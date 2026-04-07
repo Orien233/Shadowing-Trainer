@@ -4,6 +4,8 @@
 # Sensitive personal content
 data/recordings/
 data/materials/
+data/audio/
+data/cache/
 
 # Python cache
 __pycache__/
