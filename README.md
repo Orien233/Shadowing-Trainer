@@ -269,4 +269,4 @@ PROCESSING_LOCK_HEARTBEAT_SECONDS=10
 
 - 首次运行 `faster-whisper` 可能会下载模型文件，耗时会更长。
 - 若 `DEEPSEEK_API_KEY` 为空，翻译会回退为占位提示信息。
-- 本评分流程用于练习反馈，不适用于高风险语言能力评估场景。
+- 本评分流程用于练习反馈，不适用于考试等语言能力评估场景。
