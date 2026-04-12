@@ -2,19 +2,22 @@ import asyncio
 import logging
 import mimetypes
 import os
+import shutil
 import socket
 import uuid
 from datetime import datetime, timedelta
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Response, UploadFile
 from fastapi.responses import FileResponse
 from sqlalchemy import and_, desc, or_, update
 from sqlmodel import Session, func, select
 
 from app.core.config import settings
 from app.core.database import engine, get_session
+from app.models.evaluation import Evaluation
 from app.models.material import Material
+from app.models.recording import Recording
 from app.models.sentence import Sentence
 from app.schemas.material import MaterialDetail, MaterialRead
 from app.services.media_service import (
@@ -83,6 +86,50 @@ def _repair_stale_processing_materials(session: Session) -> None:
 
     if needs_commit:
         session.commit()
+
+
+def _is_within_data_dir(path: Path) -> bool:
+    try:
+        path.resolve().relative_to(settings.data_path.resolve())
+        return True
+    except Exception:
+        return False
+
+
+def _safe_delete_file(path: Path) -> None:
+    if not _is_within_data_dir(path):
+        logger.warning("Skip deleting file outside data directory: %s", path)
+        return
+
+    if not path.exists() or not path.is_file():
+        return
+
+    try:
+        path.unlink()
+    except Exception:
+        logger.exception("Failed deleting file: %s", path)
+
+
+def _safe_delete_directory(path: Path) -> None:
+    if not _is_within_data_dir(path):
+        logger.warning("Skip deleting directory outside data directory: %s", path)
+        return
+
+    if not path.exists() or not path.is_dir():
+        return
+
+    try:
+        shutil.rmtree(path)
+    except Exception:
+        logger.exception("Failed deleting directory: %s", path)
+
+
+def _recording_artifact_paths(recording_audio_path: str) -> set[Path]:
+    artifacts = {Path(recording_audio_path)}
+    stem = Path(recording_audio_path).stem
+    for candidate in settings.recordings_dir.glob(f"{stem}.*"):
+        artifacts.add(candidate)
+    return artifacts
 
 
 def _claim_material_for_processing(material_id: int, owner: str) -> bool:
@@ -196,7 +243,23 @@ async def upload_material(
     session.add(material)
     session.commit()
     session.refresh(material)
-    return material
+    if material.id is None:
+        raise HTTPException(status_code=500, detail="Material creation failed.")
+
+    material_id = material.id
+    claimed = await asyncio.to_thread(
+        _claim_material_for_processing,
+        material_id,
+        WORKER_INSTANCE_ID,
+    )
+    if claimed:
+        _ensure_processing_task(material_id, WORKER_INSTANCE_ID)
+
+    session.expire_all()
+    latest_material = session.get(Material, material_id)
+    if not latest_material:
+        raise HTTPException(status_code=404, detail="Material not found.")
+    return latest_material
 
 
 # For testing purposes, you can also add a simple endpoint to list all materials and get details of a specific material.
@@ -345,6 +408,8 @@ def _ensure_processing_task(material_id: int, owner: str) -> None:
         processing_tasks.pop(material_id, None)
         try:
             done_task.result()
+        except asyncio.CancelledError:
+            return
         except BaseException:
             logger.exception("Background task crashed for material %s", material_id)
 
@@ -375,6 +440,76 @@ async def process_material(material_id: int, session: Session = Depends(get_sess
         _ensure_processing_task(material_id, WORKER_INSTANCE_ID)
 
     return _build_material_detail(session, latest_material)
+
+
+@router.delete("/{material_id}", status_code=204)
+async def delete_material(material_id: int, session: Session = Depends(get_session)):
+    _repair_stale_processing_materials(session)
+
+    material = session.get(Material, material_id)
+    if not material:
+        raise HTTPException(status_code=404, detail="Material not found.")
+
+    processing_task = processing_tasks.pop(material_id, None)
+    if processing_task and not processing_task.done():
+        processing_task.cancel()
+        try:
+            await processing_task
+        except asyncio.CancelledError:
+            pass
+        except Exception:
+            logger.exception("Processing task failed while deleting material %s", material_id)
+
+    sentences = session.exec(
+        select(Sentence).where(Sentence.material_id == material_id)
+    ).all()
+    sentence_ids = [sentence.id for sentence in sentences if sentence.id is not None]
+
+    recordings: list[Recording] = []
+    if sentence_ids:
+        recordings = session.exec(
+            select(Recording).where(Recording.sentence_id.in_(sentence_ids))
+        ).all()
+    recording_ids = [recording.id for recording in recordings if recording.id is not None]
+
+    evaluations: list[Evaluation] = []
+    if recording_ids:
+        evaluations = session.exec(
+            select(Evaluation).where(Evaluation.recording_id.in_(recording_ids))
+        ).all()
+
+    file_paths: set[Path] = set()
+    directory_paths: set[Path] = {settings.sentence_audio_dir / f"material_{material_id}"}
+
+    file_paths.add(Path(material.original_path))
+    file_paths.add(settings.audio_dir / f"{Path(material.original_path).stem}.wav")
+    if material.audio_path:
+        file_paths.add(Path(material.audio_path))
+
+    for sentence in sentences:
+        if sentence.clip_audio_path:
+            file_paths.add(Path(sentence.clip_audio_path))
+
+    for evaluation in evaluations:
+        session.delete(evaluation)
+
+    for recording in recordings:
+        for artifact in _recording_artifact_paths(recording.audio_path):
+            file_paths.add(artifact)
+        session.delete(recording)
+
+    for sentence in sentences:
+        session.delete(sentence)
+
+    session.delete(material)
+    session.commit()
+
+    for directory_path in directory_paths:
+        _safe_delete_directory(directory_path)
+    for file_path in file_paths:
+        _safe_delete_file(file_path)
+
+    return Response(status_code=204)
 
 
 @router.get("/{material_id}/audio")

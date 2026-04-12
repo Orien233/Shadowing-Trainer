@@ -115,7 +115,7 @@ input:not([type]) {
   display: flex;
   justify-content: space-between;
   gap: 10px;
-  align-items: center;
+  align-items: flex-start;
   padding: 12px;
   border: 1px solid #e2e8f0;
   border-radius: 14px;
@@ -129,6 +129,71 @@ input:not([type]) {
 .material-main {
   flex: 1;
   cursor: pointer;
+}
+
+.material-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.material-state {
+  font-size: 12px;
+  color: #64748b;
+  white-space: nowrap;
+}
+
+.material-menu-anchor {
+  position: relative;
+}
+
+.material-more-button {
+  width: 34px;
+  min-width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  background: #e2e8f0;
+  color: #1e293b;
+  padding: 0;
+  font-size: 20px;
+  line-height: 1;
+}
+
+.material-more-button:hover:not(:disabled) {
+  background: #cbd5e1;
+}
+
+.material-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 5;
+  min-width: 170px;
+  background: white;
+  border: 1px solid #dbe3ef;
+  border-radius: 12px;
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  box-shadow: 0 12px 24px rgba(15, 23, 42, 0.12);
+}
+
+.material-menu-item {
+  width: 100%;
+  border-radius: 8px;
+  background: transparent;
+  color: #0f172a;
+  text-align: left;
+  padding: 8px 10px;
+}
+
+.material-menu-item:hover:not(:disabled) {
+  background: #f1f5f9;
+}
+
+.material-menu-item.danger {
+  color: #b91c1c;
 }
 
 .material-title {
@@ -154,8 +219,20 @@ input:not([type]) {
   gap: 10px;
 }
 
+.video-frame {
+  width: min(100%, 560px);
+  margin: 0 auto;
+  aspect-ratio: 16 / 9;
+  border-radius: 12px;
+  overflow: hidden;
+  background: #0f172a;
+}
+
 .material-video {
   width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
   border-radius: 12px;
   background: #0f172a;
 }

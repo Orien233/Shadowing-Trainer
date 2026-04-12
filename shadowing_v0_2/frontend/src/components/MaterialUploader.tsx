@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from "react";
-import { uploadMaterial } from "../lib/api";
+import { processMaterial, uploadMaterial } from "../lib/api";
 import type { Material } from "../types";
 
 interface Props {
@@ -17,7 +17,15 @@ export default function MaterialUploader({ onUploaded }: Props) {
 
     setLoading(true);
     try {
-      const material = await uploadMaterial(title, file);
+      const uploaded = await uploadMaterial(title, file);
+      let material = uploaded;
+      if (uploaded.status === "uploaded") {
+        try {
+          material = await processMaterial(uploaded.id);
+        } catch (error) {
+          console.error(error);
+        }
+      }
       onUploaded(material);
       setTitle("");
       setFile(null);
@@ -30,7 +38,7 @@ export default function MaterialUploader({ onUploaded }: Props) {
 
   return (
     <form className="card upload-form" onSubmit={handleSubmit}>
-      <h2>1. 上传素材</h2>
+      <h2>上传素材</h2>
       <input
         value={title}
         onChange={(e) => setTitle(e.target.value)}

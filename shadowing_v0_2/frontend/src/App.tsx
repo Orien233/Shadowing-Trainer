@@ -96,6 +96,17 @@ export default function App() {
     });
   }
 
+  function handleDeleted(materialId: number) {
+    setMaterials((prev) => {
+      const next = prev.filter((item) => item.id !== materialId);
+      setActiveMaterialId((activeId) => {
+        if (activeId !== materialId) return activeId;
+        return next[0]?.id ?? null;
+      });
+      return next;
+    });
+  }
+
   function closeFrontendWindow() {
     window.open("", "_self");
     window.close();
@@ -143,6 +154,7 @@ export default function App() {
             activeId={activeMaterialId}
             onSelect={setActiveMaterialId}
             onProcessed={handleProcessed}
+            onDeleted={handleDeleted}
           />
         </section>
 

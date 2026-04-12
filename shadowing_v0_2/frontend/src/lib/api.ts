@@ -38,6 +38,13 @@ export async function processMaterial(materialId: number): Promise<Material> {
   return res.json();
 }
 
+export async function deleteMaterial(materialId: number): Promise<void> {
+  const res = await fetch(`${API_BASE}/api/materials/${materialId}`, {
+    method: "DELETE",
+  });
+  if (!res.ok) throw new Error(await res.text());
+}
+
 export async function getSentences(materialId: number): Promise<Sentence[]> {
   const res = await fetch(`${API_BASE}/api/materials/${materialId}/sentences`);
   if (!res.ok) throw new Error("Failed to load sentences");
