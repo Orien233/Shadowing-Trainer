@@ -213,13 +213,12 @@ data/cache/
 *.temp
 
 # Project runtime data
-shadowing_v0_2/backend/data/
 shadowing_v0_3/backend/data/
 
 # Frontend TypeScript build metadata
-shadowing_v0_2/frontend/*.tsbuildinfo
-shadowing_v0_2/frontend/vite.config.js
-shadowing_v0_2/frontend/vite.config.d.ts
+shadowing_v0_3/frontend/*.tsbuildinfo
+shadowing_v0_3/frontend/vite.config.js
+shadowing_v0_3/frontend/vite.config.d.ts
 
 # Local environment variants
 .env.local
