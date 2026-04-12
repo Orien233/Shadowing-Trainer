@@ -106,7 +106,7 @@ shadowing_v0_2/
 
 ## 运行前准备
 
-1. Python 3.10 或更高版本
+1. Python 3.10 或更高版本 （测试使用3.12）
 2. Node.js 18+ 与 npm
 3. `PATH` 中可用 FFmpeg 与 ffprobe
 
