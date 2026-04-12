@@ -1,0 +1,46 @@
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+
+from app.api.evaluations import router as evaluations_router
+from app.api.materials import router as materials_router
+from app.api.recordings import router as recordings_router
+from app.api.sentences import router as sentences_router
+from app.api.system import router as system_router
+from app.core.config import settings
+from app.core.database import init_db
+from app.services.media_service import ensure_directories
+from app.services.translation_service import close_translation_http_client
+import app.models  # noqa: F401
+
+app = FastAPI(title=settings.app_name, debug=settings.debug)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=settings.cors_origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+
+@app.on_event("startup")
+def on_startup():
+    ensure_directories()
+    init_db()
+
+
+@app.on_event("shutdown")
+async def on_shutdown():
+    await close_translation_http_client()
+
+
+@app.get("/health")
+def health():
+    return {"status": "ok"}
+
+
+app.include_router(materials_router)
+app.include_router(sentences_router)
+app.include_router(recordings_router)
+app.include_router(evaluations_router)
+app.include_router(system_router)

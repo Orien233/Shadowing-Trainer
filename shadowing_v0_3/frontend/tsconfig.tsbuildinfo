@@ -1,0 +1,1 @@
+{"root":["./src/app.tsx","./src/main.tsx","./src/types.ts","./src/components/evaluationpanel.tsx","./src/components/materiallist.tsx","./src/components/materialuploader.tsx","./src/components/recorderpanel.tsx","./src/components/sentencetrainer.tsx","./src/lib/api.ts"],"version":"5.9.3"}
