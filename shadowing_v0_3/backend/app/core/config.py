@@ -1,7 +1,7 @@
 from pathlib import Path
 from typing import List
 
-from pydantic import field_validator
+from pydantic import field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 BACKEND_DIR = Path(__file__).resolve().parents[2]
@@ -38,15 +38,27 @@ class Settings(BaseSettings):
     processing_lock_timeout_seconds: int = 1800
     processing_lock_heartbeat_seconds: int = 10
 
+    enable_wavlm_score: bool = True
+    enable_prosody_score: bool = True
+    eval_weight_content: float = 0.40
+    eval_weight_imitation: float = 0.35
+    eval_weight_prosody: float = 0.25
+    eval_sample_rate: int = 16000
+    prosody_backend: str = "librosa_pyin"
+    wavlm_model_name: str = "microsoft/wavlm-base-plus"
+    wavlm_device: str = "cpu"
+    wavlm_chunk_count: int = 4
+    wavlm_min_chunk_seconds: float = 0.35
+
     model_config = SettingsConfigDict( #replace with Config in older Pydantic versions
         env_file=ENV_FILES,
         env_file_encoding="utf-8",
     )
 
     # Custom validators to handle flexible input formats for debug and CORS origins settings.
-    @field_validator("debug", mode="before")
+    @field_validator("debug", "enable_wavlm_score", "enable_prosody_score", mode="before")
     @classmethod
-    def parse_debug_value(cls, value):
+    def parse_bool_value(cls, value):
         if isinstance(value, bool):
             return value
         if isinstance(value, str):
@@ -71,6 +83,8 @@ class Settings(BaseSettings):
         "translation_max_keepalive_connections",
         "processing_lock_timeout_seconds",
         "processing_lock_heartbeat_seconds",
+        "eval_sample_rate",
+        "wavlm_chunk_count",
     )
     @classmethod
     def validate_positive_int_settings(cls, value: int) -> int:
@@ -85,12 +99,42 @@ class Settings(BaseSettings):
             raise ValueError("translation_max_retries must be >= 0.")
         return value
 
-    @field_validator("translation_request_timeout_seconds", "translation_retry_base_seconds")
+    @field_validator(
+        "translation_request_timeout_seconds",
+        "translation_retry_base_seconds",
+        "wavlm_min_chunk_seconds",
+    )
     @classmethod
     def validate_positive_float_settings(cls, value: float) -> float:
         if value <= 0:
             raise ValueError("Value must be > 0.")
         return value
+
+    @field_validator("eval_weight_content", "eval_weight_imitation", "eval_weight_prosody")
+    @classmethod
+    def validate_non_negative_weights(cls, value: float) -> float:
+        if value < 0:
+            raise ValueError("Value must be >= 0.")
+        return value
+
+    @field_validator("prosody_backend")
+    @classmethod
+    def validate_prosody_backend(cls, value: str) -> str:
+        normalized = value.strip().lower()
+        if normalized not in {"librosa_pyin"}:
+            raise ValueError("Currently supported prosody backend: librosa_pyin")
+        return normalized
+
+    @model_validator(mode="after")
+    def validate_eval_weight_sum(self):
+        weight_sum = (
+            self.eval_weight_content
+            + self.eval_weight_imitation
+            + self.eval_weight_prosody
+        )
+        if weight_sum <= 0:
+            raise ValueError("Evaluation branch weights must have a positive sum.")
+        return self
 
     @property
     def data_path(self) -> Path:

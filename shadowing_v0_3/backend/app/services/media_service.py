@@ -16,6 +16,8 @@ AUDIO_EXTENSIONS = {".mp3", ".wav", ".m4a", ".aac", ".flac", ".ogg"}
 MIN_CLIP_DURATION_SECONDS = 0.05
 DEFAULT_LEADING_PAD_MS = 100
 DEFAULT_TRAILING_PAD_MS = 140
+DEFAULT_TRAILING_TAIL_PROTECT_MS = 90
+DEFAULT_NEXT_SENTENCE_GUARD_MS = 20
 
 logger = logging.getLogger(__name__)
 
@@ -115,15 +117,38 @@ def _extract_original_sentence_bounds(item: dict[str, Any]) -> tuple[float, floa
     return start_time, end_time
 
 
+def _extract_sentence_start_time(item: dict[str, Any]) -> float:
+    return max(float(item["start_time"]), 0.0)
+
+
 def _extract_sentence_effective_word_bounds(
     item: dict[str, Any],
 ) -> tuple[float | None, float | None]:
     return _as_float(item.get("word_start_time")), _as_float(item.get("word_end_time"))
 
 
+def _compute_clip_end_soft_limit(
+    original_end_time: float,
+    next_sentence_start_time: float | None,
+    *,
+    trailing_tail_protect_ms: float,
+    next_sentence_guard_ms: float,
+) -> float:
+    trailing_tail_protect_seconds = max(float(trailing_tail_protect_ms), 0.0) / 1000.0
+    clip_end_soft_limit = original_end_time + trailing_tail_protect_seconds
+
+    if next_sentence_start_time is None:
+        return clip_end_soft_limit
+
+    next_sentence_guard_seconds = max(float(next_sentence_guard_ms), 0.0) / 1000.0
+    guarded_next_sentence_start = max(next_sentence_start_time - next_sentence_guard_seconds, 0.0)
+    return max(original_end_time, min(clip_end_soft_limit, guarded_next_sentence_start))
+
+
 def _compute_trimmed_sentence_bounds(
     original_start_time: float,
     original_end_time: float,
+    clip_end_soft_limit: float,
     word_start_time: float | None,
     word_end_time: float | None,
     *,
@@ -159,7 +184,8 @@ def _compute_trimmed_sentence_bounds(
 
     trimmed_end_time = original_end_time
     if normalized_word_end is not None:
-        trimmed_end_time = min(original_end_time, normalized_word_end + safe_trailing_pad)
+        safe_clip_end_soft_limit = max(clip_end_soft_limit, original_end_time)
+        trimmed_end_time = min(safe_clip_end_soft_limit, normalized_word_end + safe_trailing_pad)
 
     if trimmed_end_time < trimmed_start_time + MIN_CLIP_DURATION_SECONDS:
         return original_start_time, original_end_time, False, "fallback_invalid_trim_window"
@@ -172,6 +198,8 @@ def _log_sentence_clip_bounds(
     display_order: int,
     original_start_time: float,
     original_end_time: float,
+    clip_end_soft_limit: float,
+    next_sentence_start_time: float | None,
     word_start_time: float | None,
     word_end_time: float | None,
     clip_start_time: float,
@@ -182,13 +210,16 @@ def _log_sentence_clip_bounds(
     logger.debug(
         (
             "Sentence clip bounds: order=%s original=(%.3f, %.3f) "
-            "word=(%s, %s) clip=(%.3f, %.3f) trimmed=%s reason=%s"
+            "word=(%s, %s) next_start=%s soft_limit=%.3f "
+            "clip=(%.3f, %.3f) trimmed=%s reason=%s"
         ),
         display_order,
         original_start_time,
         original_end_time,
         "None" if word_start_time is None else f"{word_start_time:.3f}",
         "None" if word_end_time is None else f"{word_end_time:.3f}",
+        "None" if next_sentence_start_time is None else f"{next_sentence_start_time:.3f}",
+        clip_end_soft_limit,
         clip_start_time,
         clip_end_time,
         used_trimmed_bounds,
@@ -202,6 +233,8 @@ def build_sentence_audio_metadata(
     sentence_candidates: Sequence[dict[str, Any]],
     leading_pad_ms: float = DEFAULT_LEADING_PAD_MS,
     trailing_pad_ms: float = DEFAULT_TRAILING_PAD_MS,
+    trailing_tail_protect_ms: float = DEFAULT_TRAILING_TAIL_PROTECT_MS,
+    next_sentence_guard_ms: float = DEFAULT_NEXT_SENTENCE_GUARD_MS,
 ) -> list[dict[str, Any]]:
     material_segment_dir = settings.sentence_audio_dir / f"material_{material_id}"
     if material_segment_dir.exists():
@@ -209,12 +242,22 @@ def build_sentence_audio_metadata(
     material_segment_dir.mkdir(parents=True, exist_ok=True)
 
     enriched_sentences: list[dict[str, Any]] = []
-    for item in sentence_candidates:
+    for index, item in enumerate(sentence_candidates):
         start_time, end_time = _extract_original_sentence_bounds(item)
         word_start_time, word_end_time = _extract_sentence_effective_word_bounds(item)
+        next_sentence_start_time: float | None = None
+        if index + 1 < len(sentence_candidates):
+            next_sentence_start_time = _extract_sentence_start_time(sentence_candidates[index + 1])
+        clip_end_soft_limit = _compute_clip_end_soft_limit(
+            end_time,
+            next_sentence_start_time,
+            trailing_tail_protect_ms=trailing_tail_protect_ms,
+            next_sentence_guard_ms=next_sentence_guard_ms,
+        )
         clip_start_time, clip_end_time, used_trimmed_bounds, trim_reason = _compute_trimmed_sentence_bounds(
             start_time,
             end_time,
+            clip_end_soft_limit,
             word_start_time,
             word_end_time,
             leading_pad_ms=leading_pad_ms,
@@ -227,6 +270,8 @@ def build_sentence_audio_metadata(
             display_order=display_order,
             original_start_time=start_time,
             original_end_time=end_time,
+            clip_end_soft_limit=clip_end_soft_limit,
+            next_sentence_start_time=next_sentence_start_time,
             word_start_time=word_start_time,
             word_end_time=word_end_time,
             clip_start_time=clip_start_time,

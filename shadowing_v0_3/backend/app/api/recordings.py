@@ -42,6 +42,7 @@ async def upload_recording(
             0.1,
         ),
         recording_path=str(normalized_path),
+        reference_audio_path=sentence.clip_audio_path,
     )
 
     recording = Recording(

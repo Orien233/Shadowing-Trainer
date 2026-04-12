@@ -132,27 +132,37 @@ def _recording_artifact_paths(recording_audio_path: str) -> set[Path]:
     return artifacts
 
 
+def _get_rowcount(result: object) -> int:
+    return int(getattr(result, "rowcount", 0) or 0)
+
+
 def _claim_material_for_processing(material_id: int, owner: str) -> bool:
     now = _now_utc()
     stale_before = _stale_before(now)
+    processing_heartbeat_at_col = getattr(Material, "processing_heartbeat_at")
+    processing_started_at_col = getattr(Material, "processing_started_at")
+    status_col = getattr(Material, "status")
+    processing_owner_col = getattr(Material, "processing_owner")
+    material_id_col = getattr(Material, "id")
+
     stale_lock_clause = or_(
-        Material.processing_heartbeat_at < stale_before,
+        processing_heartbeat_at_col < stale_before,
         and_(
-            Material.processing_heartbeat_at.is_(None),
-            Material.processing_started_at < stale_before,
+            processing_heartbeat_at_col.is_(None),
+            processing_started_at_col < stale_before,
         ),
         and_(
-            Material.processing_heartbeat_at.is_(None),
-            Material.processing_started_at.is_(None),
+            processing_heartbeat_at_col.is_(None),
+            processing_started_at_col.is_(None),
         ),
     )
     statement = (
         update(Material)
-        .where(Material.id == material_id)
+        .where(material_id_col == material_id)
         .where(
             or_(
-                Material.status != "processing",
-                Material.processing_owner == owner,
+                status_col != "processing",
+                processing_owner_col == owner,
                 stale_lock_clause,
             )
         )
@@ -165,7 +175,7 @@ def _claim_material_for_processing(material_id: int, owner: str) -> bool:
     )
     with Session(engine) as claim_session:
         result = claim_session.exec(statement)
-        updated_rows = result.rowcount or 0
+        updated_rows = _get_rowcount(result)
         if updated_rows < 1:
             claim_session.rollback()
             return False
@@ -183,7 +193,7 @@ def _touch_processing_lock(material_id: int, owner: str) -> bool:
     )
     with Session(engine) as heartbeat_session:
         result = heartbeat_session.exec(statement)
-        updated_rows = result.rowcount or 0
+        updated_rows = _get_rowcount(result)
         if updated_rows < 1:
             heartbeat_session.rollback()
             return False
@@ -467,15 +477,17 @@ async def delete_material(material_id: int, session: Session = Depends(get_sessi
 
     recordings: list[Recording] = []
     if sentence_ids:
+        sentence_id_col = getattr(Recording, "sentence_id")
         recordings = session.exec(
-            select(Recording).where(Recording.sentence_id.in_(sentence_ids))
+            select(Recording).where(sentence_id_col.in_(sentence_ids))
         ).all()
     recording_ids = [recording.id for recording in recordings if recording.id is not None]
 
     evaluations: list[Evaluation] = []
     if recording_ids:
+        recording_id_col = getattr(Evaluation, "recording_id")
         evaluations = session.exec(
-            select(Evaluation).where(Evaluation.recording_id.in_(recording_ids))
+            select(Evaluation).where(recording_id_col.in_(recording_ids))
         ).all()
 
     file_paths: set[Path] = set()
