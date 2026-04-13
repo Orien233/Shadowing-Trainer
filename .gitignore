@@ -47,8 +47,15 @@ coverage.xml
 .hypothesis/
 .pytest_cache/
 
-# Project-specific pytest and test directories
+# Project-specific pytest temp/cache directories
+shadowing_v0_3/backend/.pytest_runtime/
+shadowing_v0_3/backend/.pytest_run_tmp/
 shadowing_v0_3/backend/.pytest_tmp/
+shadowing_v0_3/backend/.pytest_cache/
+shadowing_v0_3/backend/pytest-cache-files-*/
+shadowing_v0_3/backend/tests/.tmp_*/
+shadowing_v0_3/backend/tests/.pytest_runtime/
+shadowing_v0_3/backend/tests/.pytest_runtime_cases/
 shadowing_v0_3/backend/tests/
 
 # Translations

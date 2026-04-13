@@ -1,47 +1,123 @@
-# Shadowing Trainer v0.2
+# Shadowing Trainer v0.3
 
-Shadowing Trainer is a local-first web app for spoken English shadowing practice.  
-It supports the full workflow from media upload to sentence-level practice, recording, and scoring.
+Shadowing Trainer 是一款本地优先（local-first）的英语口语跟读训练 Web 应用。  
+它支持从素材上传到句级练习、录音与评分的完整流程。
 
-## Change Summary (v0_2 branch)
+## 版本日志（v0_3）
 
-This branch includes the following major updates:
+以下日志覆盖 `v0_3` 分支在 2026-04-13 的主要变更（含当前工作区未提交内容）。
 
-- Added automatic background processing right after material upload.
-- Added material deletion (`DELETE /api/materials/{material_id}`) with cascading cleanup:
-  - Deletes related `sentence`, `recording`, and `evaluation` rows.
-  - Safely deletes generated audio clips and recording artifacts on disk.
-  - Cancels in-flight background processing if the material is being processed.
-- Added material action menu in the frontend:
-  - Start processing / reprocess.
-  - Delete material.
-- Improved sentence trainer timeline logic:
-  - Uses a global timeline aligned with original media timestamps.
-  - Includes silent-gap segments for cleaner navigation.
-  - Supports segment autoplay and loop mode.
-- Improved video training experience:
-  - Embedded video player in practice mode.
-  - Bidirectional sync between video time and segment timeline.
+### 2026-04-13（工作区未提交）
 
-## Core Features
+- **评测链路新增静音裁剪（VAD）预处理**：
+  - 新增 `backend/app/services/vad_service.py`，基于 `librosa.effects.split` 检测有效语音区间，并支持前后 padding、最短时长兜底和失败回退。
+  - `evaluation_service` 改为优先使用裁剪后音频参与 ASR、模仿度分支和韵律分支计算，评测结束后自动清理临时裁剪文件。
+- **评测结果可观测性增强**：
+  - `raw_metrics` 增加 `vad` 元数据。
+  - 评测标签合并逻辑优化，能同时保留 VAD 标签与原有诊断标签。
+- **配置与测试运行配置补充**：
+  - `config.py` 新增 `enable_trim_silence` 和 `trim_*` 参数及校验规则。
+  - 新增 `backend/pytest.ini`，并在 `.gitignore` 补充 pytest 运行期目录忽略项。
 
-- Upload audio or video materials.
-- Automatically extract and normalize audio to WAV (16kHz, mono).
-- ASR transcription with `faster-whisper`.
-- Sentence segmentation from ASR output.
-- Sentence translation to Simplified Chinese through DeepSeek API.
-- Sentence-level playback and timeline scrubbing.
-- Recording upload and automatic scoring:
-  - Completeness
-  - Fluency
-  - Sync
-  - Pronunciation
-- Optional reprocessing of existing materials.
-- Material-level deletion with data/file cleanup.
+### 2026-04-13（5fa70a4）评分结果数据系统
 
-## Architecture
+- **新增评分结果快照子系统**：
+  - 新增 `score_database.py`、`material_sentence_score` 模型、对应 schema 与 service。
+  - 录音上传评测完成后，按素材/句子落库保存最新评分快照。
+- **后端接口扩展**：
+  - 新增 `GET /api/materials/{material_id}/latest-evaluations`，用于按素材拉取每句最新评分。
+  - 删除素材时同步清理对应评分快照数据。
+  - 评分快照不可用时，支持从主库评测表回退读取。
+- **前端联动**：
+  - 新增最新评分相关类型与 API 封装。
+  - 素材加载时并发拉取句子与最新评分，在训练页回填历史评分结果。
 
-### Backend
+### 2026-04-13（41bf5c8）已知问题修复
+
+- **媒体处理与切句稳定性增强**：
+  - `media_service` 重构切片边界计算，补齐最小时长、边界夹紧与相邻片段防重叠处理。
+  - 媒体类型检测改为基于 `ffprobe` 流信息，提升音视频识别鲁棒性。
+- **训练页行为修复**：
+  - `SentenceTrainer` 时间轴构建与同步逻辑优化，音频/视频模式下定位与回放更稳定。
+  - 媒体加载失败提示更明确，减少“处理成功但无法播放”的误判。
+
+### 2026-04-13（40ffc0b）仓库清理
+
+- 清理误提交和冗余文件，减少仓库噪音。
+- 调整忽略规则，避免测试运行临时文件再次进入版本控制。
+
+## 变更摘要（v0_2 分支）
+
+本分支包含以下主要更新：
+
+### 新增功能
+
+- **素材上传后自动触发处理**：
+  - 上传成功后会尝试自动进入 `processing`。
+  - 前端上传组件会自动调用处理接口。
+  - 后端上传接口也会尝试抢占处理锁并启动后台任务。
+- **素材安全删除（级联清理 + 文件清理）**：
+  - 新增 `DELETE /api/materials/{material_id}`。
+  - 级联删除关联的 `sentence` / `recording` / `evaluation` 数据。
+  - 取消进行中的处理任务。
+  - 安全删除原始素材、统一音轨、切句音频目录、录音产物等。
+  - 带有“仅允许删除 `data` 目录内文件”的安全保护。
+- **素材操作菜单**：
+  - 素材列表每项新增 “...” 菜单。
+  - 支持 `Start Processing` / `Reprocess` / `Delete`。
+  - 展示 `Processing` / `Deleting` 状态。
+- **删除后的选中项兜底**：
+  - 删除当前选中的素材后，自动切换到列表第一个素材；若列表为空则置空选中项。
+- **分句训练时间轴增强**：
+  - 时间轴按“句子段 + 静音空白段（gap）”构建。
+  - 支持 gap 段导航。
+  - 支持 `Auto Play`（自动播下一段）与 `Loop Segment`（单段循环），两者互斥。
+  - 在 gap 段自动隐藏录音/评分面板。
+- **视频训练体验增强**：
+  - 练习页内嵌视频播放器。
+  - 视频播放进度与分段时间轴双向同步（拖动/播放/倍速都同步）。
+
+### UI 改动项
+
+- **素材区**：
+  - 列表项由“按钮式操作”改为“菜单式操作”。
+  - 新增 `Processing/Deleting` 文案。
+  - 列表布局对齐方式调整，更适配多行内容。
+- **上传区 / 列表区**：
+  - 标题去掉步骤编号（如“1/2/4”）。
+- **练习区**：
+  - 进度条改为“当前段内进度”。
+  - 新增 `Global Position`（全局时间）提示。
+  - 遇到静音段时显示 `[Silent Segment]` 提示与说明文案。
+- **样式增强**：
+  - 新增下拉菜单样式（浮层、阴影、危险操作红色）。
+  - 新增视频容器 16:9 自适应框（`object-fit: contain`）。
+  - 整体交互风格更偏“卡片 + 操作菜单”。
+
+### 文档
+
+- `README.md` 放在仓库根目录维护。
+- 文档补充了 v0_2 变更摘要、Quick Start、API 列表（包含新增 `DELETE` 接口）。
+
+## 核心功能
+
+- 上传音频或视频素材。
+- 自动提取并标准化音频为 WAV（16kHz、单声道）。
+- 使用 `faster-whisper` 进行 ASR 转写。
+- 基于 ASR 输出进行句子切分。
+- 通过 DeepSeek API 将句子翻译为简体中文。
+- 支持句级播放与时间轴拖拽定位。
+- 上传录音并自动评分：
+  - 完整度（Completeness）
+  - 流利度（Fluency）
+  - 同步度（Sync）
+  - 发音（Pronunciation）
+- 支持对已有素材重新处理。
+- 支持素材级删除与数据/文件清理。
+
+## 架构
+
+### 后端
 
 - Python 3.10+
 - FastAPI
@@ -49,99 +125,99 @@ This branch includes the following major updates:
 - `faster-whisper`
 - FFmpeg / ffprobe
 - librosa + soundfile
-- httpx (for DeepSeek translation requests)
+- httpx（用于 DeepSeek 翻译请求）
 
-### Frontend
+### 前端
 
 - React 18
 - TypeScript
 - Vite
 
-## Project Structure
+## 项目结构
 
 ```text
 shadowing_v0_2/
   backend/
     app/
-    data/                 # runtime data (ignored in git)
+    data/                 # 运行期数据（git 忽略）
     requirements.txt
-    .env                  # local config (not committed)
+    .env                  # 本地配置（不提交）
   frontend/
     src/
   README.md
 ```
 
-## Prerequisites
+## 运行前准备
 
-1. Python 3.10 or newer
-2. Node.js 18+ and npm
-3. FFmpeg and ffprobe available in `PATH`
+1. Python 3.10 或更高版本 （测试使用3.12）
+2. Node.js 18+ 与 npm
+3. `PATH` 中可用 FFmpeg 与 ffprobe
 
-Verify FFmpeg:
+验证 FFmpeg：
 
 ```bash
 ffmpeg -version
 ffprobe -version
 ```
 
-Optional GPU acceleration (for Whisper) requires PyTorch + CUDA.
+可选：若需启用 Whisper 的 GPU 加速，需要安装支持 CUDA 的 PyTorch。
 
-## Quick Start
+## 快速开始
 
-### 1) Backend setup
+### 1) 配置后端
 
 ```bash
 cd shadowing_v0_2/backend
 python -m venv .venv
 ```
 
-Activate venv:
+激活虚拟环境：
 
-- PowerShell:
+- PowerShell：
 
 ```powershell
 .\.venv\Scripts\Activate.ps1
 ```
 
-- CMD:
+- CMD：
 
 ```bat
 .venv\Scripts\activate.bat
 ```
 
-- macOS/Linux:
+- macOS/Linux：
 
 ```bash
 source .venv/bin/activate
 ```
 
-Install backend dependencies:
+安装后端依赖：
 
 ```bash
 pip install -r requirements.txt
 ```
 
-Install PyTorch (choose one):
+安装 PyTorch（任选其一）：
 
-- CPU:
+- CPU：
 
 ```bash
 pip install torch torchvision torchaudio
 ```
 
-- CUDA 12.1:
+- CUDA 12.1：
 
 ```bash
 pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121
 ```
 
-Create `backend/.env` (example below), then start backend:
+创建 `backend/.env`（示例见下文），然后启动后端：
 
 ```bash
 uvicorn app.main:app --reload --port 8000
 ```
 
-### 2) Frontend setup
+### 2) 配置前端
 
 ```bash
 cd shadowing_v0_2/frontend
@@ -149,12 +225,12 @@ npm install
 npm run dev
 ```
 
-Default local URLs:
+默认本地地址：
 
-- Frontend: `http://localhost:5173`
-- Backend: `http://localhost:8000`
+- 前端：`http://localhost:5173`
+- 后端：`http://localhost:8000`
 
-## Environment Variables (`backend/.env`)
+## 环境变量（`backend/.env`）
 
 ```env
 APP_NAME=Shadowing Trainer
@@ -184,31 +260,31 @@ PROCESSING_LOCK_TIMEOUT_SECONDS=1800
 PROCESSING_LOCK_HEARTBEAT_SECONDS=10
 ```
 
-## Data Storage
+## 数据存储
 
-Backend runtime data is under `backend/data`:
+后端运行期数据位于 `backend/data`：
 
-- `materials/` original uploaded files
-- `audio/` normalized full-material audio
-- `audio/sentences/material_{id}/` sentence clip WAVs
-- `recordings/` user recording files and converted artifacts
-- `app.db` SQLite database
+- `materials/` 原始上传文件
+- `audio/` 标准化后的整段音频
+- `audio/sentences/material_{id}/` 句子切片 WAV 文件
+- `recordings/` 用户录音文件及其转换产物
+- `app.db` SQLite 数据库
 
-## Database Notes
+## 数据库说明
 
-On startup, lightweight schema migration is applied automatically.  
-Current migration includes additional sentence columns:
+启动时会自动执行轻量级 schema 迁移。  
+当前迁移包含新增的句子字段：
 
 - `original_start_time`
 - `original_end_time`
 - `clip_audio_path`
 - `clip_duration`
 
-Legacy rows are backfilled with safe defaults.
+旧数据行会以安全默认值进行回填。
 
-## API Overview
+## API 概览
 
-### Materials
+### 素材（Materials）
 
 - `POST /api/materials/upload`
 - `GET /api/materials`
@@ -218,22 +294,22 @@ Legacy rows are backfilled with safe defaults.
 - `GET /api/materials/{material_id}/audio`
 - `GET /api/materials/{material_id}/video`
 
-### Sentences
+### 句子（Sentences）
 
 - `GET /api/materials/{material_id}/sentences`
 
-### Recordings and Evaluation
+### 录音与评估（Recordings & Evaluation）
 
 - `POST /api/recordings/upload`
 - `DELETE /api/recordings/cleanup`
 - `GET /api/evaluations/{evaluation_id}`
 
-### System
+### 系统（System）
 
 - `POST /api/system/shutdown`
 
-## Notes
+## 备注
 
-- The first `faster-whisper` run may download model files and take longer.
-- If `DEEPSEEK_API_KEY` is empty, translation falls back to a placeholder message.
-- This scoring pipeline is intended for practice feedback, not high-stakes language assessment.
+- 首次运行 `faster-whisper` 可能会下载模型文件，耗时会更长。
+- 若 `DEEPSEEK_API_KEY` 为空，翻译会回退为占位提示信息。
+- 本评分流程用于练习反馈，不适用于考试等语言能力评估场景。

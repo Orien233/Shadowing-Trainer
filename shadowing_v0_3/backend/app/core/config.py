@@ -40,10 +40,17 @@ class Settings(BaseSettings):
 
     enable_wavlm_score: bool = True
     enable_prosody_score: bool = True
+    enable_trim_silence: bool = True
     eval_weight_content: float = 0.40
     eval_weight_imitation: float = 0.35
     eval_weight_prosody: float = 0.25
     eval_sample_rate: int = 16000
+    trim_sample_rate: int = 16000
+    trim_top_db: int = 30
+    trim_frame_length: int = 1024
+    trim_hop_length: int = 256
+    trim_pad_sec: float = 0.20
+    trim_min_duration_sec: float = 0.30
     prosody_backend: str = "librosa_pyin"
     wavlm_model_name: str = "microsoft/wavlm-base-plus"
     wavlm_device: str = "cpu"
@@ -56,7 +63,13 @@ class Settings(BaseSettings):
     )
 
     # Custom validators to handle flexible input formats for debug and CORS origins settings.
-    @field_validator("debug", "enable_wavlm_score", "enable_prosody_score", mode="before")
+    @field_validator(
+        "debug",
+        "enable_wavlm_score",
+        "enable_prosody_score",
+        "enable_trim_silence",
+        mode="before",
+    )
     @classmethod
     def parse_bool_value(cls, value):
         if isinstance(value, bool):
@@ -84,6 +97,10 @@ class Settings(BaseSettings):
         "processing_lock_timeout_seconds",
         "processing_lock_heartbeat_seconds",
         "eval_sample_rate",
+        "trim_sample_rate",
+        "trim_top_db",
+        "trim_frame_length",
+        "trim_hop_length",
         "wavlm_chunk_count",
     )
     @classmethod
@@ -102,12 +119,20 @@ class Settings(BaseSettings):
     @field_validator(
         "translation_request_timeout_seconds",
         "translation_retry_base_seconds",
+        "trim_min_duration_sec",
         "wavlm_min_chunk_seconds",
     )
     @classmethod
     def validate_positive_float_settings(cls, value: float) -> float:
         if value <= 0:
             raise ValueError("Value must be > 0.")
+        return value
+
+    @field_validator("trim_pad_sec")
+    @classmethod
+    def validate_non_negative_trim_padding(cls, value: float) -> float:
+        if value < 0:
+            raise ValueError("trim_pad_sec must be >= 0.")
         return value
 
     @field_validator("eval_weight_content", "eval_weight_imitation", "eval_weight_prosody")
