@@ -32,6 +32,8 @@ from app.services.material_score_service import (
     resolve_user_id,
 )
 from app.services.media_service import (
+    build_video_playback_asset,
+    build_video_playback_path,
     build_sentence_audio_metadata,
     detect_file_type,
     extract_audio,
@@ -397,6 +399,24 @@ def _build_latest_evaluation_read(
     )
 
 
+def _normalize_translations_for_sentences(
+    sentence_candidates: list[dict[str, object]],
+    translations: list[str],
+) -> list[str]:
+    expected_count = len(sentence_candidates)
+    normalized = list(translations[:expected_count])
+    if len(normalized) == expected_count:
+        return normalized
+
+    for item in sentence_candidates[len(normalized) :]:
+        source_text = str(item.get("source_text") or "").strip()
+        if source_text:
+            normalized.append(f"[Translation unavailable] {source_text}")
+        else:
+            normalized.append("[Translation unavailable]")
+    return normalized
+
+
 def _list_latest_scores_from_main_db(
     session: Session,
     material_id: int,
@@ -474,9 +494,16 @@ async def _process_material_in_background(material_id: int, owner: str) -> None:
                 )
                 return
             source_path = Path(material.original_path)
+            audio_source_path = source_path
+            if material.file_type == "video":
+                audio_source_path = await asyncio.to_thread(
+                    build_video_playback_asset,
+                    source_path,
+                )
 
-        audio_path = await asyncio.to_thread(extract_audio, source_path)
-        duration = await asyncio.to_thread(get_audio_duration, audio_path)
+        audio_path = await asyncio.to_thread(extract_audio, audio_source_path)
+        duration_probe_path = audio_source_path if material.file_type == "video" else audio_path
+        duration = await asyncio.to_thread(get_audio_duration, duration_probe_path)
         segments = await asyncio.to_thread(transcribe_audio_with_word_timestamps, str(audio_path))
         sentence_candidates = await asyncio.to_thread(segment_to_sentences, segments)
         enriched_candidates, translations = await asyncio.gather(
@@ -485,8 +512,26 @@ async def _process_material_in_background(material_id: int, owner: str) -> None:
                 audio_path,
                 material_id,
                 sentence_candidates,
+                duration,
             ),
             translate_sentences(item["source_text"] for item in sentence_candidates),
+        )
+        if len(enriched_candidates) != len(sentence_candidates):
+            raise RuntimeError(
+                "Sentence metadata count mismatch: "
+                f"expected={len(sentence_candidates)} got={len(enriched_candidates)}"
+            )
+        if len(translations) != len(enriched_candidates):
+            logger.warning(
+                "Translation count mismatch for material %s: expected=%s got=%s. "
+                "Missing translations will be filled with fallback text.",
+                material_id,
+                len(enriched_candidates),
+                len(translations),
+            )
+        normalized_translations = _normalize_translations_for_sentences(
+            enriched_candidates,
+            translations,
         )
 
         still_owns_lock = await asyncio.to_thread(_owns_processing_lock, material_id, owner)
@@ -515,7 +560,7 @@ async def _process_material_in_background(material_id: int, owner: str) -> None:
                 session.delete(existing)
             session.commit()
 
-            for item, translation in zip(enriched_candidates, translations):
+            for item, translation in zip(enriched_candidates, normalized_translations):
                 sentence = Sentence(
                     material_id=material_id,
                     display_order=item["display_order"],
@@ -639,6 +684,8 @@ async def delete_material(
     directory_paths: set[Path] = {settings.sentence_audio_dir / f"material_{material_id}"}
 
     file_paths.add(Path(material.original_path))
+    if material.file_type == "video":
+        file_paths.add(build_video_playback_path(Path(material.original_path)))
     file_paths.add(settings.audio_dir / f"{Path(material.original_path).stem}.wav")
     if material.audio_path:
         file_paths.add(Path(material.audio_path))
@@ -685,7 +732,10 @@ def get_material_audio(material_id: int, session: Session = Depends(get_session)
     material = session.get(Material, material_id)
     if not material or not material.audio_path:
         raise HTTPException(status_code=404, detail="Audio not found.")
-    return FileResponse(material.audio_path, media_type="audio/wav")
+    audio_path = Path(material.audio_path)
+    if not audio_path.exists():
+        raise HTTPException(status_code=404, detail="Audio file not found.")
+    return FileResponse(audio_path, media_type="audio/wav")
 
 
 @router.get("/{material_id}/video")
@@ -697,8 +747,10 @@ def get_material_video(material_id: int, session: Session = Depends(get_session)
         raise HTTPException(status_code=400, detail="Material is not a video.")
 
     source_path = Path(material.original_path)
-    if not source_path.exists():
+    playback_path = build_video_playback_path(source_path)
+    video_path = playback_path if playback_path.exists() else source_path
+    if not video_path.exists():
         raise HTTPException(status_code=404, detail="Video file not found.")
 
-    mime_type, _ = mimetypes.guess_type(str(source_path))
-    return FileResponse(source_path, media_type=mime_type or "video/mp4")
+    mime_type, _ = mimetypes.guess_type(str(video_path))
+    return FileResponse(video_path, media_type=mime_type or "video/mp4")

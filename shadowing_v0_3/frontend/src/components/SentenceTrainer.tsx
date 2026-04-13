@@ -24,16 +24,27 @@ interface TimelineSegment {
 
 const SEGMENT_EPSILON = 0.05;
 
+type VideoFrameAwareElement = HTMLVideoElement & {
+  requestVideoFrameCallback?: (callback: VideoFrameRequestCallback) => number;
+  cancelVideoFrameCallback?: (handle: number) => void;
+};
+
 function clamp(value: number, min: number, max: number): number {
   return Math.min(Math.max(value, min), max);
 }
 
 function getSentenceStart(sentence: Sentence): number {
-  return sentence.original_start_time ?? sentence.start_time;
+  if (Number.isFinite(sentence.start_time)) {
+    return sentence.start_time;
+  }
+  return sentence.original_start_time ?? 0;
 }
 
 function getSentenceEnd(sentence: Sentence): number {
-  return sentence.original_end_time ?? sentence.end_time;
+  if (Number.isFinite(sentence.end_time)) {
+    return sentence.end_time;
+  }
+  return sentence.original_end_time ?? getSentenceStart(sentence) + SEGMENT_EPSILON;
 }
 
 function asEvaluation(snapshot: SentenceLatestEvaluation): Evaluation {
@@ -120,16 +131,29 @@ function buildTimelineSegments(sentences: Sentence[], timelineDuration: number):
 function locateSegmentIndex(segments: TimelineSegment[], time: number): number {
   if (segments.length === 0) return 0;
 
-  for (let i = 0; i < segments.length; i += 1) {
+  // Sentence clips can overlap after padding/trim; prefer the latest matching segment.
+  for (let i = segments.length - 1; i >= 0; i -= 1) {
     const segment = segments[i];
     const isLast = i === segments.length - 1;
-    if (time >= segment.start && (time < segment.end || (isLast && time <= segment.end + SEGMENT_EPSILON))) {
+    if (
+      time >= segment.start &&
+      (time < segment.end || (isLast && time <= segment.end + SEGMENT_EPSILON))
+    ) {
       return i;
     }
   }
 
   if (time < segments[0].start) return 0;
   return segments.length - 1;
+}
+
+function findAdjacentSegmentIndex(
+  segments: TimelineSegment[],
+  fromIndex: number,
+  direction: -1 | 1
+): number {
+  if (segments.length === 0) return 0;
+  return clamp(fromIndex + direction, 0, segments.length - 1);
 }
 
 export default function SentenceTrainer({ material, sentences, latestEvaluations }: Props) {
@@ -141,10 +165,14 @@ export default function SentenceTrainer({ material, sentences, latestEvaluations
   const [processingDots, setProcessingDots] = useState(0);
   const [playbackTime, setPlaybackTime] = useState(0);
   const [mediaDuration, setMediaDuration] = useState(0);
+  const [mediaError, setMediaError] = useState<string | null>(null);
 
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const stopTimerRef = useRef<number | null>(null);
+  const animationFrameRef = useRef<number | null>(null);
+  const videoFrameCallbackRef = useRef<number | null>(null);
+  const boundaryTokenRef = useRef(0);
   const loopRef = useRef(loop);
   const autoPlayRef = useRef(autoPlay);
   const timelineDurationRef = useRef(0);
@@ -185,11 +213,28 @@ export default function SentenceTrainer({ material, sentences, latestEvaluations
   }, [currentSegment, playbackTime]);
 
   const clearStopTimer = useCallback(() => {
-    if (stopTimerRef.current) {
+    boundaryTokenRef.current += 1;
+
+    if (stopTimerRef.current !== null) {
       window.clearTimeout(stopTimerRef.current);
       stopTimerRef.current = null;
     }
-  }, []);
+
+    if (animationFrameRef.current !== null) {
+      window.cancelAnimationFrame(animationFrameRef.current);
+      animationFrameRef.current = null;
+    }
+
+    const video = videoRef.current as VideoFrameAwareElement | null;
+    if (
+      video &&
+      videoFrameCallbackRef.current !== null &&
+      typeof video.cancelVideoFrameCallback === "function"
+    ) {
+      video.cancelVideoFrameCallback(videoFrameCallbackRef.current);
+      videoFrameCallbackRef.current = null;
+    }
+  }, [boundaryTokenRef]);
 
   const getMediaElement = useCallback((): HTMLMediaElement | null => {
     if (material?.file_type === "video") {
@@ -250,6 +295,7 @@ export default function SentenceTrainer({ material, sentences, latestEvaluations
     setEvaluation(null);
     setPlaybackTime(0);
     setMediaDuration(0);
+    setMediaError(null);
     clearStopTimer();
     audioRef.current?.pause();
     if (videoRef.current && !videoRef.current.paused) {
@@ -288,6 +334,7 @@ export default function SentenceTrainer({ material, sentences, latestEvaluations
     const audio = new Audio(`${apiBase}/api/materials/${material.id}/audio`);
     audio.preload = "metadata";
     audioRef.current = audio;
+    setMediaError(null);
 
     const handleTimeUpdate = () => {
       syncFromGlobalTime(audio.currentTime);
@@ -299,21 +346,28 @@ export default function SentenceTrainer({ material, sentences, latestEvaluations
       if (Number.isFinite(audio.duration)) {
         setMediaDuration(audio.duration);
       }
+      setMediaError(null);
     };
     const handlePause = () => {
       clearStopTimer();
+    };
+    const handleError = () => {
+      clearStopTimer();
+      setMediaError("Audio file could not be loaded. Please reprocess the material.");
     };
 
     audio.addEventListener("timeupdate", handleTimeUpdate);
     audio.addEventListener("seeking", handleSeeking);
     audio.addEventListener("loadedmetadata", handleLoadedMetadata);
     audio.addEventListener("pause", handlePause);
+    audio.addEventListener("error", handleError);
 
     return () => {
       audio.removeEventListener("timeupdate", handleTimeUpdate);
       audio.removeEventListener("seeking", handleSeeking);
       audio.removeEventListener("loadedmetadata", handleLoadedMetadata);
       audio.removeEventListener("pause", handlePause);
+      audio.removeEventListener("error", handleError);
       audio.pause();
       if (audioRef.current === audio) {
         audioRef.current = null;
@@ -334,7 +388,54 @@ export default function SentenceTrainer({ material, sentences, latestEvaluations
 
   const scheduleSegmentBoundary = useCallback(
     (segment: TimelineSegment, media: HTMLMediaElement) => {
+      clearStopTimer();
+      const boundaryToken = boundaryTokenRef.current;
+      const isCurrentBoundary = () => boundaryTokenRef.current === boundaryToken;
+
+      const scheduleNextTick = (remainingMediaSeconds: number) => {
+        if (!isCurrentBoundary()) {
+          return;
+        }
+
+        const maybeVideo = media instanceof HTMLVideoElement ? (media as VideoFrameAwareElement) : null;
+        if (maybeVideo && typeof maybeVideo.requestVideoFrameCallback === "function") {
+          videoFrameCallbackRef.current = maybeVideo.requestVideoFrameCallback(() => {
+            if (!isCurrentBoundary()) {
+              return;
+            }
+            videoFrameCallbackRef.current = null;
+            tick();
+          });
+          return;
+        }
+
+        if (document.visibilityState === "visible") {
+          animationFrameRef.current = window.requestAnimationFrame(() => {
+            if (!isCurrentBoundary()) {
+              return;
+            }
+            animationFrameRef.current = null;
+            tick();
+          });
+          return;
+        }
+
+        const playbackRate = Math.max(media.playbackRate, 0.1);
+        const remainingWallClockMs = (remainingMediaSeconds / playbackRate) * 1000;
+        const nextTickMs = Math.min(Math.max(remainingWallClockMs, 20), 120);
+        stopTimerRef.current = window.setTimeout(() => {
+          if (!isCurrentBoundary()) {
+            return;
+          }
+          tick();
+        }, nextTickMs);
+      };
+
       const playNextSegment = (): boolean => {
+        if (!isCurrentBoundary()) {
+          return false;
+        }
+
         const activeSegments = segmentsRef.current;
         let currentIndex = activeSegments.findIndex((item) => item.key === segment.key);
         if (currentIndex < 0) {
@@ -356,6 +457,10 @@ export default function SentenceTrainer({ material, sentences, latestEvaluations
       };
 
       const tick = () => {
+        if (!isCurrentBoundary()) {
+          return;
+        }
+
         if (media.paused) {
           clearStopTimer();
           return;
@@ -363,21 +468,17 @@ export default function SentenceTrainer({ material, sentences, latestEvaluations
 
         const remainingMediaSeconds = segment.end - media.currentTime;
         if (remainingMediaSeconds <= SEGMENT_EPSILON) {
-          if (autoPlayRef.current) {
+          const shouldAutoAdvanceGap = segment.type === "gap";
+          if (autoPlayRef.current || shouldAutoAdvanceGap) {
             playNextSegment();
             return;
           }
 
-          if (segment.type === "gap") {
-            playNextSegment();
-            return;
-          }
-
-          const shouldLoopCurrentSegment = loopRef.current;
+          const shouldLoopCurrentSegment = loopRef.current && segment.type === "sentence";
           if (shouldLoopCurrentSegment) {
             seekToGlobalTime(segment.start);
             void media.play().catch(() => undefined);
-            stopTimerRef.current = window.setTimeout(tick, 40);
+            scheduleNextTick(Math.max(segment.duration, SEGMENT_EPSILON));
             return;
           }
 
@@ -386,13 +487,9 @@ export default function SentenceTrainer({ material, sentences, latestEvaluations
           return;
         }
 
-        const playbackRate = Math.max(media.playbackRate, 0.1);
-        const remainingWallClockMs = (remainingMediaSeconds / playbackRate) * 1000;
-        const nextTickMs = Math.min(Math.max(remainingWallClockMs, 40), 250);
-        stopTimerRef.current = window.setTimeout(tick, nextTickMs);
+        scheduleNextTick(remainingMediaSeconds);
       };
 
-      clearStopTimer();
       tick();
     },
     [clearStopTimer, seekToGlobalTime]
@@ -416,6 +513,19 @@ export default function SentenceTrainer({ material, sentences, latestEvaluations
     setSegmentIndex((prev) => (prev === activeIndex ? prev : activeIndex));
     scheduleSegmentBoundary(activeSegment, media);
   }, [clearStopTimer, getMediaElement, scheduleSegmentBoundary]);
+
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        scheduleBoundaryForCurrentPlayback();
+      }
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [scheduleBoundaryForCurrentPlayback]);
 
   function handleVideoPlay() {
     scheduleBoundaryForCurrentPlayback();
@@ -446,18 +556,37 @@ export default function SentenceTrainer({ material, sentences, latestEvaluations
 
   function jumpToSegment(nextIndex: number) {
     if (segments.length === 0) return;
+    const activeIndex = getActiveSegmentIndexForNavigation();
     const safeIndex = clamp(nextIndex, 0, segments.length - 1);
+    if (safeIndex === activeIndex) {
+      return;
+    }
     const targetSegment = segments[safeIndex];
     setSegmentIndex(safeIndex);
     void playSegment(targetSegment);
   }
 
+  function getActiveSegmentIndexForNavigation(): number {
+    if (segments.length === 0) {
+      return 0;
+    }
+    const media = getMediaElement();
+    if (media) {
+      return locateSegmentIndex(segments, media.currentTime);
+    }
+    return clamp(segmentIndex, 0, segments.length - 1);
+  }
+
   function prevSegment() {
-    jumpToSegment(segmentIndex - 1);
+    const activeIndex = getActiveSegmentIndexForNavigation();
+    const previousIndex = findAdjacentSegmentIndex(segments, activeIndex, -1);
+    jumpToSegment(previousIndex);
   }
 
   function nextSegment() {
-    jumpToSegment(segmentIndex + 1);
+    const activeIndex = getActiveSegmentIndexForNavigation();
+    const nextIndex = findAdjacentSegmentIndex(segments, activeIndex, 1);
+    jumpToSegment(nextIndex);
   }
 
   function handleLoopChange(checked: boolean) {
@@ -509,9 +638,15 @@ export default function SentenceTrainer({ material, sentences, latestEvaluations
     if (!video) return;
     if (!Number.isFinite(video.duration)) return;
     setMediaDuration(video.duration);
+    setMediaError(null);
     if (Math.abs(video.currentTime - playbackTime) > SEGMENT_EPSILON) {
       video.currentTime = playbackTime;
     }
+  }
+
+  function handleVideoError() {
+    clearStopTimer();
+    setMediaError("Video file could not be loaded. Please reprocess the material.");
   }
 
   const handleEvaluated = useCallback(
@@ -592,6 +727,7 @@ export default function SentenceTrainer({ material, sentences, latestEvaluations
               onTimeUpdate={handleVideoTimeUpdate}
               onSeeking={handleVideoSeeking}
               onLoadedMetadata={handleVideoLoadedMetadata}
+              onError={handleVideoError}
             />
           </div>
         </div>
@@ -614,6 +750,7 @@ export default function SentenceTrainer({ material, sentences, latestEvaluations
         {isGapSegment && (
           <div className="sentence-translation muted">No spoken sentence detected in this time range.</div>
         )}
+        {mediaError && <p className="media-error">{mediaError}</p>}
 
         <div className="row gap wrap">
           <button type="button" onClick={prevSegment}>Prev Segment</button>

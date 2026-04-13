@@ -323,6 +323,12 @@ input:not([type]) {
   color: #64748b;
 }
 
+.media-error {
+  color: #b91c1c;
+  margin: 8px 0 0;
+  font-size: 14px;
+}
+
 @media (max-width: 960px) {
   .app-header {
     flex-direction: column;
