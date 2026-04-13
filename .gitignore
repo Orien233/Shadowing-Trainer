@@ -47,6 +47,10 @@ coverage.xml
 .hypothesis/
 .pytest_cache/
 
+# Project-specific pytest and test directories
+shadowing_v0_3/backend/.pytest_tmp/
+shadowing_v0_3/backend/tests/
+
 # Translations
 *.mo
 *.pot
