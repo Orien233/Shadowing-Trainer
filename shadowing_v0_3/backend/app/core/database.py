@@ -1,7 +1,11 @@
-from sqlmodel import Session, SQLModel, create_engine
 from sqlalchemy import event
+from sqlmodel import Session, SQLModel, create_engine
 
 from app.core.config import settings
+from app.models.evaluation import Evaluation
+from app.models.material import Material
+from app.models.recording import Recording
+from app.models.sentence import Sentence
 
 sqlite_url = f"sqlite:///{settings.db_path}"
 engine = create_engine(
@@ -71,8 +75,17 @@ def _migrate_material_table() -> None:
         _add_column_if_missing(connection, "material", "processing_heartbeat_at", "DATETIME")
 
 
+def _main_db_tables() -> list:
+    return [
+        Material.__table__,
+        Sentence.__table__,
+        Recording.__table__,
+        Evaluation.__table__,
+    ]
+
+
 def init_db() -> None:
-    SQLModel.metadata.create_all(engine)
+    SQLModel.metadata.create_all(engine, tables=_main_db_tables())
     _migrate_sentence_table()
     _migrate_material_table()
 

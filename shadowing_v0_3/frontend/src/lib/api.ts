@@ -1,4 +1,10 @@
-import type { Evaluation, Material, Sentence } from "../types";
+import type {
+  Evaluation,
+  Material,
+  MaterialLatestEvaluationsResponse,
+  Sentence,
+  SentenceLatestEvaluation,
+} from "../types";
 
 const API_BASE = "http://localhost:8000";
 
@@ -49,6 +55,20 @@ export async function getSentences(materialId: number): Promise<Sentence[]> {
   const res = await fetch(`${API_BASE}/api/materials/${materialId}/sentences`);
   if (!res.ok) throw new Error("Failed to load sentences");
   return res.json();
+}
+
+export async function getLatestMaterialEvaluations(
+  materialId: number,
+  userId?: string
+): Promise<SentenceLatestEvaluation[]> {
+  const url = new URL(`${API_BASE}/api/materials/${materialId}/latest-evaluations`);
+  if (userId && userId.trim()) {
+    url.searchParams.set("user_id", userId.trim());
+  }
+  const res = await fetch(url.toString());
+  if (!res.ok) throw new Error("Failed to load latest evaluations");
+  const data = (await res.json()) as MaterialLatestEvaluationsResponse;
+  return data.evaluations;
 }
 
 export async function uploadRecording(sentenceId: number, blob: Blob): Promise<Evaluation> {

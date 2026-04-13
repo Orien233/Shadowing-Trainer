@@ -8,18 +8,29 @@ import uuid
 from datetime import datetime, timedelta
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Response, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Response, UploadFile
 from fastapi.responses import FileResponse
 from sqlalchemy import and_, desc, or_, update
 from sqlmodel import Session, func, select
 
 from app.core.config import settings
 from app.core.database import engine, get_session
+from app.core.score_database import get_score_session
 from app.models.evaluation import Evaluation
 from app.models.material import Material
 from app.models.recording import Recording
 from app.models.sentence import Sentence
 from app.schemas.material import MaterialDetail, MaterialRead
+from app.schemas.material_score import (
+    MaterialLatestEvaluationsRead,
+    SentenceLatestEvaluationRead,
+)
+from app.services.material_score_service import (
+    DEFAULT_USER_ID,
+    delete_scores_for_material,
+    list_latest_scores_for_material,
+    resolve_user_id,
+)
 from app.services.media_service import (
     build_sentence_audio_metadata,
     detect_file_type,
@@ -291,11 +302,141 @@ def get_material(material_id: int, session: Session = Depends(get_session)):
     return _build_material_detail(session, material)
 
 
+@router.get(
+    "/{material_id}/latest-evaluations",
+    response_model=MaterialLatestEvaluationsRead,
+)
+def get_material_latest_evaluations(
+    material_id: int,
+    user_id: str | None = Query(default=None),
+    session: Session = Depends(get_session),
+    score_session: Session = Depends(get_score_session),
+):
+    material = session.get(Material, material_id)
+    if not material:
+        raise HTTPException(status_code=404, detail="Material not found.")
+
+    normalized_user_id = resolve_user_id(user_id)
+    latest_by_sentence: dict[int, SentenceLatestEvaluationRead] = {}
+
+    score_rows = list_latest_scores_for_material(
+        score_session=score_session,
+        material_id=material_id,
+        user_id=normalized_user_id,
+    )
+    for score_row in score_rows:
+        latest_by_sentence[score_row.sentence_id] = _build_latest_evaluation_read(
+            sentence_id=score_row.sentence_id,
+            main_db_recording_id=score_row.main_db_recording_id,
+            main_db_evaluation_id=score_row.main_db_evaluation_id,
+            completeness_score=score_row.completeness_score,
+            fluency_score=score_row.fluency_score,
+            sync_score=score_row.sync_score,
+            pronunciation_score=score_row.pronunciation_score,
+            overall_score=score_row.overall_score,
+            feedback=score_row.feedback,
+            suggestion=score_row.suggestion,
+            raw_metrics=score_row.raw_metrics,
+            created_at=score_row.created_at,
+        )
+
+    fallback_rows: list[SentenceLatestEvaluationRead] = []
+    if normalized_user_id == DEFAULT_USER_ID:
+        fallback_rows = _list_latest_scores_from_main_db(session, material_id)
+    for fallback_row in fallback_rows:
+        if fallback_row.sentence_id in latest_by_sentence:
+            continue
+        latest_by_sentence[fallback_row.sentence_id] = fallback_row
+
+    evaluations = [
+        latest_by_sentence[sentence_id]
+        for sentence_id in sorted(latest_by_sentence.keys())
+    ]
+    return MaterialLatestEvaluationsRead(
+        material_id=material_id,
+        user_id=normalized_user_id,
+        evaluations=evaluations,
+    )
+
+
 def _build_material_detail(session: Session, material: Material) -> MaterialDetail:
     sentence_count = session.exec(
         select(func.count()).select_from(Sentence).where(Sentence.material_id == material.id)
     ).one()
     return MaterialDetail(**material.model_dump(), sentence_count=sentence_count)
+
+
+def _build_latest_evaluation_read(
+    *,
+    sentence_id: int,
+    main_db_recording_id: int | None,
+    main_db_evaluation_id: int | None,
+    completeness_score: int,
+    fluency_score: int,
+    sync_score: int,
+    pronunciation_score: int,
+    overall_score: int,
+    feedback: str,
+    suggestion: str,
+    raw_metrics: str,
+    created_at: datetime,
+) -> SentenceLatestEvaluationRead:
+    return SentenceLatestEvaluationRead(
+        sentence_id=sentence_id,
+        main_db_recording_id=main_db_recording_id,
+        main_db_evaluation_id=main_db_evaluation_id,
+        completeness_score=completeness_score,
+        fluency_score=fluency_score,
+        sync_score=sync_score,
+        pronunciation_score=pronunciation_score,
+        overall_score=overall_score,
+        feedback=feedback,
+        suggestion=suggestion,
+        raw_metrics=raw_metrics,
+        created_at=created_at,
+    )
+
+
+def _list_latest_scores_from_main_db(
+    session: Session,
+    material_id: int,
+) -> list[SentenceLatestEvaluationRead]:
+    statement = (
+        select(Sentence.id, Recording.id, Evaluation)
+        .join(Recording, Recording.sentence_id == Sentence.id)
+        .join(Evaluation, Evaluation.recording_id == Recording.id)
+        .where(Sentence.material_id == material_id)
+        .order_by(
+            Sentence.id.asc(),
+            Evaluation.created_at.desc(),
+            Evaluation.id.desc(),
+        )
+    )
+    rows = session.exec(statement).all()
+
+    latest_by_sentence: dict[int, SentenceLatestEvaluationRead] = {}
+    for sentence_id, recording_id, evaluation in rows:
+        if sentence_id in latest_by_sentence:
+            continue
+        latest_by_sentence[sentence_id] = _build_latest_evaluation_read(
+            sentence_id=sentence_id,
+            main_db_recording_id=recording_id,
+            main_db_evaluation_id=evaluation.id,
+            completeness_score=evaluation.completeness_score,
+            fluency_score=evaluation.fluency_score,
+            sync_score=evaluation.sync_score,
+            pronunciation_score=evaluation.pronunciation_score,
+            overall_score=evaluation.overall_score,
+            feedback=evaluation.feedback,
+            suggestion=evaluation.suggestion,
+            raw_metrics=evaluation.raw_metrics,
+            created_at=evaluation.created_at,
+        )
+
+    return [
+        latest_by_sentence[sentence_id]
+        for sentence_id in sorted(latest_by_sentence.keys())
+    ]
 
 
 def _mark_material_failed(material_id: int, owner: str | None = None) -> None:
@@ -453,7 +594,11 @@ async def process_material(material_id: int, session: Session = Depends(get_sess
 
 
 @router.delete("/{material_id}", status_code=204)
-async def delete_material(material_id: int, session: Session = Depends(get_session)):
+async def delete_material(
+    material_id: int,
+    session: Session = Depends(get_session),
+    score_session: Session = Depends(get_score_session),
+):
     _repair_stale_processing_materials(session)
 
     material = session.get(Material, material_id)
@@ -515,6 +660,17 @@ async def delete_material(material_id: int, session: Session = Depends(get_sessi
 
     session.delete(material)
     session.commit()
+
+    try:
+        delete_scores_for_material(
+            score_session=score_session,
+            material_id=material_id,
+        )
+    except Exception:
+        logger.exception(
+            "Failed deleting score snapshots for material %s",
+            material_id,
+        )
 
     for directory_path in directory_paths:
         _safe_delete_directory(directory_path)

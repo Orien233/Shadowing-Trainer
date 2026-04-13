@@ -8,6 +8,7 @@ from app.api.sentences import router as sentences_router
 from app.api.system import router as system_router
 from app.core.config import settings
 from app.core.database import init_db
+from app.core.score_database import init_score_db
 from app.services.media_service import ensure_directories
 from app.services.translation_service import close_translation_http_client
 import app.models  # noqa: F401
@@ -27,6 +28,7 @@ app.add_middleware(
 def on_startup():
     ensure_directories()
     init_db()
+    init_score_db()
 
 
 @app.on_event("shutdown")

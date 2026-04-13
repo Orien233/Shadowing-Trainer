@@ -37,3 +37,24 @@ export interface Evaluation {
   raw_metrics: string;
   created_at: string;
 }
+
+export interface SentenceLatestEvaluation {
+  sentence_id: number;
+  main_db_recording_id: number | null;
+  main_db_evaluation_id: number | null;
+  completeness_score: number;
+  fluency_score: number;
+  sync_score: number;
+  pronunciation_score: number;
+  overall_score: number;
+  feedback: string;
+  suggestion: string;
+  raw_metrics: string;
+  created_at: string;
+}
+
+export interface MaterialLatestEvaluationsResponse {
+  material_id: number;
+  user_id: string;
+  evaluations: SentenceLatestEvaluation[];
+}

@@ -164,5 +164,9 @@ class Settings(BaseSettings):
     def db_path(self) -> Path:
         return self.data_path / "app.db"
 
+    @property
+    def score_db_path(self) -> Path:
+        return self.data_path / "score_history.db"
+
 
 settings = Settings()

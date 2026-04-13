@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { apiBase } from "../lib/api";
-import type { Evaluation, Material, Sentence } from "../types";
+import type { Evaluation, Material, Sentence, SentenceLatestEvaluation } from "../types";
 import EvaluationPanel from "./EvaluationPanel";
 import RecorderPanel from "./RecorderPanel";
 
 interface Props {
   material: Material | null;
   sentences: Sentence[];
+  latestEvaluations: Record<number, SentenceLatestEvaluation>;
 }
 
 type SegmentType = "sentence" | "gap";
@@ -33,6 +34,22 @@ function getSentenceStart(sentence: Sentence): number {
 
 function getSentenceEnd(sentence: Sentence): number {
   return sentence.original_end_time ?? sentence.end_time;
+}
+
+function asEvaluation(snapshot: SentenceLatestEvaluation): Evaluation {
+  return {
+    id: snapshot.main_db_evaluation_id ?? 0,
+    recording_id: snapshot.main_db_recording_id ?? 0,
+    completeness_score: snapshot.completeness_score,
+    fluency_score: snapshot.fluency_score,
+    sync_score: snapshot.sync_score,
+    pronunciation_score: snapshot.pronunciation_score,
+    overall_score: snapshot.overall_score,
+    feedback: snapshot.feedback,
+    suggestion: snapshot.suggestion,
+    raw_metrics: snapshot.raw_metrics,
+    created_at: snapshot.created_at,
+  };
 }
 
 function buildTimelineSegments(sentences: Sentence[], timelineDuration: number): TimelineSegment[] {
@@ -115,11 +132,12 @@ function locateSegmentIndex(segments: TimelineSegment[], time: number): number {
   return segments.length - 1;
 }
 
-export default function SentenceTrainer({ material, sentences }: Props) {
+export default function SentenceTrainer({ material, sentences, latestEvaluations }: Props) {
   const [segmentIndex, setSegmentIndex] = useState(0);
   const [loop, setLoop] = useState(false);
   const [autoPlay, setAutoPlay] = useState(false);
   const [evaluation, setEvaluation] = useState<Evaluation | null>(null);
+  const [evaluationBySentence, setEvaluationBySentence] = useState<Record<number, Evaluation>>({});
   const [processingDots, setProcessingDots] = useState(0);
   const [playbackTime, setPlaybackTime] = useState(0);
   const [mediaDuration, setMediaDuration] = useState(0);
@@ -150,6 +168,16 @@ export default function SentenceTrainer({ material, sentences }: Props) {
   );
   const currentSentence = currentSegment?.sentence ?? null;
   const isGapSegment = currentSegment?.type === "gap";
+
+  const normalizedLatestEvaluations = useMemo(() => {
+    const next: Record<number, Evaluation> = {};
+    for (const [rawSentenceId, snapshot] of Object.entries(latestEvaluations)) {
+      const sentenceId = Number(rawSentenceId);
+      if (Number.isNaN(sentenceId)) continue;
+      next[sentenceId] = asEvaluation(snapshot);
+    }
+    return next;
+  }, [latestEvaluations]);
 
   const currentSegmentPlaybackTime = useMemo(() => {
     if (!currentSegment) return 0;
@@ -214,6 +242,10 @@ export default function SentenceTrainer({ material, sentences }: Props) {
   }, [segments]);
 
   useEffect(() => {
+    setEvaluationBySentence(normalizedLatestEvaluations);
+  }, [material?.id, normalizedLatestEvaluations]);
+
+  useEffect(() => {
     setSegmentIndex(0);
     setEvaluation(null);
     setPlaybackTime(0);
@@ -230,8 +262,12 @@ export default function SentenceTrainer({ material, sentences }: Props) {
   }, [segments.length]);
 
   useEffect(() => {
-    setEvaluation(null);
-  }, [currentSegment?.key]);
+    if (isGapSegment || !currentSentence) {
+      setEvaluation(null);
+      return;
+    }
+    setEvaluation(evaluationBySentence[currentSentence.id] ?? null);
+  }, [currentSegment?.key, currentSentence, evaluationBySentence, isGapSegment]);
 
   useEffect(
     () => () => {
@@ -478,6 +514,19 @@ export default function SentenceTrainer({ material, sentences }: Props) {
     }
   }
 
+  const handleEvaluated = useCallback(
+    (nextEvaluation: Evaluation) => {
+      setEvaluation(nextEvaluation);
+      const sentenceId = currentSentence?.id;
+      if (!sentenceId) return;
+      setEvaluationBySentence((prev) => ({
+        ...prev,
+        [sentenceId]: nextEvaluation,
+      }));
+    },
+    [currentSentence?.id]
+  );
+
   if (!material) {
     return (
       <div className="card">
@@ -616,7 +665,7 @@ export default function SentenceTrainer({ material, sentences }: Props) {
         </p>
       </div>
 
-      {!isGapSegment && <RecorderPanel sentence={currentSentence} onEvaluated={setEvaluation} />}
+      {!isGapSegment && <RecorderPanel sentence={currentSentence} onEvaluated={handleEvaluated} />}
       {!isGapSegment && <EvaluationPanel evaluation={evaluation} />}
     </div>
   );

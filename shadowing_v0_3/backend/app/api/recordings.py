@@ -1,8 +1,11 @@
+import logging
+
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from sqlmodel import Session
 
 from app.core.config import settings
 from app.core.database import get_session
+from app.core.score_database import get_score_session
 from app.models.evaluation import Evaluation
 from app.models.recording import Recording
 from app.models.sentence import Sentence
@@ -10,9 +13,11 @@ from app.schemas.recording import RecordingUploadResponse
 from app.schemas.system import RecordingCleanupResponse
 from app.services.evaluation_service import evaluate_recording
 from app.services.media_service import extract_audio, save_upload
+from app.services.material_score_service import record_material_sentence_score
 from app.services.recording_file_service import cleanup_recording_files
 
 router = APIRouter(prefix="/api/recordings", tags=["recordings"])
+logger = logging.getLogger(__name__)
 
 
 @router.delete("/cleanup", response_model=RecordingCleanupResponse)
@@ -24,7 +29,9 @@ def cleanup_recordings():
 async def upload_recording(
     sentence_id: int = Form(...),
     file: UploadFile = File(...),
+    user_id: str | None = Form(default=None),
     session: Session = Depends(get_session),
+    score_session: Session = Depends(get_score_session),
 ):
     sentence = session.get(Sentence, sentence_id)
     if not sentence:
@@ -69,5 +76,21 @@ async def upload_recording(
     session.add(evaluation)
     session.commit()
     session.refresh(evaluation)
+
+    try:
+        record_material_sentence_score(
+            score_session=score_session,
+            material_id=sentence.material_id,
+            sentence_id=sentence_id,
+            evaluation=evaluation,
+            recording_id=recording.id,
+            user_id=user_id,
+        )
+    except Exception:
+        logger.exception(
+            "Failed writing score snapshot for sentence %s in material %s",
+            sentence_id,
+            sentence.material_id,
+        )
 
     return RecordingUploadResponse(recording_id=recording.id, evaluation=evaluation)

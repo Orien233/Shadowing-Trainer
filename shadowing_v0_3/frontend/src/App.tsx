@@ -2,13 +2,30 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import MaterialList from "./components/MaterialList";
 import MaterialUploader from "./components/MaterialUploader";
 import SentenceTrainer from "./components/SentenceTrainer";
-import { cleanupRecordingFiles, getSentences, listMaterials, shutdownBackend } from "./lib/api";
-import type { Material, Sentence } from "./types";
+import {
+  cleanupRecordingFiles,
+  getLatestMaterialEvaluations,
+  getSentences,
+  listMaterials,
+  shutdownBackend,
+} from "./lib/api";
+import type { Material, Sentence, SentenceLatestEvaluation } from "./types";
+
+function indexLatestEvaluations(
+  evaluations: SentenceLatestEvaluation[]
+): Record<number, SentenceLatestEvaluation> {
+  const next: Record<number, SentenceLatestEvaluation> = {};
+  for (const item of evaluations) {
+    next[item.sentence_id] = item;
+  }
+  return next;
+}
 
 export default function App() {
   const [materials, setMaterials] = useState<Material[]>([]);
   const [activeMaterialId, setActiveMaterialId] = useState<number | null>(null);
   const [sentences, setSentences] = useState<Sentence[]>([]);
+  const [latestEvaluations, setLatestEvaluations] = useState<Record<number, SentenceLatestEvaluation>>({});
   const [loadingSentences, setLoadingSentences] = useState(false);
   const [shuttingDown, setShuttingDown] = useState(false);
   const sentenceRequestIdRef = useRef(0);
@@ -53,13 +70,27 @@ export default function App() {
     sentenceRequestIdRef.current = requestId;
     setLoadingSentences(true);
     try {
-      const data = await getSentences(materialId);
+      const [sentenceResult, evaluationResult] = await Promise.allSettled([
+        getSentences(materialId),
+        getLatestMaterialEvaluations(materialId),
+      ]);
+      if (sentenceResult.status !== "fulfilled") {
+        throw sentenceResult.reason;
+      }
+      const sentenceData = sentenceResult.value;
+      const evaluationData =
+        evaluationResult.status === "fulfilled" ? evaluationResult.value : [];
+      if (evaluationResult.status !== "fulfilled") {
+        console.error(evaluationResult.reason);
+      }
       if (requestId !== sentenceRequestIdRef.current) return;
-      setSentences(data);
+      setSentences(sentenceData);
+      setLatestEvaluations(indexLatestEvaluations(evaluationData));
     } catch (error) {
       if (requestId !== sentenceRequestIdRef.current) return;
       console.error(error);
       setSentences([]);
+      setLatestEvaluations({});
     } finally {
       if (requestId === sentenceRequestIdRef.current) {
         setLoadingSentences(false);
@@ -71,12 +102,14 @@ export default function App() {
     if (!activeMaterialId) {
       sentenceRequestIdRef.current += 1;
       setSentences([]);
+      setLatestEvaluations({});
       setLoadingSentences(false);
       return;
     }
     if (activeMaterial?.status !== "ready") {
       sentenceRequestIdRef.current += 1;
       setSentences([]);
+      setLatestEvaluations({});
       setLoadingSentences(false);
       return;
     }
@@ -162,7 +195,11 @@ export default function App() {
           {loadingSentences ? (
             <div className="card"><p>句子加载中...</p></div>
           ) : (
-            <SentenceTrainer material={activeMaterial} sentences={sentences} />
+            <SentenceTrainer
+              material={activeMaterial}
+              sentences={sentences}
+              latestEvaluations={latestEvaluations}
+            />
           )}
         </section>
       </main>
