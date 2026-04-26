@@ -7,7 +7,7 @@ Shadowing Trainer 是一款本地优先（local-first）的英语口语跟读训
 
 以下日志覆盖 `v0_3` 分支在 2026-04-13 的主要变更（含当前工作区未提交内容）。
 
-### 2026-04-13（工作区未提交）
+### 2026-04-13
 
 - **评测链路新增静音裁剪（VAD）预处理**：
   - 新增 `backend/app/services/vad_service.py`，基于 `librosa.effects.split` 检测有效语音区间，并支持前后 padding、最短时长兜底和失败回退。
