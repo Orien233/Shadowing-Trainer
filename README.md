@@ -1,4 +1,4 @@
-# Shadowing Trainer v0.2
+# Shadowing Trainer v0.2（此分支停止更新）
 
 Shadowing Trainer 是一款本地优先（local-first）的英语口语跟读训练 Web 应用。  
 它支持从素材上传到句级练习、录音与评分的完整流程。
