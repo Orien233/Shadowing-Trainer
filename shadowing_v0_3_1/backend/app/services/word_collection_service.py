@@ -9,6 +9,7 @@ from app.schemas.word_collection import WordCollectionCreate
 
 
 _EDGE_PUNCTUATION = string.punctuation + "\u2018\u2019\u201c\u201d"
+_APOSTROPHES = {"'", "\u2018", "\u2019", "\u201b", "\u2032"}
 
 
 class WordAlreadyCollectedError(Exception):
@@ -19,8 +20,34 @@ class EmptyWordCollectionError(ValueError):
     pass
 
 
+def _is_word_apostrophe(chars: list[str], index: int) -> bool:
+    return (
+        chars[index] in _APOSTROPHES
+        and index > 0
+        and index < len(chars) - 1
+        and chars[index - 1].isalnum()
+        and chars[index + 1].isalnum()
+    )
+
+
+def clean_collected_word_text(word_text: str) -> str:
+    chars = list(str(word_text or "").strip())
+    cleaned: list[str] = []
+    for index, char in enumerate(chars):
+        if char.isalnum() or _is_word_apostrophe(chars, index):
+            cleaned.append(char)
+    return "".join(cleaned).strip(_EDGE_PUNCTUATION)
+
+
+def _replace_apostrophes(text: str) -> str:
+    normalized = text
+    for apostrophe in _APOSTROPHES:
+        normalized = normalized.replace(apostrophe, "'")
+    return normalized
+
+
 def normalize_word_text(word_text: str) -> str:
-    return str(word_text or "").strip().lower().strip(_EDGE_PUNCTUATION)
+    return _replace_apostrophes(clean_collected_word_text(word_text)).lower()
 
 
 def normalize_language(language: str | None) -> str:
@@ -32,7 +59,8 @@ def collect_word(
     session: Session,
     payload: WordCollectionCreate,
 ) -> WordCollection:
-    normalized_word = normalize_word_text(payload.word_text)
+    clean_word_text = clean_collected_word_text(payload.word_text)
+    normalized_word = normalize_word_text(clean_word_text)
     if not normalized_word:
         raise EmptyWordCollectionError("Word text is empty after normalization.")
 
@@ -50,7 +78,7 @@ def collect_word(
     collection = WordCollection(
         material_id=payload.material_id,
         sentence_id=payload.sentence_id,
-        word_text=payload.word_text.strip(),
+        word_text=clean_word_text,
         normalized_word=normalized_word,
         language=language,
         translation=payload.translation,

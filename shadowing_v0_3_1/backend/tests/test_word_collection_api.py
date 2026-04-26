@@ -9,7 +9,10 @@ from sqlmodel import Session, SQLModel, create_engine
 from app.api.words import router as words_router
 from app.core.database import get_session
 from app.models.word_collection import WordCollection
-from app.services.word_collection_service import normalize_word_text
+from app.services.word_collection_service import (
+    clean_collected_word_text,
+    normalize_word_text,
+)
 
 
 @pytest.fixture()
@@ -46,9 +49,25 @@ def test_collect_new_word_success(client: TestClient):
     assert response.status_code == 200
     payload = response.json()
     assert payload["id"] > 0
-    assert payload["word_text"] == "Wanted."
+    assert payload["word_text"] == "Wanted"
     assert payload["normalized_word"] == "wanted"
     assert payload["language"] == "en"
+
+
+def test_collect_word_strips_non_word_punctuation_before_storage(client: TestClient):
+    response = client.post(
+        "/api/words/collect",
+        json={
+            "material_id": 1,
+            "sentence_id": 10,
+            "word_text": '"Hello,."',
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["word_text"] == "Hello"
+    assert payload["normalized_word"] == "hello"
 
 
 def test_collect_duplicate_word_returns_409(client: TestClient):
@@ -112,4 +131,13 @@ def test_normalize_word_text_handles_case_and_punctuation():
     assert normalize_word_text("  Wanted. ") == "wanted"
     assert normalize_word_text('"Hello!"') == "hello"
     assert normalize_word_text("can't") == "can't"
+    assert normalize_word_text("can’t") == "can't"
+    assert normalize_word_text("U.S.") == "us"
     assert normalize_word_text("...") == ""
+
+
+def test_clean_collected_word_text_removes_commas_and_periods():
+    assert clean_collected_word_text("Wanted.") == "Wanted"
+    assert clean_collected_word_text("hello,") == "hello"
+    assert clean_collected_word_text("U.S.") == "US"
+    assert clean_collected_word_text("can't") == "can't"

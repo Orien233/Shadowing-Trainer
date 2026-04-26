@@ -1,46 +1,14 @@
 import { useMemo, useState } from "react";
 import { collectWord, WordCollectionApiError } from "../lib/api";
-import { getAlignmentTokenClass, getInsertionLabel } from "../utils/alignmentColors.js";
-
-const TOKEN_PATTERN = /\S+/g;
-const EDGE_PUNCTUATION_PATTERN = /^([\p{P}]*)(.*?)([\p{P}]*)$/u;
-const EDGE_PUNCTUATION = /^[\s!"#$%&()*+,\-./:;<=>?@[\\\]^_`{|}~'“”‘’]+|[\s!"#$%&()*+,\-./:;<=>?@[\\\]^_`{|}~'“”‘’]+$/g;
-
-export function normalizeWordText(wordText) {
-  return String(wordText ?? "").trim().toLowerCase().replace(EDGE_PUNCTUATION, "");
-}
-
-function collectedKey(normalizedWord, language) {
-  return `${String(language || "en").trim().toLowerCase() || "en"}:${normalizedWord}`;
-}
-
-function tokenizeSourceText(sourceText) {
-  const tokens = [];
-  for (const match of String(sourceText ?? "").matchAll(TOKEN_PATTERN)) {
-    tokens.push({
-      index: tokens.length,
-      text: match[0],
-      status: "default",
-      severity: "default",
-    });
-  }
-  return tokens;
-}
-
-function splitDisplayText(text) {
-  const displayText = String(text ?? "");
-  const match = displayText.match(EDGE_PUNCTUATION_PATTERN);
-  if (!match) {
-    return { leading: "", core: displayText, trailing: "" };
-  }
-
-  const [, leading, core, trailing] = match;
-  if (!core) {
-    return { leading: "", core: displayText, trailing: "" };
-  }
-
-  return { leading, core, trailing };
-}
+import {
+  buildCollectedWordKey,
+  cleanCollectableWordText,
+  normalizeWordText,
+  splitCollectableSegments,
+  tokenizeSentenceText,
+} from "../utils/sentenceTokenText.js";
+import { getInsertionLabel } from "../utils/alignmentColors.js";
+import { AlignmentTokenCore } from "./AlignmentToken.jsx";
 
 export default function CollectableSentenceText({
   sourceText,
@@ -56,17 +24,18 @@ export default function CollectableSentenceText({
   const rawSourceText = sourceText ?? "";
   const hasAlignmentTokens = Array.isArray(tokens) && tokens.length > 0;
   const displayTokens = useMemo(
-    () => (hasAlignmentTokens ? tokens : tokenizeSourceText(rawSourceText)),
+    () => (hasAlignmentTokens ? tokens : tokenizeSentenceText(rawSourceText)),
     [hasAlignmentTokens, rawSourceText, tokens]
   );
 
-  async function handleCollect(token) {
-    const normalizedWord = normalizeWordText(token.text);
+  async function handleCollect(wordText) {
+    const cleanWordText = cleanCollectableWordText(wordText);
+    const normalizedWord = normalizeWordText(cleanWordText);
     if (!normalizedWord || !materialId || !sentenceId) {
       return;
     }
 
-    const key = collectedKey(normalizedWord, language);
+    const key = buildCollectedWordKey(normalizedWord, language);
     if (collectedWordSet?.has(key)) {
       alert("已经收藏过了");
       return;
@@ -80,7 +49,7 @@ export default function CollectableSentenceText({
       const collection = await collectWord({
         material_id: materialId,
         sentence_id: sentenceId,
-        word_text: token.text,
+        word_text: cleanWordText,
         language,
       });
       onCollected?.(collection);
@@ -110,45 +79,72 @@ export default function CollectableSentenceText({
   return (
     <div className="collectable-sentence">
       {displayTokens.map((token) => {
-        const { leading, core, trailing } = splitDisplayText(token.text);
-        const normalizedWord = normalizeWordText(token.text);
-        const key = collectedKey(normalizedWord, language);
-        const isCollectable = Boolean(normalizedWord);
-        const isCollected = Boolean(collectedWordSet?.has(key));
-        const isPending = pendingKeys.has(key);
+        const segments = splitCollectableSegments(token.text);
+        const wordSegmentIndexes = segments.reduce((indexes, segment, index) => {
+          if (segment.type === "word") indexes.push(index);
+          return indexes;
+        }, []);
+        const lastWordSegmentIndex = wordSegmentIndexes[wordSegmentIndexes.length - 1];
         const label = getInsertionLabel(token);
-        const tokenClass = hasAlignmentTokens ? getAlignmentTokenClass(token) : "border-transparent";
 
         return (
-          <span key={`${token.index}-${token.text}`} className="collectable-token-wrap" title={token.note ?? ""}>
-            {leading && <span className="alignment-token-punctuation">{leading}</span>}
-            {isCollectable ? (
-              <span
-                role="button"
-                tabIndex={0}
-                className={[
-                  tokenClass,
-                  "collectable-word-core",
-                  isCollected ? "collected" : "",
-                  isPending ? "pending" : "",
-                ].join(" ")}
-                title={isCollected ? "已经收藏过了" : "点击收藏"}
-                onClick={() => {
-                  void handleCollect(token);
-                }}
-                onKeyDown={(event) => {
-                  if (event.key !== "Enter" && event.key !== " ") return;
-                  event.preventDefault();
-                  void handleCollect(token);
-                }}
-              >
-                <span>{core}</span>
-                {label && <span className="alignment-token-label">{label}</span>}
-              </span>
-            ) : (
-              <span>{core}</span>
-            )}
-            {trailing && <span className="alignment-token-punctuation">{trailing}</span>}
+          <span
+            key={`${token.index}-${token.text}`}
+            className="collectable-token-wrap"
+            title={token.note ?? ""}
+          >
+            {segments.map((segment, segmentIndex) => {
+              if (segment.type !== "word") {
+                return (
+                  <span
+                    key={`${segmentIndex}-${segment.text}`}
+                    className="alignment-token-punctuation"
+                  >
+                    {segment.text}
+                  </span>
+                );
+              }
+
+              const cleanWordText = cleanCollectableWordText(segment.text);
+              const normalizedWord = normalizeWordText(cleanWordText);
+              const key = buildCollectedWordKey(normalizedWord, language);
+              const isCollectable = Boolean(normalizedWord);
+              const isCollected = Boolean(collectedWordSet?.has(key));
+              const isPending = pendingKeys.has(key);
+              const coreProps = isCollectable
+                ? {
+                    role: "button",
+                    tabIndex: 0,
+                    title: isCollected ? "已经收藏过了" : "点击收藏",
+                    onClick: () => {
+                      void handleCollect(cleanWordText);
+                    },
+                    onKeyDown: (event) => {
+                      if (event.key !== "Enter" && event.key !== " ") return;
+                      event.preventDefault();
+                      void handleCollect(cleanWordText);
+                    },
+                  }
+                : {};
+
+              return (
+                <AlignmentTokenCore
+                  key={`${segmentIndex}-${segment.text}`}
+                  token={token}
+                  className={[
+                    isCollectable ? "collectable-word-core" : "",
+                    isCollected ? "collected" : "",
+                    isPending ? "pending" : "",
+                  ].join(" ")}
+                  coreProps={coreProps}
+                >
+                  <span>{cleanWordText}</span>
+                  {segmentIndex === lastWordSegmentIndex && label && (
+                    <span className="alignment-token-label">{label}</span>
+                  )}
+                </AlignmentTokenCore>
+              );
+            })}
           </span>
         );
       })}

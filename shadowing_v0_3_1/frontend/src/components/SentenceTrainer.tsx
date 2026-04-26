@@ -567,11 +567,10 @@ export default function SentenceTrainer({
     await playSegment(currentSegment);
   }
 
-  function jumpToSegment(nextIndex: number) {
+  function jumpToSegment(nextIndex: number, fromIndex = getActiveSegmentIndexForNavigation()) {
     if (segments.length === 0) return;
-    const activeIndex = getActiveSegmentIndexForNavigation();
     const safeIndex = clamp(nextIndex, 0, segments.length - 1);
-    if (safeIndex === activeIndex) {
+    if (safeIndex === fromIndex) {
       return;
     }
     const targetSegment = segments[safeIndex];
@@ -593,13 +592,13 @@ export default function SentenceTrainer({
   function prevSegment() {
     const activeIndex = getActiveSegmentIndexForNavigation();
     const previousIndex = findAdjacentSegmentIndex(segments, activeIndex, -1);
-    jumpToSegment(previousIndex);
+    jumpToSegment(previousIndex, activeIndex);
   }
 
   function nextSegment() {
     const activeIndex = getActiveSegmentIndexForNavigation();
     const nextIndex = findAdjacentSegmentIndex(segments, activeIndex, 1);
-    jumpToSegment(nextIndex);
+    jumpToSegment(nextIndex, activeIndex);
   }
 
   function handleLoopChange(checked: boolean) {
