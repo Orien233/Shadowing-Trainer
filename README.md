@@ -112,6 +112,9 @@ Shadowing Trainer 是一款本地优先（local-first）的英语口语跟读训
   - 流利度（Fluency）
   - 同步度（Sync）
   - 发音（Pronunciation）
+- 评测前支持静音裁剪（VAD）预处理，降低长静音对识别与评分的干扰。
+- 支持按素材读取“每句最近一次评分”快照，训练页可回填历史评分结果。
+- 评分历史支持按 `user_id` 维度隔离与查询（未传时使用默认用户）。
 - 支持对已有素材重新处理。
 - 支持素材级删除与数据/文件清理。
 
@@ -258,6 +261,25 @@ TRANSLATION_MAX_KEEPALIVE_CONNECTIONS=50
 
 PROCESSING_LOCK_TIMEOUT_SECONDS=1800
 PROCESSING_LOCK_HEARTBEAT_SECONDS=10
+
+ENABLE_WAVLM_SCORE=true
+ENABLE_PROSODY_SCORE=true
+ENABLE_TRIM_SILENCE=true
+EVAL_WEIGHT_CONTENT=0.40
+EVAL_WEIGHT_IMITATION=0.35
+EVAL_WEIGHT_PROSODY=0.25
+EVAL_SAMPLE_RATE=16000
+TRIM_SAMPLE_RATE=16000
+TRIM_TOP_DB=30
+TRIM_FRAME_LENGTH=1024
+TRIM_HOP_LENGTH=256
+TRIM_PAD_SEC=0.20
+TRIM_MIN_DURATION_SEC=0.30
+PROSODY_BACKEND=librosa_pyin
+WAVLM_MODEL_NAME=microsoft/wavlm-base-plus
+WAVLM_DEVICE=cpu
+WAVLM_CHUNK_COUNT=4
+WAVLM_MIN_CHUNK_SECONDS=0.35
 ```
 
 ## 数据存储
@@ -269,6 +291,7 @@ PROCESSING_LOCK_HEARTBEAT_SECONDS=10
 - `audio/sentences/material_{id}/` 句子切片 WAV 文件
 - `recordings/` 用户录音文件及其转换产物
 - `app.db` SQLite 数据库
+- `score_history.db` 评分历史快照数据库（用于素材维度最近评分读取）
 
 ## 数据库说明
 
@@ -289,6 +312,7 @@ PROCESSING_LOCK_HEARTBEAT_SECONDS=10
 - `POST /api/materials/upload`
 - `GET /api/materials`
 - `GET /api/materials/{material_id}`
+- `GET /api/materials/{material_id}/latest-evaluations?user_id=<optional>`
 - `POST /api/materials/{material_id}/process`
 - `DELETE /api/materials/{material_id}`
 - `GET /api/materials/{material_id}/audio`
@@ -300,7 +324,7 @@ PROCESSING_LOCK_HEARTBEAT_SECONDS=10
 
 ### 录音与评估（Recordings & Evaluation）
 
-- `POST /api/recordings/upload`
+- `POST /api/recordings/upload`（支持可选 `user_id`，用于评分历史隔离）
 - `DELETE /api/recordings/cleanup`
 - `GET /api/evaluations/{evaluation_id}`
 
