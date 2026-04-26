@@ -24,7 +24,6 @@ export default function WordCollectionPanel({
     try {
       await deleteWordCollection(collection.id);
       onDeleted?.(collection.id);
-      alert("已取消收藏");
     } catch (error) {
       alert(error instanceof Error ? error.message : "取消收藏失败");
     } finally {

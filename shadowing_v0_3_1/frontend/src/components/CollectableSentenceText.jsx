@@ -84,7 +84,6 @@ export default function CollectableSentenceText({
         language,
       });
       onCollected?.(collection);
-      alert("已收藏");
     } catch (error) {
       if (
         error instanceof WordCollectionApiError &&
