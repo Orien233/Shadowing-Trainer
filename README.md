@@ -1,4 +1,4 @@
-# Shadowing Trainer V0.1
+# Shadowing Trainer V0.1(此分支停止更新)
 
 一个本地运行的影子跟读最小可用版（MVP）：
 
