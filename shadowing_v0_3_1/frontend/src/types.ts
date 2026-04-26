@@ -87,3 +87,17 @@ export interface MaterialLatestEvaluationsResponse {
   user_id: string;
   evaluations: SentenceLatestEvaluation[];
 }
+
+export interface WordCollection {
+  id: number;
+  material_id: number;
+  sentence_id: number;
+  word_text: string;
+  normalized_word: string;
+  language: string;
+  translation: string | null;
+  source_type: string;
+  note: string | null;
+  created_at: string;
+  updated_at: string;
+}

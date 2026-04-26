@@ -4,6 +4,7 @@ import type {
   MaterialLatestEvaluationsResponse,
   Sentence,
   SentenceLatestEvaluation,
+  WordCollection,
 } from "../types";
 
 const API_BASE = "http://localhost:8000";
@@ -15,6 +16,40 @@ export interface RecordingCleanupResult {
   total_files: number;
   deleted_files: number;
   failed_files: Array<{ path: string; reason: string }>;
+}
+
+export interface WordCollectInput {
+  material_id: number;
+  sentence_id: number;
+  word_text: string;
+  language?: string;
+}
+
+interface WordCollectionErrorPayload {
+  detail?: string;
+  message?: string;
+}
+
+export class WordCollectionApiError extends Error {
+  status: number;
+  detail?: string;
+  serverMessage?: string;
+
+  constructor(status: number, payload: WordCollectionErrorPayload | null) {
+    super(payload?.message ?? payload?.detail ?? "Word collection request failed");
+    this.status = status;
+    this.detail = payload?.detail;
+    this.serverMessage = payload?.message;
+  }
+}
+
+async function readWordCollectionError(res: Response): Promise<WordCollectionApiError> {
+  try {
+    const payload = (await res.json()) as WordCollectionErrorPayload;
+    return new WordCollectionApiError(res.status, payload);
+  } catch {
+    return new WordCollectionApiError(res.status, null);
+  }
 }
 
 export async function listMaterials(): Promise<Material[]> {
@@ -92,6 +127,29 @@ export async function cleanupRecordingFiles(): Promise<RecordingCleanupResult> {
   });
   if (!res.ok) throw new Error(await res.text());
   return res.json();
+}
+
+export async function collectWord(payload: WordCollectInput): Promise<WordCollection> {
+  const res = await fetch(`${API_BASE}/api/words/collect`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ language: "en", ...payload }),
+  });
+  if (!res.ok) throw await readWordCollectionError(res);
+  return res.json();
+}
+
+export async function listWordCollections(): Promise<WordCollection[]> {
+  const res = await fetch(`${API_BASE}/api/words/collections`);
+  if (!res.ok) throw await readWordCollectionError(res);
+  return res.json();
+}
+
+export async function deleteWordCollection(collectionId: number): Promise<void> {
+  const res = await fetch(`${API_BASE}/api/words/collections/${collectionId}`, {
+    method: "DELETE",
+  });
+  if (!res.ok) throw await readWordCollectionError(res);
 }
 
 export async function shutdownBackend(): Promise<void> {

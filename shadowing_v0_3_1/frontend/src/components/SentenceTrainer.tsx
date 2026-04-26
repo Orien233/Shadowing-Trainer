@@ -1,14 +1,17 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { apiBase } from "../lib/api";
-import type { Evaluation, Material, Sentence, SentenceLatestEvaluation } from "../types";
+import type { Evaluation, Material, Sentence, SentenceLatestEvaluation, WordCollection } from "../types";
+import CollectableSentenceText from "./CollectableSentenceText.jsx";
 import EvaluationPanel from "./EvaluationPanel";
-import HighlightedSentence from "./HighlightedSentence.jsx";
 import RecorderPanel from "./RecorderPanel";
 
 interface Props {
   material: Material | null;
   sentences: Sentence[];
   latestEvaluations: Record<number, SentenceLatestEvaluation>;
+  collectedWordSet: Set<string>;
+  onWordCollected: (collection: WordCollection) => void;
+  onRefreshWordCollections: () => Promise<void>;
 }
 
 type SegmentType = "sentence" | "gap";
@@ -158,7 +161,14 @@ function findAdjacentSegmentIndex(
   return clamp(fromIndex + direction, 0, segments.length - 1);
 }
 
-export default function SentenceTrainer({ material, sentences, latestEvaluations }: Props) {
+export default function SentenceTrainer({
+  material,
+  sentences,
+  latestEvaluations,
+  collectedWordSet,
+  onWordCollected,
+  onRefreshWordCollections,
+}: Props) {
   const [segmentIndex, setSegmentIndex] = useState(0);
   const [loop, setLoop] = useState(false);
   const [autoPlay, setAutoPlay] = useState(false);
@@ -747,10 +757,16 @@ export default function SentenceTrainer({ material, sentences, latestEvaluations
         <div className="sentence-text">
           {isGapSegment ? (
             "[Silent Segment]"
-          ) : referenceAlignmentTokens.length > 0 ? (
-            <HighlightedSentence tokens={referenceAlignmentTokens} emptyText={currentSentence?.source_text ?? ""} />
           ) : (
-            currentSentence?.source_text
+            <CollectableSentenceText
+              sourceText={currentSentence?.source_text ?? ""}
+              tokens={referenceAlignmentTokens}
+              materialId={material.id}
+              sentenceId={currentSentence?.id}
+              collectedWordSet={collectedWordSet}
+              onCollected={onWordCollected}
+              onRefreshCollections={onRefreshWordCollections}
+            />
           )}
         </div>
         {!isGapSegment && (

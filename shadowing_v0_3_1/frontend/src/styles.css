@@ -111,6 +111,20 @@ input:not([type]) {
   gap: 10px;
 }
 
+.word-library-button {
+  width: 100%;
+  margin-bottom: 12px;
+  border: 1px solid #cbd5e1;
+  background: #f8fafc;
+  color: #334155;
+}
+
+.word-library-button:hover:not(:disabled),
+.word-library-button.active {
+  background: #eef2f7;
+  color: #0f172a;
+}
+
 .material-item {
   display: flex;
   justify-content: space-between;
@@ -362,11 +376,19 @@ input:not([type]) {
   line-height: 1.8;
 }
 
+.collectable-sentence {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  line-height: 1.8;
+}
+
 .alignment-empty {
   margin: 0;
 }
 
-.alignment-token-wrap {
+.alignment-token-wrap,
+.collectable-token-wrap {
   display: inline-flex;
   align-items: baseline;
 }
@@ -470,6 +492,88 @@ input:not([type]) {
 
 .line-through {
   text-decoration-line: line-through;
+}
+
+.collectable-word-core {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 1.35em;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  padding-left: 4px;
+  padding-right: 4px;
+  cursor: pointer;
+  transition: border-color 120ms ease, box-shadow 120ms ease, opacity 120ms ease;
+}
+
+.collectable-word-core:hover {
+  border-color: #cbd5e1;
+  box-shadow: 0 0 0 2px rgba(148, 163, 184, 0.12);
+}
+
+.collectable-word-core.collected {
+  text-decoration-line: underline;
+  text-decoration-style: dotted;
+  text-decoration-color: #94a3b8;
+  text-underline-offset: 5px;
+}
+
+.collectable-word-core.pending {
+  opacity: 0.64;
+}
+
+.word-collection-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.word-collection-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+}
+
+.word-collection-heading h2 {
+  margin: 0;
+}
+
+.word-collection-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.word-collection-item {
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  background: #ffffff;
+  color: #1f2937;
+  padding: 12px 14px;
+  text-align: left;
+}
+
+.word-collection-item:hover:not(:disabled) {
+  border-color: #cbd5e1;
+  background: #f8fafc;
+}
+
+.word-collection-text {
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.word-collection-meta {
+  color: #64748b;
+  font-size: 13px;
+  white-space: nowrap;
 }
 
 .media-error {

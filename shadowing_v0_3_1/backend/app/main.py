@@ -6,6 +6,7 @@ from app.api.materials import router as materials_router
 from app.api.recordings import router as recordings_router
 from app.api.sentences import router as sentences_router
 from app.api.system import router as system_router
+from app.api.words import router as words_router
 from app.core.config import settings
 from app.core.database import init_db
 from app.core.score_database import init_score_db
@@ -46,3 +47,4 @@ app.include_router(sentences_router)
 app.include_router(recordings_router)
 app.include_router(evaluations_router)
 app.include_router(system_router)
+app.include_router(words_router)

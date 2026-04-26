@@ -2,14 +2,16 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import MaterialList from "./components/MaterialList";
 import MaterialUploader from "./components/MaterialUploader";
 import SentenceTrainer from "./components/SentenceTrainer";
+import WordCollectionPanel from "./components/WordCollectionPanel.jsx";
 import {
   cleanupRecordingFiles,
   getLatestMaterialEvaluations,
   getSentences,
+  listWordCollections,
   listMaterials,
   shutdownBackend,
 } from "./lib/api";
-import type { Material, Sentence, SentenceLatestEvaluation } from "./types";
+import type { Material, Sentence, SentenceLatestEvaluation, WordCollection } from "./types";
 
 function indexLatestEvaluations(
   evaluations: SentenceLatestEvaluation[]
@@ -24,9 +26,12 @@ function indexLatestEvaluations(
 export default function App() {
   const [materials, setMaterials] = useState<Material[]>([]);
   const [activeMaterialId, setActiveMaterialId] = useState<number | null>(null);
+  const [activePanel, setActivePanel] = useState<"practice" | "wordLibrary">("practice");
   const [sentences, setSentences] = useState<Sentence[]>([]);
   const [latestEvaluations, setLatestEvaluations] = useState<Record<number, SentenceLatestEvaluation>>({});
+  const [wordCollections, setWordCollections] = useState<WordCollection[]>([]);
   const [loadingSentences, setLoadingSentences] = useState(false);
+  const [loadingWordCollections, setLoadingWordCollections] = useState(false);
   const [shuttingDown, setShuttingDown] = useState(false);
   const sentenceRequestIdRef = useRef(0);
 
@@ -37,6 +42,15 @@ export default function App() {
   const hasProcessingMaterials = useMemo(
     () => materials.some((item) => item.status === "processing"),
     [materials]
+  );
+  const collectedWordSet = useMemo(
+    () =>
+      new Set(
+        wordCollections.map(
+          (item) => `${(item.language || "en").trim().toLowerCase()}:${item.normalized_word}`
+        )
+      ),
+    [wordCollections]
   );
 
   const loadMaterials = useCallback(async () => {
@@ -56,6 +70,22 @@ export default function App() {
   useEffect(() => {
     void loadMaterials();
   }, [loadMaterials]);
+
+  const loadWordCollections = useCallback(async () => {
+    setLoadingWordCollections(true);
+    try {
+      const data = await listWordCollections();
+      setWordCollections(data);
+    } catch (error) {
+      console.error(error);
+    } finally {
+      setLoadingWordCollections(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadWordCollections();
+  }, [loadWordCollections]);
 
   useEffect(() => {
     if (!hasProcessingMaterials) return;
@@ -119,6 +149,7 @@ export default function App() {
   function handleUploaded(material: Material) {
     setMaterials((prev) => [material, ...prev]);
     setActiveMaterialId(material.id);
+    setActivePanel("practice");
   }
 
   function handleProcessed(material: Material) {
@@ -138,6 +169,30 @@ export default function App() {
       });
       return next;
     });
+  }
+
+  function handleSelectMaterial(materialId: number) {
+    setActiveMaterialId(materialId);
+    setActivePanel("practice");
+  }
+
+  function handleOpenWordLibrary() {
+    setActivePanel("wordLibrary");
+  }
+
+  function handleWordCollected(collection: WordCollection) {
+    setWordCollections((prev) => [
+      collection,
+      ...prev.filter(
+        (item) =>
+          item.normalized_word !== collection.normalized_word ||
+          item.language !== collection.language
+      ),
+    ]);
+  }
+
+  function handleWordDeleted(collectionId: number) {
+    setWordCollections((prev) => prev.filter((item) => item.id !== collectionId));
   }
 
   function closeFrontendWindow() {
@@ -185,20 +240,32 @@ export default function App() {
           <MaterialList
             materials={materials}
             activeId={activeMaterialId}
-            onSelect={setActiveMaterialId}
+            isWordLibraryActive={activePanel === "wordLibrary"}
+            onSelect={handleSelectMaterial}
+            onOpenWordLibrary={handleOpenWordLibrary}
             onProcessed={handleProcessed}
             onDeleted={handleDeleted}
           />
         </section>
 
         <section className="content">
-          {loadingSentences ? (
+          {activePanel === "wordLibrary" ? (
+            <WordCollectionPanel
+              collections={wordCollections}
+              loading={loadingWordCollections}
+              onRefresh={loadWordCollections}
+              onDeleted={handleWordDeleted}
+            />
+          ) : loadingSentences ? (
             <div className="card"><p>句子加载中...</p></div>
           ) : (
             <SentenceTrainer
               material={activeMaterial}
               sentences={sentences}
               latestEvaluations={latestEvaluations}
+              collectedWordSet={collectedWordSet}
+              onWordCollected={handleWordCollected}
+              onRefreshWordCollections={loadWordCollections}
             />
           )}
         </section>

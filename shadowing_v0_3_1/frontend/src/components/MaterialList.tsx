@@ -5,7 +5,9 @@ import type { Material } from "../types";
 interface Props {
   materials: Material[];
   activeId: number | null;
+  isWordLibraryActive: boolean;
   onSelect: (id: number) => void;
+  onOpenWordLibrary: () => void;
   onProcessed: (material: Material) => void;
   onDeleted: (materialId: number) => void;
 }
@@ -13,7 +15,9 @@ interface Props {
 export default function MaterialList({
   materials,
   activeId,
+  isWordLibraryActive,
   onSelect,
+  onOpenWordLibrary,
   onProcessed,
   onDeleted,
 }: Props) {
@@ -63,6 +67,16 @@ export default function MaterialList({
   return (
     <div className="card">
       <h2>素材列表</h2>
+      <button
+        type="button"
+        className={`word-library-button ${isWordLibraryActive ? "active" : ""}`}
+        onClick={() => {
+          setOpenMenuId(null);
+          onOpenWordLibrary();
+        }}
+      >
+        收藏单词
+      </button>
       <div className="material-list">
         {materials.length === 0 && <p className="muted">No materials yet. Upload one first.</p>}
         {materials.map((material) => {

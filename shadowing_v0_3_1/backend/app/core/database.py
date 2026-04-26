@@ -6,6 +6,7 @@ from app.models.evaluation import Evaluation
 from app.models.material import Material
 from app.models.recording import Recording
 from app.models.sentence import Sentence
+from app.models.word_collection import WordCollection
 
 sqlite_url = f"sqlite:///{settings.db_path}"
 engine = create_engine(
@@ -81,6 +82,7 @@ def _main_db_tables() -> list:
         Sentence.__table__,
         Recording.__table__,
         Evaluation.__table__,
+        WordCollection.__table__,
     ]
 
 
