@@ -1,13 +1,32 @@
-# Shadowing Trainer v0.3
+# Shadowing Trainer v0.3.1
 
 Shadowing Trainer 是一款本地优先（local-first）的英语口语跟读训练 Web 应用。  
 它支持从素材上传到句级练习、录音与评分的完整流程。
 
-## 版本日志（v0_3）
+## 版本日志（v0_3_1）
 
-以下日志覆盖 `v0_3` 分支在 2026-04-13 的主要变更（含当前工作区未提交内容）。
+以下日志覆盖 `v0_3_1` 分支的主要变更。
 
-### 2026-04-13（工作区未提交）
+### 2026-04-27（v0.3.1）
+
+- **新增词级对齐反馈**：
+  - 新增 `backend/app/services/word_alignment_service.py`，对目标句与用户 ASR 文本做词级对齐。
+  - 支持识别正确、近似错误、替换、漏读、插入、重复与 filler 词，并计算 `word_accuracy`。
+  - 评测结果的 `raw_metrics` 中新增 `word_alignment`，便于前端展示和后续分析。
+- **评分历史支持词级结果回填**：
+  - `Evaluation`、`SentenceLatestEvaluationRead` 与最新评分接口会返回 `word_alignment`。
+  - 重新进入素材训练页时，可从每句最新评分快照恢复词级反馈。
+- **前端新增高亮展示**：
+  - 新增 `HighlightedSentence`、`WordAlignmentView` 与 `alignmentColors`，在训练页和评估面板中高亮用户识别结果。
+  - 训练句文本可根据上一轮评估结果标注漏读、替换等问题，帮助定位具体错误词。
+- **切句与媒体边界更精细**：
+  - ASR 处理支持 word timestamps。
+  - 切句时记录有效单词边界，并在生成句子音频片段时优先使用词边界加 padding，减少片段首尾静音或截断。
+- **测试与仓库维护**：
+  - 新增 `backend/tests/test_word_alignment_service.py` 覆盖精确匹配、漏读、插入、filler、替换与空文本场景。
+  - `.gitignore` 更新为忽略 `shadowing_v0_3_1/backend/data/` 与前端 TypeScript 构建缓存。
+
+### 2026-04-13（v0.3）
 
 - **评测链路新增静音裁剪（VAD）预处理**：
   - 新增 `backend/app/services/vad_service.py`，基于 `librosa.effects.split` 检测有效语音区间，并支持前后 padding、最短时长兜底和失败回退。
@@ -112,6 +131,8 @@ Shadowing Trainer 是一款本地优先（local-first）的英语口语跟读训
   - 流利度（Fluency）
   - 同步度（Sync）
   - 发音（Pronunciation）
+- 支持词级对齐反馈，标出漏读、替换、插入、重复和 filler 词。
+- 支持每句最新评分与词级反馈快照回填。
 - 支持对已有素材重新处理。
 - 支持素材级删除与数据/文件清理。
 
@@ -136,7 +157,7 @@ Shadowing Trainer 是一款本地优先（local-first）的英语口语跟读训
 ## 项目结构
 
 ```text
-shadowing_v0_3/
+shadowing_v0_3_1/
   backend/
     app/
     data/                 # 运行期数据（git 忽略）
@@ -167,7 +188,7 @@ ffprobe -version
 ### 1) 配置后端
 
 ```bash
-cd shadowing_v0_3/backend
+cd shadowing_v0_3_1/backend
 python -m venv .venv
 ```
 
@@ -220,7 +241,7 @@ uvicorn app.main:app --reload --port 8000
 ### 2) 配置前端
 
 ```bash
-cd shadowing_v0_3/frontend
+cd shadowing_v0_3_1/frontend
 npm install
 npm run dev
 ```
@@ -234,6 +255,7 @@ npm run dev
 
 ```env
 APP_NAME=Shadowing Trainer
+APP_VERSION=0.3.1
 DEBUG=true
 HOST=0.0.0.0
 PORT=8000
@@ -258,6 +280,16 @@ TRANSLATION_MAX_KEEPALIVE_CONNECTIONS=50
 
 PROCESSING_LOCK_TIMEOUT_SECONDS=1800
 PROCESSING_LOCK_HEARTBEAT_SECONDS=10
+
+ENABLE_WAVLM_SCORE=true
+ENABLE_PROSODY_SCORE=true
+ENABLE_TRIM_SILENCE=true
+EVAL_WEIGHT_CONTENT=0.40
+EVAL_WEIGHT_IMITATION=0.35
+EVAL_WEIGHT_PROSODY=0.25
+TRIM_TOP_DB=30
+TRIM_PAD_SEC=0.20
+TRIM_MIN_DURATION_SEC=0.30
 ```
 
 ## 数据存储
@@ -279,6 +311,7 @@ PROCESSING_LOCK_HEARTBEAT_SECONDS=10
 - `original_end_time`
 - `clip_audio_path`
 - `clip_duration`
+- `raw_metrics.word_alignment` 中保存词级对齐结果。
 
 旧数据行会以安全默认值进行回填。
 
@@ -291,6 +324,7 @@ PROCESSING_LOCK_HEARTBEAT_SECONDS=10
 - `GET /api/materials/{material_id}`
 - `POST /api/materials/{material_id}/process`
 - `DELETE /api/materials/{material_id}`
+- `GET /api/materials/{material_id}/latest-evaluations`
 - `GET /api/materials/{material_id}/audio`
 - `GET /api/materials/{material_id}/video`
 

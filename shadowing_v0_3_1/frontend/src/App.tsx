@@ -171,7 +171,7 @@ export default function App() {
     <div className="app-shell">
       <header className="app-header">
         <div className="app-header-main">
-          <h1>Shadowing Trainer V0.3</h1>
+          <h1>Shadowing Trainer v0.3.1</h1>
           <p>上传素材 → 转写切句 → 翻译 → 逐句播放 → 跟读录音 → 基础评估</p>
         </div>
         <button type="button" className="shutdown-button" disabled={shuttingDown} onClick={handleShutdown}>

@@ -13,7 +13,7 @@ from app.services.media_service import ensure_directories
 from app.services.translation_service import close_translation_http_client
 import app.models  # noqa: F401
 
-app = FastAPI(title=settings.app_name, debug=settings.debug)
+app = FastAPI(title=settings.app_name, version=settings.app_version, debug=settings.debug)
 
 app.add_middleware(
     CORSMiddleware,
@@ -38,7 +38,7 @@ async def on_shutdown():
 
 @app.get("/health")
 def health():
-    return {"status": "ok"}
+    return {"status": "ok", "version": settings.app_version}
 
 
 app.include_router(materials_router)
