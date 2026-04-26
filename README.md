@@ -136,7 +136,7 @@ Shadowing Trainer 是一款本地优先（local-first）的英语口语跟读训
 ## 项目结构
 
 ```text
-shadowing_v0_2/
+shadowing_v0_3/
   backend/
     app/
     data/                 # 运行期数据（git 忽略）
@@ -167,7 +167,7 @@ ffprobe -version
 ### 1) 配置后端
 
 ```bash
-cd shadowing_v0_2/backend
+cd shadowing_v0_3/backend
 python -m venv .venv
 ```
 
@@ -220,7 +220,7 @@ uvicorn app.main:app --reload --port 8000
 ### 2) 配置前端
 
 ```bash
-cd shadowing_v0_2/frontend
+cd shadowing_v0_3/frontend
 npm install
 npm run dev
 ```
