@@ -1,4 +1,5 @@
 import asyncio
+import json
 import logging
 import mimetypes
 import os
@@ -7,6 +8,7 @@ import socket
 import uuid
 from datetime import datetime, timedelta
 from pathlib import Path
+from typing import Any
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Response, UploadFile
 from fastapi.responses import FileResponse
@@ -395,8 +397,21 @@ def _build_latest_evaluation_read(
         feedback=feedback,
         suggestion=suggestion,
         raw_metrics=raw_metrics,
+        word_alignment=_extract_word_alignment(raw_metrics),
         created_at=created_at,
     )
+
+
+def _extract_word_alignment(raw_metrics: str) -> dict[str, Any] | None:
+    try:
+        payload = json.loads(raw_metrics)
+    except Exception:
+        return None
+
+    word_alignment = payload.get("word_alignment")
+    if isinstance(word_alignment, dict):
+        return word_alignment
+    return None
 
 
 def _normalize_translations_for_sentences(

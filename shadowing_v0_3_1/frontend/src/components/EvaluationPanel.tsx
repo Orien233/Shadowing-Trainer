@@ -1,4 +1,5 @@
 import type { Evaluation } from "../types";
+import WordAlignmentView from "./WordAlignmentView.jsx";
 
 interface Props {
   evaluation: Evaluation | null;
@@ -26,6 +27,7 @@ export default function EvaluationPanel({ evaluation }: Props) {
       </div>
       <p><strong>反馈：</strong>{evaluation.feedback}</p>
       <p><strong>建议：</strong>{evaluation.suggestion}</p>
+      {evaluation.word_alignment && <WordAlignmentView alignment={evaluation.word_alignment} />}
     </div>
   );
 }

@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import Any
 
 from pydantic import BaseModel, ConfigDict
 
@@ -16,4 +17,5 @@ class EvaluationRead(BaseModel):
     feedback: str
     suggestion: str
     raw_metrics: str
+    word_alignment: dict[str, Any] | None = None
     created_at: datetime

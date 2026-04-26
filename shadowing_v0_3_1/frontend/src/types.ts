@@ -24,6 +24,33 @@ export interface Sentence {
   created_at: string;
 }
 
+export interface WordAlignmentToken {
+  index: number;
+  text: string;
+  normalized: string;
+  status: string;
+  severity: string;
+  matched_token_index: number | null;
+  note?: string;
+  insertion_type?: string;
+}
+
+export interface WordAlignmentSummary {
+  correct_count: number;
+  substitution_count: number;
+  deletion_count: number;
+  insertion_count: number;
+  minor_error_count: number;
+  filler_count?: number;
+  word_accuracy: number;
+}
+
+export interface WordAlignment {
+  reference_tokens: WordAlignmentToken[];
+  user_tokens: WordAlignmentToken[];
+  summary: WordAlignmentSummary;
+}
+
 export interface Evaluation {
   id: number;
   recording_id: number;
@@ -35,6 +62,7 @@ export interface Evaluation {
   feedback: string;
   suggestion: string;
   raw_metrics: string;
+  word_alignment?: WordAlignment | null;
   created_at: string;
 }
 
@@ -50,6 +78,7 @@ export interface SentenceLatestEvaluation {
   feedback: string;
   suggestion: string;
   raw_metrics: string;
+  word_alignment?: WordAlignment | null;
   created_at: string;
 }
 

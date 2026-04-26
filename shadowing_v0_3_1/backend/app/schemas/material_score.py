@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import Any
 
 from pydantic import BaseModel, Field
 
@@ -15,6 +16,7 @@ class SentenceLatestEvaluationRead(BaseModel):
     feedback: str
     suggestion: str
     raw_metrics: str
+    word_alignment: dict[str, Any] | None = None
     created_at: datetime
 
 

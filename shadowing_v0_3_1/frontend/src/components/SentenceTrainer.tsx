@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { apiBase } from "../lib/api";
 import type { Evaluation, Material, Sentence, SentenceLatestEvaluation } from "../types";
 import EvaluationPanel from "./EvaluationPanel";
+import HighlightedSentence from "./HighlightedSentence.jsx";
 import RecorderPanel from "./RecorderPanel";
 
 interface Props {
@@ -59,6 +60,7 @@ function asEvaluation(snapshot: SentenceLatestEvaluation): Evaluation {
     feedback: snapshot.feedback,
     suggestion: snapshot.suggestion,
     raw_metrics: snapshot.raw_metrics,
+    word_alignment: snapshot.word_alignment,
     created_at: snapshot.created_at,
   };
 }
@@ -196,6 +198,7 @@ export default function SentenceTrainer({ material, sentences, latestEvaluations
   );
   const currentSentence = currentSegment?.sentence ?? null;
   const isGapSegment = currentSegment?.type === "gap";
+  const referenceAlignmentTokens = evaluation?.word_alignment?.reference_tokens ?? [];
 
   const normalizedLatestEvaluations = useMemo(() => {
     const next: Record<number, Evaluation> = {};
@@ -742,7 +745,13 @@ export default function SentenceTrainer({ material, sentences, latestEvaluations
         </div>
 
         <div className="sentence-text">
-          {isGapSegment ? "[Silent Segment]" : currentSentence?.source_text}
+          {isGapSegment ? (
+            "[Silent Segment]"
+          ) : referenceAlignmentTokens.length > 0 ? (
+            <HighlightedSentence tokens={referenceAlignmentTokens} emptyText={currentSentence?.source_text ?? ""} />
+          ) : (
+            currentSentence?.source_text
+          )}
         </div>
         {!isGapSegment && (
           <div className="sentence-translation">{currentSentence?.translation ?? "No translation yet."}</div>

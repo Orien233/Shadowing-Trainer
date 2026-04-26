@@ -22,6 +22,7 @@ from app.services.scoring_service import (
 )
 from app.services.transcription_service import transcribe_text
 from app.services.vad_service import TrimmedAudioResult, create_trimmed_audio
+from app.services.word_alignment_service import align_word_tokens
 
 
 EVALUATION_PIPELINE_VERSION = "multi_branch_v1"
@@ -148,6 +149,7 @@ def evaluate_recording(
         resolved_reference_audio_path = _resolve_reference_audio_path(reference_audio_path)
 
         content_metrics = extract_content_metrics(reference_text, asr_text)
+        word_alignment = align_word_tokens(reference_text, asr_text)
         content_score = score_content_branch(content_metrics)
 
         imitation_metrics = compute_imitation_metrics(
@@ -220,6 +222,7 @@ def evaluate_recording(
             "vad": trim_result.metadata,
             "tags": tags,
             "asr_text": asr_text,
+            "word_alignment": word_alignment,
             "duration": duration,
             "legacy": {
                 "recall": content_metrics.token_recall,
