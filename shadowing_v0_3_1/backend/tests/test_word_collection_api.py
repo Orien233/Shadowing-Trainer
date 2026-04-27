@@ -140,7 +140,7 @@ def test_collect_word_matches_existing_normalized_word_case_insensitively():
             )
 
 
-def test_get_word_collections_returns_created_at_desc(client: TestClient):
+def test_get_word_collections_default_returns_newest_first(client: TestClient):
     client.post(
         "/api/words/collect",
         json={"material_id": 1, "sentence_id": 10, "word_text": "first"},
@@ -156,6 +156,37 @@ def test_get_word_collections_returns_created_at_desc(client: TestClient):
     payload = response.json()
     assert [item["word_text"] for item in payload] == ["second", "first"]
     assert payload[0]["id"] == second["id"]
+
+
+def test_get_word_collections_can_sort_by_collected_time_oldest_first(client: TestClient):
+    first = client.post(
+        "/api/words/collect",
+        json={"material_id": 1, "sentence_id": 10, "word_text": "first"},
+    ).json()
+    client.post(
+        "/api/words/collect",
+        json={"material_id": 1, "sentence_id": 11, "word_text": "second"},
+    )
+
+    response = client.get("/api/words/collections?sort=collected_time_desc")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert [item["word_text"] for item in payload] == ["first", "second"]
+    assert payload[0]["id"] == first["id"]
+
+
+def test_get_word_collections_can_sort_alphabetically(client: TestClient):
+    for word in ["banana", "apple", "cat"]:
+        client.post(
+            "/api/words/collect",
+            json={"material_id": 1, "sentence_id": 10, "word_text": word},
+        )
+
+    response = client.get("/api/words/collections?sort=alphabetical")
+
+    assert response.status_code == 200
+    assert [item["word_text"] for item in response.json()] == ["apple", "banana", "cat"]
 
 
 def test_delete_word_collection_success(client: TestClient):

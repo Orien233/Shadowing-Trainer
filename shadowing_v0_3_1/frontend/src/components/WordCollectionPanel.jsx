@@ -2,6 +2,12 @@ import { useEffect, useState } from "react";
 import { deleteWordCollection } from "../lib/api";
 import { normalizeWordText } from "../utils/sentenceTokenText.js";
 
+const SORT_OPTIONS = [
+  { value: "collected_time_asc", label: "收藏时间正序（新到旧）" },
+  { value: "collected_time_desc", label: "收藏时间倒序（旧到新）" },
+  { value: "alphabetical", label: "字母顺序" },
+];
+
 export default function WordCollectionPanel({
   collections,
   loading,
@@ -9,12 +15,17 @@ export default function WordCollectionPanel({
   onDeleted,
 }) {
   const [deletingIds, setDeletingIds] = useState(() => new Set());
+  const [sortMode, setSortMode] = useState("collected_time_asc");
   const visibleCollections = collections ?? [];
   const isLoading = Boolean(loading);
 
   useEffect(() => {
-    void onRefresh?.();
-  }, [onRefresh]);
+    void onRefresh?.(sortMode);
+  }, [onRefresh, sortMode]);
+
+  function handleSortChange(event) {
+    setSortMode(event.target.value);
+  }
 
   async function handleDelete(collection) {
     if (deletingIds.has(collection.id)) {
@@ -40,7 +51,19 @@ export default function WordCollectionPanel({
     <div className="card word-collection-panel">
       <div className="word-collection-heading">
         <h2>收藏单词</h2>
-        {isLoading && <span className="material-state">Loading...</span>}
+        <div className="word-collection-controls">
+          <label className="word-collection-sort">
+            <span>排序</span>
+            <select value={sortMode} onChange={handleSortChange}>
+              {SORT_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          {isLoading && <span className="material-state">Loading...</span>}
+        </div>
       </div>
 
       {visibleCollections.length === 0 ? (

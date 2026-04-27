@@ -11,6 +11,7 @@ import {
   listMaterials,
   shutdownBackend,
 } from "./lib/api";
+import type { WordCollectionSortMode } from "./lib/api";
 import type { Material, Sentence, SentenceLatestEvaluation, WordCollection } from "./types";
 import { buildCollectedWordKey, normalizeWordText } from "./utils/sentenceTokenText.js";
 
@@ -75,10 +76,12 @@ export default function App() {
     void loadMaterials();
   }, [loadMaterials]);
 
-  const loadWordCollections = useCallback(async () => {
+  const loadWordCollections = useCallback(async (
+    sort: WordCollectionSortMode = "collected_time_asc"
+  ) => {
     setLoadingWordCollections(true);
     try {
-      const data = await listWordCollections();
+      const data = await listWordCollections({ sort });
       setWordCollections(data);
     } catch (error) {
       console.error(error);

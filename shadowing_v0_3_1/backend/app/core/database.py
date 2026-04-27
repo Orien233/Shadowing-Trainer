@@ -87,6 +87,18 @@ def _migrate_word_collection_table() -> None:
                 language = lower(language)
             """
         )
+        connection.exec_driver_sql(
+            """
+            CREATE INDEX IF NOT EXISTS ix_word_collections_created_at
+            ON word_collections (created_at)
+            """
+        )
+        connection.exec_driver_sql(
+            """
+            CREATE INDEX IF NOT EXISTS ix_word_collections_normalized_word
+            ON word_collections (normalized_word)
+            """
+        )
 
 
 def _main_db_tables() -> list:

@@ -1,8 +1,9 @@
 import string
 from datetime import datetime
+from typing import Literal
 
 from sqlalchemy.exc import IntegrityError
-from sqlmodel import Session, desc, func, select
+from sqlmodel import Session, asc, desc, func, select
 
 from app.models.word_collection import WordCollection
 from app.schemas.word_collection import WordCollectionCreate
@@ -10,6 +11,11 @@ from app.schemas.word_collection import WordCollectionCreate
 
 _EDGE_PUNCTUATION = string.punctuation + "\u2018\u2019\u201c\u201d"
 _APOSTROPHES = {"'", "\u2018", "\u2019", "\u201b", "\u2032"}
+WordCollectionSortMode = Literal[
+    "collected_time_asc",
+    "collected_time_desc",
+    "alphabetical",
+]
 
 
 class WordAlreadyCollectedError(Exception):
@@ -99,12 +105,27 @@ def collect_word(
     return collection
 
 
-def list_word_collections(session: Session) -> list[WordCollection]:
-    return list(
-        session.exec(
-            select(WordCollection).order_by(desc(WordCollection.created_at))
-        ).all()
-    )
+def list_word_collections(
+    session: Session,
+    sort: WordCollectionSortMode = "collected_time_asc",
+) -> list[WordCollection]:
+    statement = select(WordCollection)
+    if sort == "alphabetical":
+        statement = statement.order_by(
+            asc(func.lower(WordCollection.normalized_word)),
+            desc(WordCollection.created_at),
+        )
+    elif sort == "collected_time_desc":
+        statement = statement.order_by(
+            asc(WordCollection.created_at),
+            asc(WordCollection.id),
+        )
+    else:
+        statement = statement.order_by(
+            desc(WordCollection.created_at),
+            desc(WordCollection.id),
+        )
+    return list(session.exec(statement).all())
 
 
 def delete_word_collection(session: Session, collection_id: int) -> bool:

@@ -25,6 +25,15 @@ export interface WordCollectInput {
   language?: string;
 }
 
+export type WordCollectionSortMode =
+  | "collected_time_asc"
+  | "collected_time_desc"
+  | "alphabetical";
+
+export interface WordCollectionListOptions {
+  sort?: WordCollectionSortMode;
+}
+
 interface WordCollectionErrorPayload {
   detail?: string;
   message?: string;
@@ -139,8 +148,14 @@ export async function collectWord(payload: WordCollectInput): Promise<WordCollec
   return res.json();
 }
 
-export async function listWordCollections(): Promise<WordCollection[]> {
-  const res = await fetch(`${API_BASE}/api/words/collections`);
+export async function listWordCollections(
+  options: WordCollectionListOptions = {}
+): Promise<WordCollection[]> {
+  const url = new URL(`${API_BASE}/api/words/collections`);
+  if (options.sort) {
+    url.searchParams.set("sort", options.sort);
+  }
+  const res = await fetch(url.toString());
   if (!res.ok) throw await readWordCollectionError(res);
   return res.json();
 }

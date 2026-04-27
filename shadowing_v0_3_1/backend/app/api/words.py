@@ -1,3 +1,5 @@
+from typing import Literal
+
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import JSONResponse
 from sqlmodel import Session
@@ -39,8 +41,15 @@ def collect_word_collection(
 
 
 @router.get("/collections", response_model=list[WordCollectionRead])
-def get_word_collections(session: Session = Depends(get_session)):
-    return list_word_collections(session)
+def get_word_collections(
+    sort: Literal[
+        "collected_time_asc",
+        "collected_time_desc",
+        "alphabetical",
+    ] = "collected_time_asc",
+    session: Session = Depends(get_session),
+):
+    return list_word_collections(session, sort=sort)
 
 
 @router.delete(
