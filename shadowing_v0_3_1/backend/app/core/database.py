@@ -76,6 +76,19 @@ def _migrate_material_table() -> None:
         _add_column_if_missing(connection, "material", "processing_heartbeat_at", "DATETIME")
 
 
+def _migrate_word_collection_table() -> None:
+    with engine.begin() as connection:
+        connection.exec_driver_sql(
+            """
+            UPDATE word_collections
+            SET
+                word_text = lower(normalized_word),
+                normalized_word = lower(normalized_word),
+                language = lower(language)
+            """
+        )
+
+
 def _main_db_tables() -> list:
     return [
         Material.__table__,
@@ -90,6 +103,7 @@ def init_db() -> None:
     SQLModel.metadata.create_all(engine, tables=_main_db_tables())
     _migrate_sentence_table()
     _migrate_material_table()
+    _migrate_word_collection_table()
 
 
 def get_session():

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { deleteWordCollection } from "../lib/api";
+import { normalizeWordText } from "../utils/sentenceTokenText.js";
 
 export default function WordCollectionPanel({
   collections,
@@ -48,6 +49,9 @@ export default function WordCollectionPanel({
         <div className="word-collection-list">
           {visibleCollections.map((collection) => {
             const isDeleting = deletingIds.has(collection.id);
+            const displayWord =
+              normalizeWordText(collection.normalized_word || collection.word_text) ||
+              String(collection.word_text ?? "").toLowerCase();
             return (
               <button
                 key={collection.id}
@@ -59,7 +63,7 @@ export default function WordCollectionPanel({
                 }}
                 title="点击取消收藏"
               >
-                <span className="word-collection-text">{collection.word_text}</span>
+                <span className="word-collection-text">{displayWord}</span>
                 <span className="word-collection-meta">
                   {collection.language || "en"}
                   {isDeleting ? " · Removing..." : ""}

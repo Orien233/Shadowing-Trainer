@@ -12,6 +12,7 @@ import {
   shutdownBackend,
 } from "./lib/api";
 import type { Material, Sentence, SentenceLatestEvaluation, WordCollection } from "./types";
+import { buildCollectedWordKey, normalizeWordText } from "./utils/sentenceTokenText.js";
 
 function indexLatestEvaluations(
   evaluations: SentenceLatestEvaluation[]
@@ -21,6 +22,11 @@ function indexLatestEvaluations(
     next[item.sentence_id] = item;
   }
   return next;
+}
+
+function getWordCollectionKey(collection: WordCollection): string {
+  const normalizedWord = normalizeWordText(collection.normalized_word || collection.word_text);
+  return buildCollectedWordKey(normalizedWord, collection.language);
 }
 
 export default function App() {
@@ -46,9 +52,7 @@ export default function App() {
   const collectedWordSet = useMemo(
     () =>
       new Set(
-        wordCollections.map(
-          (item) => `${(item.language || "en").trim().toLowerCase()}:${item.normalized_word}`
-        )
+        wordCollections.map((item) => getWordCollectionKey(item)).filter(Boolean)
       ),
     [wordCollections]
   );
@@ -181,13 +185,10 @@ export default function App() {
   }
 
   function handleWordCollected(collection: WordCollection) {
+    const collectionKey = getWordCollectionKey(collection);
     setWordCollections((prev) => [
       collection,
-      ...prev.filter(
-        (item) =>
-          item.normalized_word !== collection.normalized_word ||
-          item.language !== collection.language
-      ),
+      ...prev.filter((item) => getWordCollectionKey(item) !== collectionKey),
     ]);
   }
 

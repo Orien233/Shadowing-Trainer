@@ -2,7 +2,7 @@ import string
 from datetime import datetime
 
 from sqlalchemy.exc import IntegrityError
-from sqlmodel import Session, desc, select
+from sqlmodel import Session, desc, func, select
 
 from app.models.word_collection import WordCollection
 from app.schemas.word_collection import WordCollectionCreate
@@ -67,8 +67,8 @@ def collect_word(
     language = normalize_language(payload.language)
     existing = session.exec(
         select(WordCollection).where(
-            WordCollection.normalized_word == normalized_word,
-            WordCollection.language == language,
+            func.lower(WordCollection.normalized_word) == normalized_word,
+            func.lower(WordCollection.language) == language,
         )
     ).first()
     if existing:
@@ -78,7 +78,7 @@ def collect_word(
     collection = WordCollection(
         material_id=payload.material_id,
         sentence_id=payload.sentence_id,
-        word_text=clean_word_text,
+        word_text=normalized_word,
         normalized_word=normalized_word,
         language=language,
         translation=payload.translation,

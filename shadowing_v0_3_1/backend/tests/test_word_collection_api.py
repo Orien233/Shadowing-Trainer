@@ -9,8 +9,11 @@ from sqlmodel import Session, SQLModel, create_engine
 from app.api.words import router as words_router
 from app.core.database import get_session
 from app.models.word_collection import WordCollection
+from app.schemas.word_collection import WordCollectionCreate
 from app.services.word_collection_service import (
+    WordAlreadyCollectedError,
     clean_collected_word_text,
+    collect_word,
     normalize_word_text,
 )
 
@@ -49,7 +52,7 @@ def test_collect_new_word_success(client: TestClient):
     assert response.status_code == 200
     payload = response.json()
     assert payload["id"] > 0
-    assert payload["word_text"] == "Wanted"
+    assert payload["word_text"] == "wanted"
     assert payload["normalized_word"] == "wanted"
     assert payload["language"] == "en"
 
@@ -66,8 +69,24 @@ def test_collect_word_strips_non_word_punctuation_before_storage(client: TestCli
 
     assert response.status_code == 200
     payload = response.json()
-    assert payload["word_text"] == "Hello"
+    assert payload["word_text"] == "hello"
     assert payload["normalized_word"] == "hello"
+
+
+def test_collect_word_stores_lowercase_word_text(client: TestClient):
+    response = client.post(
+        "/api/words/collect",
+        json={
+            "material_id": 1,
+            "sentence_id": 10,
+            "word_text": "CAN’T.",
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["word_text"] == "can't"
+    assert payload["normalized_word"] == "can't"
 
 
 def test_collect_duplicate_word_returns_409(client: TestClient):
@@ -87,6 +106,38 @@ def test_collect_duplicate_word_returns_409(client: TestClient):
         "detail": "WORD_ALREADY_COLLECTED",
         "message": "这个单词已经收藏过了",
     }
+
+
+def test_collect_word_matches_existing_normalized_word_case_insensitively():
+    engine = create_engine(
+        "sqlite://",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    SQLModel.metadata.create_all(engine, tables=[WordCollection.__table__])
+
+    with Session(engine) as session:
+        session.add(
+            WordCollection(
+                material_id=1,
+                sentence_id=10,
+                word_text="Wanted",
+                normalized_word="Wanted",
+                language="EN",
+            )
+        )
+        session.commit()
+
+        with pytest.raises(WordAlreadyCollectedError):
+            collect_word(
+                session,
+                WordCollectionCreate(
+                    material_id=1,
+                    sentence_id=11,
+                    word_text="wanted.",
+                    language="en",
+                ),
+            )
 
 
 def test_get_word_collections_returns_created_at_desc(client: TestClient):
