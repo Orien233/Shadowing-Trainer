@@ -27,6 +27,7 @@ interface TimelineSegment {
 }
 
 const SEGMENT_EPSILON = 0.05;
+const PROGRAMMATIC_SEEK_TOLERANCE = SEGMENT_EPSILON * 2;
 
 type VideoFrameAwareElement = HTMLVideoElement & {
   requestVideoFrameCallback?: (callback: VideoFrameRequestCallback) => number;
@@ -187,8 +188,19 @@ export default function SentenceTrainer({
   const boundaryTokenRef = useRef(0);
   const loopRef = useRef(loop);
   const autoPlayRef = useRef(autoPlay);
+  const segmentIndexRef = useRef(segmentIndex);
   const timelineDurationRef = useRef(0);
   const segmentsRef = useRef<TimelineSegment[]>([]);
+  const programmaticVideoSeekTargetRef = useRef<number | null>(null);
+  const programmaticVideoSeekInFlightRef = useRef(false);
+
+  const setActiveSegmentIndex = useCallback((nextIndex: number | ((prev: number) => number)) => {
+    setSegmentIndex((prev) => {
+      const resolvedIndex = typeof nextIndex === "function" ? nextIndex(prev) : nextIndex;
+      segmentIndexRef.current = resolvedIndex;
+      return prev === resolvedIndex ? prev : resolvedIndex;
+    });
+  }, []);
 
   const timelineDuration = useMemo(() => {
     const materialDuration = material?.duration ?? 0;
@@ -256,31 +268,41 @@ export default function SentenceTrainer({
     return audioRef.current;
   }, [material?.file_type]);
 
-  const syncFromGlobalTime = useCallback((targetTime: number) => {
+  const syncPlaybackTime = useCallback((targetTime: number): number => {
     const maxTime = timelineDurationRef.current;
     const clampedGlobalTime = maxTime > 0 ? clamp(targetTime, 0, maxTime) : Math.max(targetTime, 0);
 
     setPlaybackTime(clampedGlobalTime);
-    if (segmentsRef.current.length > 0) {
-      const nextIndex = locateSegmentIndex(segmentsRef.current, clampedGlobalTime);
-      setSegmentIndex((prev) => (prev === nextIndex ? prev : nextIndex));
-    } else {
-      setSegmentIndex(0);
-    }
+    return clampedGlobalTime;
   }, []);
 
+  const syncFromGlobalTime = useCallback((targetTime: number): number => {
+    const clampedGlobalTime = syncPlaybackTime(targetTime);
+    if (segmentsRef.current.length > 0) {
+      const nextIndex = locateSegmentIndex(segmentsRef.current, clampedGlobalTime);
+      setActiveSegmentIndex(nextIndex);
+    } else {
+      setActiveSegmentIndex(0);
+    }
+    return clampedGlobalTime;
+  }, [setActiveSegmentIndex, syncPlaybackTime]);
+
   const seekToGlobalTime = useCallback(
-    (targetTime: number) => {
-      const maxTime = timelineDurationRef.current;
-      const clampedGlobalTime = maxTime > 0 ? clamp(targetTime, 0, maxTime) : Math.max(targetTime, 0);
-      syncFromGlobalTime(clampedGlobalTime);
+    (targetTime: number, mapSegmentFromTime = false) => {
+      const clampedGlobalTime = mapSegmentFromTime
+        ? syncFromGlobalTime(targetTime)
+        : syncPlaybackTime(targetTime);
 
       const media = getMediaElement();
       if (!media) return;
       if (Math.abs(media.currentTime - clampedGlobalTime) <= SEGMENT_EPSILON) return;
+      if (media instanceof HTMLVideoElement) {
+        programmaticVideoSeekTargetRef.current = clampedGlobalTime;
+        programmaticVideoSeekInFlightRef.current = true;
+      }
       media.currentTime = clampedGlobalTime;
     },
-    [getMediaElement, syncFromGlobalTime]
+    [getMediaElement, syncFromGlobalTime, syncPlaybackTime]
   );
 
   useEffect(() => {
@@ -290,6 +312,10 @@ export default function SentenceTrainer({
   useEffect(() => {
     autoPlayRef.current = autoPlay;
   }, [autoPlay]);
+
+  useEffect(() => {
+    segmentIndexRef.current = segmentIndex;
+  }, [segmentIndex]);
 
   useEffect(() => {
     timelineDurationRef.current = timelineDuration;
@@ -304,21 +330,23 @@ export default function SentenceTrainer({
   }, [material?.id, normalizedLatestEvaluations]);
 
   useEffect(() => {
-    setSegmentIndex(0);
+    setActiveSegmentIndex(0);
     setEvaluation(null);
     setPlaybackTime(0);
     setMediaDuration(0);
     setMediaError(null);
+    programmaticVideoSeekTargetRef.current = null;
+    programmaticVideoSeekInFlightRef.current = false;
     clearStopTimer();
     audioRef.current?.pause();
     if (videoRef.current && !videoRef.current.paused) {
       videoRef.current.pause();
     }
-  }, [clearStopTimer, material?.id]);
+  }, [clearStopTimer, material?.id, setActiveSegmentIndex]);
 
   useEffect(() => {
-    setSegmentIndex((prev) => clamp(prev, 0, Math.max(segments.length - 1, 0)));
-  }, [segments.length]);
+    setActiveSegmentIndex((prev) => clamp(prev, 0, Math.max(segments.length - 1, 0)));
+  }, [segments.length, setActiveSegmentIndex]);
 
   useEffect(() => {
     if (isGapSegment || !currentSentence) {
@@ -350,10 +378,10 @@ export default function SentenceTrainer({
     setMediaError(null);
 
     const handleTimeUpdate = () => {
-      syncFromGlobalTime(audio.currentTime);
+      syncPlaybackTime(audio.currentTime);
     };
     const handleSeeking = () => {
-      syncFromGlobalTime(audio.currentTime);
+      syncPlaybackTime(audio.currentTime);
     };
     const handleLoadedMetadata = () => {
       if (Number.isFinite(audio.duration)) {
@@ -386,7 +414,7 @@ export default function SentenceTrainer({
         audioRef.current = null;
       }
     };
-  }, [clearStopTimer, material?.file_type, material?.id, material?.status, syncFromGlobalTime]);
+  }, [clearStopTimer, material?.file_type, material?.id, material?.status, syncPlaybackTime]);
 
   useEffect(() => {
     if (material?.status !== "processing") {
@@ -462,7 +490,7 @@ export default function SentenceTrainer({
         }
 
         const nextSegment = activeSegments[nextIndex];
-        setSegmentIndex((prev) => (prev === nextIndex ? prev : nextIndex));
+        setActiveSegmentIndex(nextIndex);
         seekToGlobalTime(nextSegment.start);
         void media.play().catch(() => undefined);
         scheduleSegmentBoundary(nextSegment, media);
@@ -505,10 +533,10 @@ export default function SentenceTrainer({
 
       tick();
     },
-    [clearStopTimer, seekToGlobalTime]
+    [clearStopTimer, seekToGlobalTime, setActiveSegmentIndex]
   );
 
-  const scheduleBoundaryForCurrentPlayback = useCallback(() => {
+  const scheduleBoundaryForCurrentPlayback = useCallback((mapSegmentFromMedia = false) => {
     const media = getMediaElement();
     if (!media || media.paused) {
       clearStopTimer();
@@ -521,11 +549,15 @@ export default function SentenceTrainer({
       return;
     }
 
-    const activeIndex = locateSegmentIndex(activeSegments, media.currentTime);
+    const activeIndex = mapSegmentFromMedia
+      ? locateSegmentIndex(activeSegments, media.currentTime)
+      : clamp(segmentIndexRef.current, 0, activeSegments.length - 1);
     const activeSegment = activeSegments[activeIndex];
-    setSegmentIndex((prev) => (prev === activeIndex ? prev : activeIndex));
+    if (mapSegmentFromMedia) {
+      setActiveSegmentIndex(activeIndex);
+    }
     scheduleSegmentBoundary(activeSegment, media);
-  }, [clearStopTimer, getMediaElement, scheduleSegmentBoundary]);
+  }, [clearStopTimer, getMediaElement, scheduleSegmentBoundary, setActiveSegmentIndex]);
 
   useEffect(() => {
     const handleVisibilityChange = () => {
@@ -574,17 +606,13 @@ export default function SentenceTrainer({
       return;
     }
     const targetSegment = segments[safeIndex];
-    setSegmentIndex(safeIndex);
+    setActiveSegmentIndex(safeIndex);
     void playSegment(targetSegment);
   }
 
   function getActiveSegmentIndexForNavigation(): number {
     if (segments.length === 0) {
       return 0;
-    }
-    const media = getMediaElement();
-    if (media) {
-      return locateSegmentIndex(segments, media.currentTime);
     }
     return clamp(segmentIndex, 0, segments.length - 1);
   }
@@ -628,17 +656,50 @@ export default function SentenceTrainer({
   function handleVideoTimeUpdate() {
     const video = videoRef.current;
     if (!video) return;
-    syncFromGlobalTime(video.currentTime);
+    syncPlaybackTime(video.currentTime);
+  }
+
+  function isProgrammaticVideoSeek(video: HTMLVideoElement): boolean {
+    const target = programmaticVideoSeekTargetRef.current;
+    return (
+      programmaticVideoSeekInFlightRef.current ||
+      (target !== null && Math.abs(video.currentTime - target) <= PROGRAMMATIC_SEEK_TOLERANCE)
+    );
   }
 
   function handleVideoSeeking() {
     const video = videoRef.current;
     if (!video) return;
-    clearStopTimer();
+
+    if (isProgrammaticVideoSeek(video)) {
+      syncPlaybackTime(video.currentTime);
+      if (!video.paused) {
+        scheduleBoundaryForCurrentPlayback();
+      }
+      return;
+    }
+
     syncFromGlobalTime(video.currentTime);
     if (!video.paused) {
-      scheduleBoundaryForCurrentPlayback();
+      scheduleBoundaryForCurrentPlayback(true);
+    } else {
+      clearStopTimer();
     }
+  }
+
+  function handleVideoSeeked() {
+    const video = videoRef.current;
+    if (!video) return;
+
+    const target = programmaticVideoSeekTargetRef.current;
+    if (
+      programmaticVideoSeekInFlightRef.current ||
+      (target !== null && Math.abs(video.currentTime - target) <= PROGRAMMATIC_SEEK_TOLERANCE)
+    ) {
+      programmaticVideoSeekTargetRef.current = null;
+      programmaticVideoSeekInFlightRef.current = false;
+    }
+    syncPlaybackTime(video.currentTime);
   }
 
   function handleVideoPause() {
@@ -652,7 +713,7 @@ export default function SentenceTrainer({
     setMediaDuration(video.duration);
     setMediaError(null);
     if (Math.abs(video.currentTime - playbackTime) > SEGMENT_EPSILON) {
-      video.currentTime = playbackTime;
+      seekToGlobalTime(playbackTime);
     }
   }
 
@@ -738,6 +799,7 @@ export default function SentenceTrainer({
               onRateChange={handleVideoRateChange}
               onTimeUpdate={handleVideoTimeUpdate}
               onSeeking={handleVideoSeeking}
+              onSeeked={handleVideoSeeked}
               onLoadedMetadata={handleVideoLoadedMetadata}
               onError={handleVideoError}
             />
