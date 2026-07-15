@@ -16,6 +16,9 @@ recording, scoring, word collection, and durable-job workflows.
   provider for LLM/TTS/ASR, then mark one provider per capability as default.
   API keys are stored only by the backend and the list API/UI returns a masked
   value. A blank API-key update keeps the previous key.
+- **TTS endpoint:** for an OpenAI-compatible TTS provider, enter the complete
+  synthesis endpoint (for example `https://host/v1/audio/speech`). The app
+  deliberately does not append `/audio/speech`.
 - **ASR scene switches:** *Use Local Whisper for material transcription*
   affects uploaded material processing. *Use Local Whisper for recording
   evaluation* affects learner speech scoring. Turning either switch off uses

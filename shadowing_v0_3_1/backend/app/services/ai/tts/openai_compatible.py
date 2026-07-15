@@ -20,7 +20,9 @@ class OpenAICompatibleTTSProvider(TTSProvider):
         response_format = self.extra_config.get("response_format")
         if response_format:
             payload["response_format"] = response_format
-        response = httpx.post(f"{self.base_url}/audio/speech", json=payload, headers={"Authorization": f"Bearer {self.api_key}"}, timeout=120)
+        # The configured URL is the full synthesis endpoint. Compatible
+        # providers often expose a different path, so never append /audio/speech.
+        response = httpx.post(self.base_url, json=payload, headers={"Authorization": f"Bearer {self.api_key}"}, timeout=120)
         response.raise_for_status()
         if not response.content:
             raise ValueError("TTS provider returned an empty audio file.")

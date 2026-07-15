@@ -18,6 +18,8 @@ from app.schemas.text_practice import TextGenerationRequest
 from app.services import asr_router, text_generation_service, tts_service
 from app.services.ai.asr.local_whisper import LocalWhisperASRProvider
 from app.services.ai.audio_types import TTSResult
+from app.services.ai.tts.base import TTSRequest
+from app.services.ai.tts.openai_compatible import OpenAICompatibleTTSProvider
 from app.services.provider_factory import create_provider
 from app.api.providers import _read
 
@@ -42,6 +44,21 @@ def test_factory_creates_azure_audio_adapters():
     asr = create_provider(AIProvider(name="azure", capability="asr", provider_type="azure_speech", base_url="https://westus.stt.speech.microsoft.com", api_key="secret", model_name="conversation"))
     assert tts.__class__.__name__ == "AzureSpeechTTSProvider"
     assert asr.__class__.__name__ == "AzureSpeechASRProvider"
+
+
+def test_openai_tts_uses_user_provided_full_endpoint(monkeypatch):
+    called: dict[str, object] = {}
+    class Response:
+        content = b"audio"
+        headers: dict[str, str] = {}
+        def raise_for_status(self): pass
+    def fake_post(url, **kwargs):
+        called["url"] = url
+        return Response()
+    monkeypatch.setattr("app.services.ai.tts.openai_compatible.httpx.post", fake_post)
+    provider = OpenAICompatibleTTSProvider(base_url="https://voice.example/custom/speech", api_key="key", model_name="model")
+    provider.synthesize(TTSRequest(text="Hello"))
+    assert called["url"] == "https://voice.example/custom/speech"
 
 
 def test_provider_read_masks_api_key():
