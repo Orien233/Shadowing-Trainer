@@ -6,8 +6,12 @@ The v0.4 project lives in `shadowing_v0_3_1/`. It adds an OpenAI-compatible
 provider layer while preserving the existing upload, sentence training,
 recording, scoring, word collection, and durable-job workflows.
 
-- **Provider types currently implemented:** OpenAI-compatible LLM, TTS, and
-  remote ASR; cached Local Whisper remains available as the local ASR provider.
+- **Audio provider contract:** TTS and ASR use OpenAI Audio API request shapes
+  (`/audio/speech`, `/audio/transcriptions`) as a common baseline, while the
+  application exposes its own `AudioCapability`, `TTSResult`, and `ASRResult`.
+  Azure Speech and cached Local Whisper are adapters behind that contract.
+- **Provider types currently implemented:** OpenAI-compatible LLM/TTS/remote
+  ASR, Azure Speech TTS/ASR, and cached Local Whisper for local ASR.
 - **Configuration:** open **Settings** in the application, add an enabled
   provider for LLM/TTS/ASR, then mark one provider per capability as default.
   API keys are stored only by the backend and the list API/UI returns a masked

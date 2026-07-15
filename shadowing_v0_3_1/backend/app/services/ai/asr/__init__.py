@@ -1,5 +1,6 @@
 from app.services.ai.asr.base import ASRProvider
 from app.services.ai.asr.local_whisper import LocalWhisperASRProvider
 from app.services.ai.asr.openai_compatible import OpenAICompatibleRemoteASRProvider
+from app.services.ai.asr.azure_speech import AzureSpeechASRProvider
 
-__all__ = ["ASRProvider", "LocalWhisperASRProvider", "OpenAICompatibleRemoteASRProvider"]
+__all__ = ["ASRProvider", "LocalWhisperASRProvider", "OpenAICompatibleRemoteASRProvider", "AzureSpeechASRProvider"]

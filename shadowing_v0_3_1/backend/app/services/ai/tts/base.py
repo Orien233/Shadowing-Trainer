@@ -2,6 +2,8 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import Any
 
+from app.services.ai.audio_types import AudioCapability, TTSResult
+
 
 @dataclass(frozen=True)
 class TTSRequest:
@@ -14,8 +16,13 @@ class TTSRequest:
 
 
 class TTSProvider(ABC):
+    capabilities: frozenset[AudioCapability] = frozenset({AudioCapability.SYNTHESIZE})
+
+    def supports(self, capability: AudioCapability) -> bool:
+        return capability in self.capabilities
+
     @abstractmethod
-    def synthesize(self, request: TTSRequest) -> bytes: ...
+    def synthesize(self, request: TTSRequest) -> TTSResult: ...
 
     @abstractmethod
     def list_voices(self) -> list[dict[str, Any]]: ...

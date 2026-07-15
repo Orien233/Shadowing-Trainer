@@ -68,9 +68,9 @@ def run_tts_synthesis(job_id: str, payload: dict) -> dict:
     paths: list[Path] = []
     for index, sentence in enumerate(sentences, start=1):
         update_job(job_id, stage=f"synthesizing_sentence_{index}", progress=max(5, int(index / len(sentences) * 75)))
-        audio = provider.synthesize(TTSRequest(text=sentence, voice=options.voice, model=options.model, speed=_SPEEDS[options.speed_preset], accent=options.accent, gender=options.gender))
-        path = output_dir / f"{index:04d}.mp3"
-        path.write_bytes(audio)
+        result = provider.synthesize(TTSRequest(text=sentence, voice=options.voice, model=options.model, speed=_SPEEDS[options.speed_preset], accent=options.accent, gender=options.gender))
+        path = output_dir / f"{index:04d}.{result.extension}"
+        path.write_bytes(result.audio)
         paths.append(path)
     update_job(job_id, stage="merging_audio", progress=82)
     merged_path = settings.audio_dir / f"text_practice_{practice_id}.mp3"

@@ -17,6 +17,7 @@ from app.models.word_collection import WordCollection
 from app.schemas.text_practice import TextGenerationRequest
 from app.services import asr_router, text_generation_service, tts_service
 from app.services.ai.asr.local_whisper import LocalWhisperASRProvider
+from app.services.ai.audio_types import TTSResult
 from app.services.provider_factory import create_provider
 from app.api.providers import _read
 
@@ -34,6 +35,13 @@ def test_factory_creates_openai_compatible_provider():
     assert llm.__class__.__name__ == "OpenAICompatibleLLMProvider"
     assert tts.__class__.__name__ == "OpenAICompatibleTTSProvider"
     assert asr.__class__.__name__ == "OpenAICompatibleRemoteASRProvider"
+
+
+def test_factory_creates_azure_audio_adapters():
+    tts = create_provider(AIProvider(name="azure", capability="tts", provider_type="azure_speech", base_url="https://westus.tts.speech.microsoft.com", api_key="secret", model_name="en-US-AvaMultilingualNeural"))
+    asr = create_provider(AIProvider(name="azure", capability="asr", provider_type="azure_speech", base_url="https://westus.stt.speech.microsoft.com", api_key="secret", model_name="conversation"))
+    assert tts.__class__.__name__ == "AzureSpeechTTSProvider"
+    assert asr.__class__.__name__ == "AzureSpeechASRProvider"
 
 
 def test_provider_read_masks_api_key():
@@ -77,7 +85,7 @@ def test_tts_job_creates_material_and_sentences(monkeypatch, tmp_path: Path):
     monkeypatch.setattr(tts_service, "engine", engine)
     tts_service.settings.data_dir = str(tmp_path)
     class Provider:
-        def synthesize(self, _request): return b"audio"
+        def synthesize(self, _request): return TTSResult(audio=b"audio")
     monkeypatch.setattr(tts_service, "get_provider", lambda *_args: Provider())
     monkeypatch.setattr(tts_service, "_merge_audio", lambda _parts, target: target.write_bytes(b"merged"))
     monkeypatch.setattr(tts_service, "get_audio_duration", lambda path: 1.25 if path.name != "text_practice_1.mp3" else 2.5)

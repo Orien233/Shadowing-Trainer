@@ -4,16 +4,21 @@ from typing import Any
 import httpx
 
 from app.services.ai.asr.base import ASRProvider
+from app.services.ai.audio_types import ASRResult, ASRSegment, ASRWord, AudioCapability
 
 
 class OpenAICompatibleRemoteASRProvider(ASRProvider):
+    """Adapter for the OpenAI Audio Transcriptions API request shape."""
+    capabilities = frozenset({AudioCapability.TRANSCRIBE, AudioCapability.WORD_TIMESTAMPS})
     def __init__(self, *, base_url: str, api_key: str, model_name: str, extra_config: dict[str, Any] | None = None) -> None:
         self.base_url, self.api_key, self.model_name = base_url.rstrip("/"), api_key, model_name
         self.extra_config = extra_config or {}
 
-    def transcribe(self, audio_path: str, *, word_timestamps: bool = False) -> list[dict[str, Any]]:
+    def transcribe(self, audio_path: str, *, word_timestamps: bool = False) -> ASRResult:
         if not self.api_key:
             raise ValueError("Provider API key is not configured.")
+        if word_timestamps:
+            self.require(AudioCapability.WORD_TIMESTAMPS)
         path = Path(audio_path)
         data: dict[str, str] = {"model": self.model_name, "response_format": "verbose_json"}
         if word_timestamps:
@@ -26,10 +31,17 @@ class OpenAICompatibleRemoteASRProvider(ASRProvider):
             raise ValueError("ASR provider returned an invalid response.")
         segments = payload.get("segments")
         if isinstance(segments, list):
-            words = payload.get("words") if isinstance(payload.get("words"), list) else []
-            return [{"start": float(item.get("start", 0)), "end": float(item.get("end", 0)), "text": str(item.get("text", "")).strip(), "words": [{"start": word.get("start"), "end": word.get("end"), "word": word.get("word", "")} for word in words if isinstance(word, dict) and float(word.get("start", 0)) >= float(item.get("start", 0)) and float(word.get("end", 0)) <= float(item.get("end", 0))]} for item in segments if isinstance(item, dict)]
+            all_words = payload.get("words") if isinstance(payload.get("words"), list) else []
+            normalized_segments: list[ASRSegment] = []
+            for item in segments:
+                if not isinstance(item, dict):
+                    continue
+                start, end = float(item.get("start", 0)), float(item.get("end", 0))
+                words = [ASRWord(text=str(word.get("word", "")).strip(), start=word.get("start"), end=word.get("end")) for word in all_words if isinstance(word, dict) and float(word.get("start", 0)) >= start and float(word.get("end", 0)) <= end]
+                normalized_segments.append(ASRSegment(text=str(item.get("text", "")).strip(), start=start, end=end, words=words))
+            return ASRResult(text=str(payload.get("text", "")).strip() or " ".join(item.text for item in normalized_segments).strip(), segments=normalized_segments, provider_metadata={"adapter": "openai_audio"})
         text = str(payload.get("text", "")).strip()
-        return [{"start": 0.0, "end": 0.0, "text": text, "words": []}] if text else []
+        return ASRResult(text=text, segments=[ASRSegment(text=text)] if text else [], provider_metadata={"adapter": "openai_audio"})
 
     def test_connection(self) -> str:
         if not self.api_key:

@@ -1,13 +1,23 @@
 from abc import ABC, abstractmethod
-from typing import Any
+
+from app.services.ai.audio_types import ASRResult, AudioCapability, UnsupportedAudioCapabilityError
 
 
 class ASRProvider(ABC):
+    capabilities: frozenset[AudioCapability] = frozenset({AudioCapability.TRANSCRIBE})
+
+    def supports(self, capability: AudioCapability) -> bool:
+        return capability in self.capabilities
+
     @abstractmethod
-    def transcribe(self, audio_path: str, *, word_timestamps: bool = False) -> list[dict[str, Any]]: ...
+    def transcribe(self, audio_path: str, *, word_timestamps: bool = False) -> ASRResult: ...
 
     def transcribe_text(self, audio_path: str) -> str:
-        return " ".join(str(item.get("text", "")).strip() for item in self.transcribe(audio_path) if item.get("text")).strip()
+        return self.transcribe(audio_path).text
+
+    def require(self, capability: AudioCapability) -> None:
+        if not self.supports(capability):
+            raise UnsupportedAudioCapabilityError(f"This ASR provider does not support {capability.value}.")
 
     @abstractmethod
     def test_connection(self) -> str: ...

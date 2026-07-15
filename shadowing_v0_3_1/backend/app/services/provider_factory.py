@@ -5,9 +5,9 @@ from sqlmodel import Session, select
 
 from app.models.ai_provider import AIProvider
 from app.core.config import settings
-from app.services.ai.asr import OpenAICompatibleRemoteASRProvider
+from app.services.ai.asr import AzureSpeechASRProvider, OpenAICompatibleRemoteASRProvider
 from app.services.ai.llm import OpenAICompatibleLLMProvider
-from app.services.ai.tts import OpenAICompatibleTTSProvider
+from app.services.ai.tts import AzureSpeechTTSProvider, OpenAICompatibleTTSProvider
 
 
 class ProviderConfigurationError(RuntimeError):
@@ -39,16 +39,18 @@ def create_provider(provider: AIProvider):
     provider_type = provider.provider_type.strip().lower()
     extra = parse_extra_config(provider.extra_config)
     base_url, api_key, model_name = provider.base_url or "", provider.api_key or "", provider.model_name or ""
-    if provider_type not in {"openai_compatible", "openai-compatible", "openai"}:
-        raise ProviderConfigurationError(f"Unsupported provider type: {provider.provider_type}.")
     if not base_url or not model_name:
         raise ProviderConfigurationError("Provider base URL and model name are required.")
-    if provider.capability == "llm":
+    if provider.capability == "llm" and provider_type in {"openai_compatible", "openai-compatible", "openai"}:
         return OpenAICompatibleLLMProvider(base_url=base_url, api_key=api_key, model_name=model_name)
-    if provider.capability == "tts":
+    if provider.capability == "tts" and provider_type in {"openai_compatible", "openai-compatible", "openai"}:
         return OpenAICompatibleTTSProvider(base_url=base_url, api_key=api_key, model_name=model_name, extra_config=extra)
-    if provider.capability == "asr":
+    if provider.capability == "asr" and provider_type in {"openai_compatible", "openai-compatible", "openai"}:
         return OpenAICompatibleRemoteASRProvider(base_url=base_url, api_key=api_key, model_name=model_name, extra_config=extra)
+    if provider.capability == "tts" and provider_type in {"azure_speech", "azure-speech"}:
+        return AzureSpeechTTSProvider(base_url=base_url, api_key=api_key, model_name=model_name, extra_config=extra)
+    if provider.capability == "asr" and provider_type in {"azure_speech", "azure-speech"}:
+        return AzureSpeechASRProvider(base_url=base_url, api_key=api_key, model_name=model_name, extra_config=extra)
     raise ProviderConfigurationError(f"Unsupported capability: {provider.capability}.")
 
 

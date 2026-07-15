@@ -36,7 +36,8 @@ def get_asr_provider(session: Session, scene: str):
 
 def transcribe_for_scene(scene: str, audio_path: str, *, word_timestamps: bool = False) -> list[dict]:
     with Session(engine) as session:
-        return get_asr_provider(session, scene).transcribe(audio_path, word_timestamps=word_timestamps)
+        result = get_asr_provider(session, scene).transcribe(audio_path, word_timestamps=word_timestamps)
+        return result.as_legacy_segments()
 
 
 def transcribe_text_for_scene(scene: str, audio_path: str) -> str:
