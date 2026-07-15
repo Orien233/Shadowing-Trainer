@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Optional
 
 from sqlmodel import Field, Index, SQLModel
@@ -38,4 +38,4 @@ class MaterialSentenceScore(SQLModel, table=True):
     feedback: str
     suggestion: str
     raw_metrics: str
-    created_at: datetime = Field(default_factory=datetime.utcnow, index=True)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC), index=True)

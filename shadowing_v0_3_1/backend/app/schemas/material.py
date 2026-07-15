@@ -13,6 +13,10 @@ class MaterialRead(BaseModel):
     audio_path: str | None
     duration: float | None
     status: str
+    job_id: str | None = None
+    processing_stage: str | None = None
+    processing_progress: int = 0
+    error_message: str | None = None
     created_at: datetime
 
 

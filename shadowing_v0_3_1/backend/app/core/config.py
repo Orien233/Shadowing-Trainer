@@ -14,7 +14,7 @@ ENV_FILES = (
 # Centralized configuration management using Pydantic's BaseSettings, loading from .env files and providing convenient properties for file paths.
 class Settings(BaseSettings):
     app_name: str = "Shadowing Trainer"
-    app_version: str = "0.3.1"
+    app_version: str = "0.3.2"
     debug: bool = True # Default to True for development, but can be overridden by environment variable.
     host: str = "0.0.0.0"
     port: int = 8000
@@ -38,6 +38,11 @@ class Settings(BaseSettings):
     translation_max_keepalive_connections: int = 50
     processing_lock_timeout_seconds: int = 1800
     processing_lock_heartbeat_seconds: int = 10
+    job_worker_concurrency: int = 1
+    job_poll_interval_seconds: float = 0.25
+    recording_max_duration_seconds: float = 90.0
+    recording_max_bytes: int = 25 * 1024 * 1024
+    local_admin_token: str = ""
 
     enable_wavlm_score: bool = True
     enable_prosody_score: bool = True
@@ -181,6 +186,10 @@ class Settings(BaseSettings):
     @property
     def recordings_dir(self) -> Path:
         return self.data_path / "recordings"
+
+    @property
+    def videos_dir(self) -> Path:
+        return self.data_path / "videos"
 
     @property
     def cache_dir(self) -> Path:

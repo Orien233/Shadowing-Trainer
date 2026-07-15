@@ -6,6 +6,10 @@ export interface Material {
   audio_path: string | null;
   duration: number | null;
   status: string;
+  job_id?: string | null;
+  processing_stage?: string | null;
+  processing_progress?: number;
+  error_message?: string | null;
   created_at: string;
 }
 
@@ -86,6 +90,23 @@ export interface MaterialLatestEvaluationsResponse {
   material_id: number;
   user_id: string;
   evaluations: SentenceLatestEvaluation[];
+}
+
+export interface Job {
+  id: string;
+  kind: "evaluation" | "material_processing" | "storage_cleanup";
+  status: "queued" | "running" | "succeeded" | "failed" | "cancelled";
+  stage: string;
+  progress: number;
+  result: { recording_id?: number; evaluation?: Evaluation; material_id?: number } | null;
+  error_message: string | null;
+  attempts: number;
+}
+
+export interface RecordingUploadAccepted {
+  recording_id: number;
+  job_id: string;
+  status: string;
 }
 
 export interface WordCollection {

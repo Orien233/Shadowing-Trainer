@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Optional
 
 from sqlmodel import Field, SQLModel
@@ -15,4 +15,8 @@ class Material(SQLModel, table=True):
     processing_owner: str | None = None
     processing_started_at: datetime | None = None
     processing_heartbeat_at: datetime | None = None
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    job_id: str | None = Field(default=None, index=True)
+    processing_stage: str | None = None
+    processing_progress: int = 0
+    error_message: str | None = None
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))

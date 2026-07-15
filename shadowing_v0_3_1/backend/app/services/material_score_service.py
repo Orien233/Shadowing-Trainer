@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from sqlmodel import Session, delete, select
+from sqlmodel import Session, select
 
 from app.models.evaluation import Evaluation
 from app.models.material_sentence_score import MaterialSentenceScore
@@ -15,7 +15,7 @@ def resolve_user_id(user_id: str | None) -> str:
 
 def record_material_sentence_score(
     *,
-    score_session: Session,
+    session: Session,
     material_id: int,
     sentence_id: int,
     evaluation: Evaluation,
@@ -37,15 +37,13 @@ def record_material_sentence_score(
         suggestion=evaluation.suggestion,
         raw_metrics=evaluation.raw_metrics,
     )
-    score_session.add(snapshot)
-    score_session.commit()
-    score_session.refresh(snapshot)
+    session.add(snapshot)
     return snapshot
 
 
 def list_latest_scores_for_material(
     *,
-    score_session: Session,
+    session: Session,
     material_id: int,
     user_id: str | None = None,
 ) -> list[MaterialSentenceScore]:
@@ -60,7 +58,7 @@ def list_latest_scores_for_material(
             MaterialSentenceScore.id.desc(),
         )
     )
-    rows = score_session.exec(statement).all()
+    rows = session.exec(statement).all()
 
     latest_by_sentence: dict[int, MaterialSentenceScore] = {}
     for row in rows:
@@ -76,7 +74,7 @@ def list_latest_scores_for_material(
 
 def get_latest_score_for_sentence(
     *,
-    score_session: Session,
+    session: Session,
     material_id: int,
     sentence_id: int,
     user_id: str | None = None,
@@ -93,17 +91,4 @@ def get_latest_score_for_sentence(
         )
         .limit(1)
     )
-    return score_session.exec(statement).first()
-
-
-def delete_scores_for_material(
-    *,
-    score_session: Session,
-    material_id: int,
-) -> int:
-    statement = delete(MaterialSentenceScore).where(
-        MaterialSentenceScore.material_id == material_id
-    )
-    result = score_session.exec(statement)
-    score_session.commit()
-    return int(getattr(result, "rowcount", 0) or 0)
+    return session.exec(statement).first()

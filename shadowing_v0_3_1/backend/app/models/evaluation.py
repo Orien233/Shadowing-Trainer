@@ -1,6 +1,6 @@
 import json
 
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any, Optional
 
 from sqlmodel import Field, SQLModel
@@ -17,7 +17,7 @@ class Evaluation(SQLModel, table=True):
     feedback: str
     suggestion: str
     raw_metrics: str
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
     @property
     def word_alignment(self) -> dict[str, Any] | None:

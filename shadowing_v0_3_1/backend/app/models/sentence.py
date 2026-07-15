@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Optional
 
 from sqlmodel import Field, SQLModel
@@ -16,4 +16,4 @@ class Sentence(SQLModel, table=True):
     clip_duration: float | None = None
     source_text: str
     translation: str | None = None
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))

@@ -2,14 +2,15 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.evaluations import router as evaluations_router
+from app.api.jobs import router as jobs_router
 from app.api.materials import router as materials_router
 from app.api.recordings import router as recordings_router
 from app.api.sentences import router as sentences_router
 from app.api.system import router as system_router
 from app.api.words import router as words_router
 from app.core.config import settings
-from app.core.database import init_db
-from app.core.score_database import init_score_db
+from app.core.migrations import run_migrations
+from app.services.job_service import start_job_worker, stop_job_worker
 from app.services.media_service import ensure_directories
 from app.services.translation_service import close_translation_http_client
 import app.models  # noqa: F401
@@ -26,14 +27,15 @@ app.add_middleware(
 
 
 @app.on_event("startup")
-def on_startup():
+async def on_startup():
     ensure_directories()
-    init_db()
-    init_score_db()
+    run_migrations()
+    start_job_worker()
 
 
 @app.on_event("shutdown")
 async def on_shutdown():
+    await stop_job_worker()
     await close_translation_http_client()
 
 
@@ -46,5 +48,6 @@ app.include_router(materials_router)
 app.include_router(sentences_router)
 app.include_router(recordings_router)
 app.include_router(evaluations_router)
+app.include_router(jobs_router)
 app.include_router(system_router)
 app.include_router(words_router)

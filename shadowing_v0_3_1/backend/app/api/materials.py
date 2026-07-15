@@ -2,23 +2,21 @@ import asyncio
 import json
 import logging
 import mimetypes
-import os
 import shutil
-import socket
-import uuid
-from datetime import datetime, timedelta
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Response, UploadFile
 from fastapi.responses import FileResponse
-from sqlalchemy import and_, desc, or_, update
+from sqlalchemy import desc, update
 from sqlmodel import Session, func, select
 
 from app.core.config import settings
 from app.core.database import engine, get_session
-from app.core.score_database import get_score_session
 from app.models.evaluation import Evaluation
+from app.models.job import Job
+from app.models.material_sentence_score import MaterialSentenceScore
 from app.models.material import Material
 from app.models.recording import Recording
 from app.models.sentence import Sentence
@@ -29,78 +27,34 @@ from app.schemas.material_score import (
 )
 from app.services.material_score_service import (
     DEFAULT_USER_ID,
-    delete_scores_for_material,
     list_latest_scores_for_material,
     resolve_user_id,
 )
 from app.services.media_service import (
-    build_video_playback_asset,
-    build_video_playback_path,
     build_sentence_audio_metadata,
     detect_file_type,
     extract_audio,
     get_audio_duration,
     save_upload,
+    transcode_video_for_storage,
 )
+from app.services.job_service import enqueue_job, update_job
 from app.services.segmentation_service import segment_to_sentences
 from app.services.transcription_service import transcribe_audio_with_word_timestamps
 from app.services.translation_service import translate_sentences
 
 router = APIRouter(prefix="/api/materials", tags=["materials"])
 logger = logging.getLogger(__name__)
-processing_tasks: dict[int, asyncio.Task[None]] = {}
-WORKER_INSTANCE_ID = f"{socket.gethostname()}:{os.getpid()}:{uuid.uuid4().hex[:8]}"
 
 
 def _now_utc() -> datetime:
-    return datetime.utcnow()
-
-
-def _stale_before(now: datetime | None = None) -> datetime:
-    current = now or _now_utc()
-    return current - timedelta(seconds=settings.processing_lock_timeout_seconds)
+    return datetime.now(UTC)
 
 
 def _clear_processing_lock_fields(material: Material) -> None:
     material.processing_owner = None
     material.processing_started_at = None
     material.processing_heartbeat_at = None
-
-
-def _is_material_lock_stale(material: Material, stale_before: datetime) -> bool:
-    heartbeat_at = material.processing_heartbeat_at
-    started_at = material.processing_started_at
-    if heartbeat_at is not None:
-        return heartbeat_at < stale_before
-    if started_at is not None:
-        return started_at < stale_before
-    return True
-
-
-def _repair_stale_processing_materials(session: Session) -> None:
-    processing_materials = session.exec(
-        select(Material).where(Material.status == "processing")
-    ).all()
-    if not processing_materials:
-        return
-
-    stale_before = _stale_before()
-    needs_commit = False
-    for material in processing_materials:
-        if material.id is None:
-            continue
-        task = processing_tasks.get(material.id)
-        if task and not task.done():
-            continue
-        if not _is_material_lock_stale(material, stale_before):
-            continue
-        material.status = "failed"
-        _clear_processing_lock_fields(material)
-        session.add(material)
-        needs_commit = True
-
-    if needs_commit:
-        session.commit()
 
 
 def _is_within_data_dir(path: Path) -> bool:
@@ -111,32 +65,36 @@ def _is_within_data_dir(path: Path) -> bool:
         return False
 
 
-def _safe_delete_file(path: Path) -> None:
+def _safe_delete_file(path: Path) -> bool:
     if not _is_within_data_dir(path):
         logger.warning("Skip deleting file outside data directory: %s", path)
-        return
+        return False
 
     if not path.exists() or not path.is_file():
-        return
+        return True
 
     try:
         path.unlink()
+        return True
     except Exception:
         logger.exception("Failed deleting file: %s", path)
+        return False
 
 
-def _safe_delete_directory(path: Path) -> None:
+def _safe_delete_directory(path: Path) -> bool:
     if not _is_within_data_dir(path):
         logger.warning("Skip deleting directory outside data directory: %s", path)
-        return
+        return False
 
     if not path.exists() or not path.is_dir():
-        return
+        return True
 
     try:
         shutil.rmtree(path)
+        return True
     except Exception:
         logger.exception("Failed deleting directory: %s", path)
+        return False
 
 
 def _recording_artifact_paths(recording_audio_path: str) -> set[Path]:
@@ -149,53 +107,6 @@ def _recording_artifact_paths(recording_audio_path: str) -> set[Path]:
 
 def _get_rowcount(result: object) -> int:
     return int(getattr(result, "rowcount", 0) or 0)
-
-
-def _claim_material_for_processing(material_id: int, owner: str) -> bool:
-    now = _now_utc()
-    stale_before = _stale_before(now)
-    processing_heartbeat_at_col = getattr(Material, "processing_heartbeat_at")
-    processing_started_at_col = getattr(Material, "processing_started_at")
-    status_col = getattr(Material, "status")
-    processing_owner_col = getattr(Material, "processing_owner")
-    material_id_col = getattr(Material, "id")
-
-    stale_lock_clause = or_(
-        processing_heartbeat_at_col < stale_before,
-        and_(
-            processing_heartbeat_at_col.is_(None),
-            processing_started_at_col < stale_before,
-        ),
-        and_(
-            processing_heartbeat_at_col.is_(None),
-            processing_started_at_col.is_(None),
-        ),
-    )
-    statement = (
-        update(Material)
-        .where(material_id_col == material_id)
-        .where(
-            or_(
-                status_col != "processing",
-                processing_owner_col == owner,
-                stale_lock_clause,
-            )
-        )
-        .values(
-            status="processing",
-            processing_owner=owner,
-            processing_started_at=now,
-            processing_heartbeat_at=now,
-        )
-    )
-    with Session(engine) as claim_session:
-        result = claim_session.exec(statement)
-        updated_rows = _get_rowcount(result)
-        if updated_rows < 1:
-            claim_session.rollback()
-            return False
-        claim_session.commit()
-        return True
 
 
 def _touch_processing_lock(material_id: int, owner: str) -> bool:
@@ -253,17 +164,21 @@ async def upload_material(
     file: UploadFile = File(...),
     session: Session = Depends(get_session),
 ):
-    original_path = await save_upload(file, settings.materials_dir)
-    file_type = detect_file_type(original_path)
-
-    if file_type == "unknown":
-        raise HTTPException(status_code=400, detail="Unsupported file type.")
+    try:
+        original_path = await save_upload(file, settings.materials_dir)
+        file_type = detect_file_type(original_path)
+        if file_type == "unknown":
+            raise ValueError("Unsupported file type.")
+    except ValueError as exc:
+        if "original_path" in locals():
+            original_path.unlink(missing_ok=True)
+        raise HTTPException(status_code=400, detail=str(exc))
 
     material = Material(
         title=title,
         file_type=file_type,
         original_path=str(original_path),
-        status="uploaded",
+        status="queued",
     )
     session.add(material)
     session.commit()
@@ -271,26 +186,18 @@ async def upload_material(
     if material.id is None:
         raise HTTPException(status_code=500, detail="Material creation failed.")
 
-    material_id = material.id
-    claimed = await asyncio.to_thread(
-        _claim_material_for_processing,
-        material_id,
-        WORKER_INSTANCE_ID,
-    )
-    if claimed:
-        _ensure_processing_task(material_id, WORKER_INSTANCE_ID)
-
-    session.expire_all()
-    latest_material = session.get(Material, material_id)
-    if not latest_material:
-        raise HTTPException(status_code=404, detail="Material not found.")
-    return latest_material
+    job = enqueue_job(session, "material_processing", {"material_id": material.id})
+    material.job_id = job.id
+    material.processing_stage = "queued"
+    session.add(material)
+    session.commit()
+    session.refresh(material)
+    return material
 
 
 # For testing purposes, you can also add a simple endpoint to list all materials and get details of a specific material.
 @router.get("", response_model=list[MaterialRead])
 def list_materials(session: Session = Depends(get_session)):
-    _repair_stale_processing_materials(session)
     statement = select(Material).order_by(desc(getattr(Material, "created_at")))
     return list(session.exec(statement).all())
 
@@ -298,7 +205,6 @@ def list_materials(session: Session = Depends(get_session)):
 # Get material details along with the count of sentences (if processed)
 @router.get("/{material_id}", response_model=MaterialDetail)
 def get_material(material_id: int, session: Session = Depends(get_session)):
-    _repair_stale_processing_materials(session)
     material = session.get(Material, material_id)
     if not material:
         raise HTTPException(status_code=404, detail="Material not found.")
@@ -314,7 +220,6 @@ def get_material_latest_evaluations(
     material_id: int,
     user_id: str | None = Query(default=None),
     session: Session = Depends(get_session),
-    score_session: Session = Depends(get_score_session),
 ):
     material = session.get(Material, material_id)
     if not material:
@@ -324,7 +229,7 @@ def get_material_latest_evaluations(
     latest_by_sentence: dict[int, SentenceLatestEvaluationRead] = {}
 
     score_rows = list_latest_scores_for_material(
-        score_session=score_session,
+        session=session,
         material_id=material_id,
         user_id=normalized_user_id,
     )
@@ -474,7 +379,7 @@ def _list_latest_scores_from_main_db(
     ]
 
 
-def _mark_material_failed(material_id: int, owner: str | None = None) -> None:
+def _mark_material_failed(material_id: int, owner: str | None = None, error_message: str | None = None) -> None:
     with Session(engine) as failure_session:
         material = failure_session.get(Material, material_id)
         if not material:
@@ -486,6 +391,8 @@ def _mark_material_failed(material_id: int, owner: str | None = None) -> None:
                 return
 
         material.status = "failed"
+        material.processing_stage = "failed"
+        material.error_message = error_message
         _clear_processing_lock_fields(material)
         failure_session.add(material)
         failure_session.commit()
@@ -511,10 +418,13 @@ async def _process_material_in_background(material_id: int, owner: str) -> None:
             source_path = Path(material.original_path)
             audio_source_path = source_path
             if material.file_type == "video":
-                audio_source_path = await asyncio.to_thread(
-                    build_video_playback_asset,
-                    source_path,
-                )
+                audio_source_path = await asyncio.to_thread(transcode_video_for_storage, source_path)
+                source_path.unlink(missing_ok=True)
+                material.original_path = str(audio_source_path)
+                material.processing_stage = "extracting_audio"
+                material.processing_progress = 20
+                session.add(material)
+                session.commit()
 
         audio_path = await asyncio.to_thread(extract_audio, audio_source_path)
         duration_probe_path = audio_source_path if material.file_type == "video" else audio_path
@@ -593,12 +503,15 @@ async def _process_material_in_background(material_id: int, owner: str) -> None:
             material.audio_path = str(audio_path)
             material.duration = duration
             material.status = "ready"
+            material.processing_stage = "completed"
+            material.processing_progress = 100
+            material.error_message = None
             _clear_processing_lock_fields(material)
             session.add(material)
             session.commit()
-    except Exception:
+    except Exception as exc:
         logger.exception("Failed processing material %s", material_id)
-        await asyncio.to_thread(_mark_material_failed, material_id, owner)
+        await asyncio.to_thread(_mark_material_failed, material_id, owner, str(exc)[:2000])
     finally:
         heartbeat_stop_event.set()
         try:
@@ -607,73 +520,67 @@ async def _process_material_in_background(material_id: int, owner: str) -> None:
             logger.exception("Heartbeat task failed for material %s", material_id)
 
 
-def _ensure_processing_task(material_id: int, owner: str) -> None:
-    current_task = processing_tasks.get(material_id)
-    if current_task and not current_task.done():
-        return
-
-    task = asyncio.create_task(_process_material_in_background(material_id, owner))
-    processing_tasks[material_id] = task
-
-    def _cleanup_task(done_task: asyncio.Task[None]) -> None:
-        processing_tasks.pop(material_id, None)
-        try:
-            done_task.result()
-        except asyncio.CancelledError:
-            return
-        except BaseException:
-            logger.exception("Background task crashed for material %s", material_id)
-
-    task.add_done_callback(_cleanup_task)
+async def process_material_job(material_id: int, job_id: str) -> None:
+    """Worker entrypoint; API routes only enqueue this operation."""
+    with Session(engine) as session:
+        material = session.get(Material, material_id)
+        if not material:
+            raise RuntimeError("Material no longer exists.")
+        material.status = "processing"
+        material.processing_owner = job_id
+        material.processing_started_at = _now_utc()
+        material.processing_heartbeat_at = _now_utc()
+        material.processing_stage = "transcribing"
+        material.processing_progress = 15
+        material.error_message = None
+        session.add(material)
+        session.commit()
+    update_job(job_id, stage="transcribing_material", progress=25)
+    await _process_material_in_background(material_id, job_id)
+    with Session(engine) as session:
+        material = session.get(Material, material_id)
+        if not material or material.status != "ready":
+            raise RuntimeError(material.error_message if material else "Material processing failed.")
+    update_job(job_id, stage="material_ready", progress=95)
 
 
 # This endpoint triggers the processing of the material: extracting audio, transcribing, segmenting, translating, and saving sentences.
 @router.post("/{material_id}/process", response_model=MaterialDetail)
 async def process_material(material_id: int, session: Session = Depends(get_session)):
-    _repair_stale_processing_materials(session)
-
     material = session.get(Material, material_id)
     if not material:
         raise HTTPException(status_code=404, detail="Material not found.")
 
-    claimed = await asyncio.to_thread(
-        _claim_material_for_processing,
-        material_id,
-        WORKER_INSTANCE_ID,
-    )
-
-    session.expire_all()
-    latest_material = session.get(Material, material_id)
-    if not latest_material:
-        raise HTTPException(status_code=404, detail="Material not found.")
-
-    if claimed:
-        _ensure_processing_task(material_id, WORKER_INSTANCE_ID)
-
-    return _build_material_detail(session, latest_material)
+    current_job = session.get(Job, material.job_id) if material.job_id else None
+    if current_job and current_job.status in {"queued", "running"}:
+        return _build_material_detail(session, material)
+    job = enqueue_job(session, "material_processing", {"material_id": material_id})
+    material.status = "queued"
+    material.job_id = job.id
+    material.processing_stage = "queued"
+    material.processing_progress = 0
+    material.error_message = None
+    session.add(material)
+    session.commit()
+    session.refresh(material)
+    return _build_material_detail(session, material)
 
 
 @router.delete("/{material_id}", status_code=204)
 async def delete_material(
     material_id: int,
     session: Session = Depends(get_session),
-    score_session: Session = Depends(get_score_session),
 ):
-    _repair_stale_processing_materials(session)
-
     material = session.get(Material, material_id)
     if not material:
         raise HTTPException(status_code=404, detail="Material not found.")
 
-    processing_task = processing_tasks.pop(material_id, None)
-    if processing_task and not processing_task.done():
-        processing_task.cancel()
-        try:
-            await processing_task
-        except asyncio.CancelledError:
-            pass
-        except Exception:
-            logger.exception("Processing task failed while deleting material %s", material_id)
+    if material.job_id:
+        queued_job = session.get(Job, material.job_id)
+        if queued_job and queued_job.status in {"queued", "running"}:
+            queued_job.status = "cancelled"
+            queued_job.stage = "cancelled"
+            session.add(queued_job)
 
     sentences = session.exec(
         select(Sentence).where(Sentence.material_id == material_id)
@@ -700,7 +607,7 @@ async def delete_material(
 
     file_paths.add(Path(material.original_path))
     if material.file_type == "video":
-        file_paths.add(build_video_playback_path(Path(material.original_path)))
+        file_paths.add(Path(material.original_path))
     file_paths.add(settings.audio_dir / f"{Path(material.original_path).stem}.wav")
     if material.audio_path:
         file_paths.add(Path(material.audio_path))
@@ -711,6 +618,11 @@ async def delete_material(
 
     for evaluation in evaluations:
         session.delete(evaluation)
+
+    for snapshot in session.exec(
+        select(MaterialSentenceScore).where(MaterialSentenceScore.material_id == material_id)
+    ).all():
+        session.delete(snapshot)
 
     for recording in recordings:
         for artifact in _recording_artifact_paths(recording.audio_path):
@@ -723,21 +635,11 @@ async def delete_material(
     session.delete(material)
     session.commit()
 
-    try:
-        delete_scores_for_material(
-            score_session=score_session,
-            material_id=material_id,
-        )
-    except Exception:
-        logger.exception(
-            "Failed deleting score snapshots for material %s",
-            material_id,
-        )
-
-    for directory_path in directory_paths:
-        _safe_delete_directory(directory_path)
-    for file_path in file_paths:
-        _safe_delete_file(file_path)
+    pending_cleanup = [str(path) for path in directory_paths if not _safe_delete_directory(path)]
+    pending_cleanup.extend(str(path) for path in file_paths if not _safe_delete_file(path))
+    if pending_cleanup:
+        enqueue_job(session, "storage_cleanup", {"paths": pending_cleanup})
+        session.commit()
 
     return Response(status_code=204)
 
@@ -762,10 +664,8 @@ def get_material_video(material_id: int, session: Session = Depends(get_session)
         raise HTTPException(status_code=400, detail="Material is not a video.")
 
     source_path = Path(material.original_path)
-    playback_path = build_video_playback_path(source_path)
-    video_path = playback_path if playback_path.exists() else source_path
-    if not video_path.exists():
+    if not source_path.exists():
         raise HTTPException(status_code=404, detail="Video file not found.")
 
-    mime_type, _ = mimetypes.guess_type(str(video_path))
-    return FileResponse(video_path, media_type=mime_type or "video/mp4")
+    mime_type, _ = mimetypes.guess_type(str(source_path))
+    return FileResponse(source_path, media_type=mime_type or "video/mp4")

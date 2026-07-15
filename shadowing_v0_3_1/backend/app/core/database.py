@@ -3,10 +3,12 @@ from sqlmodel import Session, SQLModel, create_engine
 
 from app.core.config import settings
 from app.models.evaluation import Evaluation
+from app.models.job import Job
 from app.models.material import Material
 from app.models.recording import Recording
 from app.models.sentence import Sentence
 from app.models.word_collection import WordCollection
+from app.models.material_sentence_score import MaterialSentenceScore
 
 sqlite_url = f"sqlite:///{settings.db_path}"
 engine = create_engine(
@@ -74,6 +76,17 @@ def _migrate_material_table() -> None:
         _add_column_if_missing(connection, "material", "processing_owner", "VARCHAR")
         _add_column_if_missing(connection, "material", "processing_started_at", "DATETIME")
         _add_column_if_missing(connection, "material", "processing_heartbeat_at", "DATETIME")
+        _add_column_if_missing(connection, "material", "job_id", "VARCHAR")
+        _add_column_if_missing(connection, "material", "processing_stage", "VARCHAR")
+        _add_column_if_missing(connection, "material", "processing_progress", "INTEGER DEFAULT 0")
+        _add_column_if_missing(connection, "material", "error_message", "VARCHAR")
+
+
+def _migrate_recording_table() -> None:
+    with engine.begin() as connection:
+        _add_column_if_missing(connection, "recording", "status", "VARCHAR DEFAULT 'completed'")
+        _add_column_if_missing(connection, "recording", "error_message", "VARCHAR")
+        _add_column_if_missing(connection, "recording", "job_id", "VARCHAR")
 
 
 def _migrate_word_collection_table() -> None:
@@ -107,6 +120,8 @@ def _main_db_tables() -> list:
         Sentence.__table__,
         Recording.__table__,
         Evaluation.__table__,
+        MaterialSentenceScore.__table__,
+        Job.__table__,
         WordCollection.__table__,
     ]
 
@@ -115,6 +130,7 @@ def init_db() -> None:
     SQLModel.metadata.create_all(engine, tables=_main_db_tables())
     _migrate_sentence_table()
     _migrate_material_table()
+    _migrate_recording_table()
     _migrate_word_collection_table()
 
 

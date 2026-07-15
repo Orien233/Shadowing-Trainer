@@ -1,96 +1,98 @@
-import logging
+import json
+from pathlib import Path
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
-from sqlmodel import Session
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
+from sqlmodel import Session, select
 
 from app.core.config import settings
 from app.core.database import get_session
-from app.core.score_database import get_score_session
 from app.models.evaluation import Evaluation
+from app.models.job import Job
+from app.models.material_sentence_score import MaterialSentenceScore
 from app.models.recording import Recording
 from app.models.sentence import Sentence
 from app.schemas.recording import RecordingUploadResponse
 from app.schemas.system import RecordingCleanupResponse
-from app.services.evaluation_service import evaluate_recording
-from app.services.media_service import extract_audio, save_upload
-from app.services.material_score_service import record_material_sentence_score
-from app.services.recording_file_service import cleanup_recording_files
+from app.services.job_service import enqueue_job
+from app.services.media_service import detect_file_type, get_audio_duration, save_upload
 
 router = APIRouter(prefix="/api/recordings", tags=["recordings"])
-logger = logging.getLogger(__name__)
 
 
 @router.delete("/cleanup", response_model=RecordingCleanupResponse)
-def cleanup_recordings():
-    return cleanup_recording_files()
+def cleanup_recordings(session: Session = Depends(get_session)):
+    """Delete recording rows and files together so history never points to nothing."""
+    recordings = list(session.exec(select(Recording)).all())
+    recording_ids = [item.id for item in recordings if item.id is not None]
+    paths = [Path(item.audio_path) for item in recordings]
+    if recording_ids:
+        evaluations = session.exec(select(Evaluation).where(Evaluation.recording_id.in_(recording_ids))).all()
+        for evaluation in evaluations:
+            session.delete(evaluation)
+        snapshots = session.exec(
+            select(MaterialSentenceScore).where(MaterialSentenceScore.main_db_recording_id.in_(recording_ids))
+        ).all()
+        for snapshot in snapshots:
+            session.delete(snapshot)
+    for job in session.exec(select(Job).where(Job.kind == "evaluation")).all():
+        try:
+            if int(json.loads(job.payload).get("recording_id", -1)) in recording_ids:
+                job.status = "cancelled"
+                job.stage = "cancelled"
+                session.add(job)
+        except (TypeError, ValueError, json.JSONDecodeError):
+            continue
+    for recording in recordings:
+        session.delete(recording)
+    session.commit()
+
+    failed_files = []
+    deleted_files = 0
+    for path in paths:
+        try:
+            path.unlink(missing_ok=True)
+            deleted_files += 1
+        except OSError as exc:
+            failed_files.append({"path": str(path), "reason": str(exc)})
+    if failed_files:
+        enqueue_job(session, "storage_cleanup", {"paths": [item["path"] for item in failed_files]})
+        session.commit()
+    return RecordingCleanupResponse(
+        target_dir=str(settings.recordings_dir), total_files=len(paths),
+        deleted_files=deleted_files, failed_files=failed_files,
+    )
 
 
-@router.post("/upload", response_model=RecordingUploadResponse)
+@router.post("/upload", response_model=RecordingUploadResponse, status_code=status.HTTP_202_ACCEPTED)
 async def upload_recording(
     sentence_id: int = Form(...),
     file: UploadFile = File(...),
     user_id: str | None = Form(default=None),
     session: Session = Depends(get_session),
-    score_session: Session = Depends(get_score_session),
 ):
     sentence = session.get(Sentence, sentence_id)
     if not sentence:
         raise HTTPException(status_code=404, detail="Sentence not found.")
+    try:
+        saved_path = await save_upload(file, settings.recordings_dir, max_bytes=settings.recording_max_bytes)
+        if detect_file_type(saved_path) != "audio":
+            raise ValueError("Recording must contain an audio stream.")
+        if get_audio_duration(saved_path) > settings.recording_max_duration_seconds:
+            raise ValueError(f"Recording cannot exceed {settings.recording_max_duration_seconds:.0f} seconds.")
+    except ValueError as exc:
+        if "saved_path" in locals():
+            saved_path.unlink(missing_ok=True)
+        raise HTTPException(status_code=413, detail=str(exc))
+    except Exception as exc:
+        if "saved_path" in locals():
+            saved_path.unlink(missing_ok=True)
+        raise HTTPException(status_code=400, detail=f"Invalid recording media: {exc}")
 
-    saved_path = await save_upload(file, settings.recordings_dir)
-    normalized_path = extract_audio(saved_path)
-
-    result = evaluate_recording(
-        reference_text=sentence.source_text,
-        reference_duration=max(
-            sentence.clip_duration
-            if sentence.clip_duration is not None
-            else sentence.end_time - sentence.start_time,
-            0.1,
-        ),
-        recording_path=str(normalized_path),
-        reference_audio_path=sentence.clip_audio_path,
-    )
-
-    recording = Recording(
-        sentence_id=sentence_id,
-        audio_path=str(normalized_path),
-        duration=result["duration"],
-        asr_text=result["asr_text"],
-    )
+    recording = Recording(sentence_id=sentence_id, audio_path=str(saved_path), status="queued")
+    session.add(recording)
+    session.flush()
+    job = enqueue_job(session, "evaluation", {"recording_id": recording.id, "user_id": user_id})
+    recording.job_id = job.id
     session.add(recording)
     session.commit()
-    session.refresh(recording)
-
-    evaluation = Evaluation(
-        recording_id=recording.id,
-        completeness_score=result["completeness_score"],
-        fluency_score=result["fluency_score"],
-        sync_score=result["sync_score"],
-        pronunciation_score=result["pronunciation_score"],
-        overall_score=result["overall_score"],
-        feedback=result["feedback"],
-        suggestion=result["suggestion"],
-        raw_metrics=result["raw_metrics"],
-    )
-    session.add(evaluation)
-    session.commit()
-    session.refresh(evaluation)
-
-    try:
-        record_material_sentence_score(
-            score_session=score_session,
-            material_id=sentence.material_id,
-            sentence_id=sentence_id,
-            evaluation=evaluation,
-            recording_id=recording.id,
-            user_id=user_id,
-        )
-    except Exception:
-        logger.exception(
-            "Failed writing score snapshot for sentence %s in material %s",
-            sentence_id,
-            sentence.material_id,
-        )
-
-    return RecordingUploadResponse(recording_id=recording.id, evaluation=evaluation)
+    return RecordingUploadResponse(recording_id=recording.id, job_id=job.id, status="queued")

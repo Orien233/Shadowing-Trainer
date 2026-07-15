@@ -80,7 +80,7 @@ export default function MaterialList({
       <div className="material-list">
         {materials.length === 0 && <p className="muted">No materials yet. Upload one first.</p>}
         {materials.map((material) => {
-          const isProcessing = material.status === "processing" || processingIds.includes(material.id);
+          const isProcessing = material.status === "processing" || material.status === "queued" || processingIds.includes(material.id);
           const isDeleting = deletingIds.includes(material.id);
           const canOpenMenu = !isDeleting;
 
@@ -94,11 +94,13 @@ export default function MaterialList({
                 <div className="material-meta">
                   <span>{material.file_type}</span>
                   <span>{material.status}</span>
+                  {isProcessing && <span>{material.processing_stage || "queued"} {material.processing_progress ?? 0}%</span>}
                 </div>
               </div>
 
               <div className="material-actions">
                 {isProcessing && <span className="material-state">Processing...</span>}
+                {material.status === "failed" && material.error_message && <span className="material-state">{material.error_message}</span>}
                 {isDeleting && <span className="material-state">Deleting...</span>}
                 <div className="material-menu-anchor">
                   <button
@@ -124,6 +126,8 @@ export default function MaterialList({
                           ? "Processing..."
                           : material.status === "ready"
                             ? "Reprocess"
+                            : material.status === "failed"
+                              ? "Retry Processing"
                             : "Start Processing"}
                       </button>
                       <button

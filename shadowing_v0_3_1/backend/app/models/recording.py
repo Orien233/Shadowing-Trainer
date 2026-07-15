@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Optional
 
 from sqlmodel import Field, SQLModel
@@ -10,4 +10,7 @@ class Recording(SQLModel, table=True):
     audio_path: str
     duration: float | None = None
     asr_text: str | None = None
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    status: str = Field(default="queued", index=True)
+    error_message: str | None = None
+    job_id: str | None = Field(default=None, index=True)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))

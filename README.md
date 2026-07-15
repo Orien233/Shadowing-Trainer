@@ -3,6 +3,15 @@
 Shadowing Trainer 是一款本地优先（local-first）的英语口语跟读训练 Web 应用。  
 它支持从素材上传到句级练习、录音与评分的完整流程。
 
+## 版本日志（v0_3_2）
+
+### 2026-07-15（v0.3.2）
+
+- **持久化任务队列**：录音评分与素材处理均改为 SQLite 任务；上传接口立即返回任务 ID，可通过 `GET /api/jobs/{job_id}` 查询进度、错误和结果，失败任务可手动重试。
+- **一致性与迁移**：评分快照已合并到 `app.db`，移除运行时双 SQLite 写入；新增 Alembic 迁移，旧的 `score_history.db` 保留但不导入。
+- **媒体安全与视频管线**：上传采用流式 `.part` 写入和 ffprobe 校验；录音限制 90 秒/25 MiB。视频先转码为 `data/videos` 内的 ≤150 MiB MP4，再提取 Whisper 用音频，成功后删除原视频。
+- **练习体验**：录音面板支持权限错误、倒计时自动停止、试听、重录、任务进度与评分重试；前端 API 地址支持 `VITE_API_BASE`。
+
 ## 版本日志（v0_3_1）
 
 以下日志覆盖 `v0_3_1` 分支的主要变更。
@@ -218,6 +227,12 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
+首次启动前或部署升级时执行：
+
+```bash
+alembic upgrade head
+```
+
 安装 PyTorch（任选其一）：
 
 - CPU：
@@ -301,6 +316,7 @@ TRIM_MIN_DURATION_SEC=0.30
 - `audio/sentences/material_{id}/` 句子切片 WAV 文件
 - `recordings/` 用户录音文件及其转换产物
 - `app.db` SQLite 数据库
+- `videos/` 视频转码产物（最多 150 MiB）
 
 ## 数据库说明
 
@@ -336,6 +352,8 @@ TRIM_MIN_DURATION_SEC=0.30
 
 - `POST /api/recordings/upload`
 - `DELETE /api/recordings/cleanup`
+- `GET /api/jobs/{job_id}`
+- `POST /api/jobs/{job_id}/retry`
 - `GET /api/evaluations/{evaluation_id}`
 
 ### 系统（System）

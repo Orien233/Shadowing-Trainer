@@ -1,5 +1,5 @@
 import logging
-import shutil
+import os
 import subprocess
 import uuid
 
@@ -11,9 +11,10 @@ from fastapi import UploadFile
 from app.core.config import settings
 
 
-VIDEO_EXTENSIONS = {".mp4", ".mov", ".mkv", ".avi", ".webm"}
-AUDIO_EXTENSIONS = {".mp3", ".wav", ".m4a", ".aac", ".flac", ".ogg"}
-VIDEO_PLAYBACK_SUFFIX = ".playback.mp4"
+VIDEO_MAX_BYTES = 150 * 1024 * 1024
+VIDEO_TARGET_BYTES = 145 * 1024 * 1024
+VIDEO_AUDIO_BITRATE_KBPS = 128
+VIDEO_MIN_BITRATE_KBPS = 300
 MIN_CLIP_DURATION_SECONDS = 0.05
 DEFAULT_LEADING_PAD_MS = 100
 DEFAULT_TRAILING_PAD_MS = 140
@@ -35,18 +36,40 @@ def ensure_directories() -> None:
         settings.audio_dir,
         settings.sentence_audio_dir,
         settings.recordings_dir,
+        settings.videos_dir,
         settings.cache_dir,
     ]:
         path.mkdir(parents=True, exist_ok=True)
 
 # Call this function at startup to create directories
-async def save_upload(upload_file: UploadFile, target_dir: Path) -> Path:
+async def save_upload(
+    upload_file: UploadFile,
+    target_dir: Path,
+    *,
+    max_bytes: int | None = None,
+) -> Path:
+    """Stream an upload into a temporary file and never keep rejected input."""
     suffix = Path(upload_file.filename or "").suffix.lower()
     filename = f"{uuid.uuid4().hex}{suffix}"
     target_path = target_dir / filename
-    with target_path.open("wb") as file_obj:
-        shutil.copyfileobj(upload_file.file, file_obj)
-    return target_path
+    temporary_path = target_path.with_suffix(f"{target_path.suffix}.part")
+    target_dir.mkdir(parents=True, exist_ok=True)
+    received = 0
+    try:
+        with temporary_path.open("wb") as file_obj:
+            while chunk := await upload_file.read(1024 * 1024):
+                received += len(chunk)
+                if max_bytes is not None and received > max_bytes:
+                    raise ValueError("Upload exceeds the allowed file size.")
+                file_obj.write(chunk)
+        temporary_path.replace(target_path)
+        return target_path
+    except Exception:
+        temporary_path.unlink(missing_ok=True)
+        target_path.unlink(missing_ok=True)
+        raise
+    finally:
+        await upload_file.close()
 
 # Media processing functions
 def _probe_media_stream_types(file_path: Path) -> set[str]:
@@ -75,71 +98,46 @@ def detect_file_type(file_path: Path) -> str:
     if "audio" in stream_types:
         return "audio"
 
-    suffix = file_path.suffix.lower()
-    if suffix in VIDEO_EXTENSIONS:
-        return "video"
-    if suffix in AUDIO_EXTENSIONS:
-        return "audio"
     return "unknown"
 
 
-def build_video_playback_path(source_video_path: Path) -> Path:
-    return source_video_path.with_name(f"{source_video_path.stem}{VIDEO_PLAYBACK_SUFFIX}")
+def transcode_video_for_storage(source_video_path: Path) -> Path:
+    """Create a bounded MP4 before any audio extraction occurs.
 
+    The first pass calculates video frames only.  The second pass retains a
+    128 kbps AAC track and reserves container headroom below the 150 MiB cap.
+    """
+    duration = get_audio_duration(source_video_path)
+    if duration <= 0:
+        raise ValueError("Video duration is invalid.")
+    total_kbps = (VIDEO_TARGET_BYTES * 8 / duration) / 1000
+    video_kbps = int(total_kbps - VIDEO_AUDIO_BITRATE_KBPS)
+    if video_kbps < VIDEO_MIN_BITRATE_KBPS:
+        raise ValueError("Video is too long to fit within 150 MiB at the minimum quality.")
 
-def build_video_playback_asset(source_video_path: Path) -> Path:
-    output_path = build_video_playback_path(source_video_path)
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-
-    base_command = [
-        "ffmpeg",
-        "-y",
-        "-i",
-        str(source_video_path),
-        "-map",
-        "0:v:0",
-        "-map",
-        "0:a:0?",
-        "-pix_fmt",
-        "yuv420p",
-        "-c:a",
-        "aac",
-        "-ac",
-        "1",
-        "-ar",
-        "16000",
-        "-movflags",
-        "+faststart",
+    output_path = settings.videos_dir / f"{uuid.uuid4().hex}.mp4"
+    passlog = settings.cache_dir / f"video-pass-{uuid.uuid4().hex}"
+    common = [
+        "ffmpeg", "-y", "-i", str(source_video_path), "-map", "0:v:0",
+        "-c:v", "libx264", "-b:v", f"{video_kbps}k", "-maxrate", f"{video_kbps}k",
+        "-bufsize", f"{video_kbps * 2}k", "-pix_fmt", "yuv420p", "-preset", "medium",
+        "-passlogfile", str(passlog),
     ]
-    preferred_command = [
-        *base_command,
-        "-c:v",
-        "libx264",
-        "-preset",
-        "veryfast",
-        "-crf",
-        "23",
-        str(output_path),
-    ]
-    fallback_command = [
-        *base_command,
-        "-c:v",
-        "mpeg4",
-        "-q:v",
-        "5",
-        str(output_path),
-    ]
-
     try:
-        _run_media_command(preferred_command)
-    except subprocess.CalledProcessError:
-        logger.warning(
-            "libx264 unavailable for %s; falling back to mpeg4 playback encode.",
-            source_video_path,
-        )
-        _run_media_command(fallback_command)
-
-    return output_path
+        _run_media_command([*common, "-pass", "1", "-an", "-f", "mp4", os.devnull])
+        _run_media_command([
+            *common, "-pass", "2", "-map", "0:a:0?", "-c:a", "aac",
+            "-b:a", f"{VIDEO_AUDIO_BITRATE_KBPS}k", "-movflags", "+faststart", str(output_path),
+        ])
+        if output_path.stat().st_size > VIDEO_MAX_BYTES:
+            raise ValueError("Transcoded video exceeds the 150 MiB limit.")
+        return output_path
+    except Exception:
+        output_path.unlink(missing_ok=True)
+        raise
+    finally:
+        for candidate in settings.cache_dir.glob(f"{passlog.name}*"):
+            candidate.unlink(missing_ok=True)
 
 # For video files, extract audio and return the path to the audio file
 def extract_audio(input_path: Path) -> Path:

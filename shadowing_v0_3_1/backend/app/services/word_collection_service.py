@@ -1,5 +1,5 @@
 import string
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Literal
 
 from sqlalchemy.exc import IntegrityError
@@ -80,7 +80,7 @@ def collect_word(
     if existing:
         raise WordAlreadyCollectedError
 
-    now = datetime.utcnow()
+    now = datetime.now(UTC)
     collection = WordCollection(
         material_id=payload.material_id,
         sentence_id=payload.sentence_id,

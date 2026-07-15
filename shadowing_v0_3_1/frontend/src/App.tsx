@@ -40,6 +40,7 @@ export default function App() {
   const [loadingSentences, setLoadingSentences] = useState(false);
   const [loadingWordCollections, setLoadingWordCollections] = useState(false);
   const [shuttingDown, setShuttingDown] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const sentenceRequestIdRef = useRef(0);
 
   const activeMaterial = useMemo(
@@ -47,7 +48,7 @@ export default function App() {
     [materials, activeMaterialId]
   );
   const hasProcessingMaterials = useMemo(
-    () => materials.some((item) => item.status === "processing"),
+    () => materials.some((item) => item.status === "processing" || item.status === "queued"),
     [materials]
   );
   const collectedWordSet = useMemo(
@@ -61,6 +62,7 @@ export default function App() {
   const loadMaterials = useCallback(async () => {
     try {
       const data = await listMaterials();
+      setLoadError(null);
       setMaterials(data);
       setActiveMaterialId((prev) => {
         if (data.length === 0) return null;
@@ -84,7 +86,7 @@ export default function App() {
       const data = await listWordCollections({ sort });
       setWordCollections(data);
     } catch (error) {
-      console.error(error);
+      setLoadError(error instanceof Error ? error.message : "无法加载素材列表。");
     } finally {
       setLoadingWordCollections(false);
     }
@@ -125,7 +127,7 @@ export default function App() {
       setLatestEvaluations(indexLatestEvaluations(evaluationData));
     } catch (error) {
       if (requestId !== sentenceRequestIdRef.current) return;
-      console.error(error);
+      setLoadError(error instanceof Error ? error.message : "无法加载词库。");
       setSentences([]);
       setLatestEvaluations({});
     } finally {
@@ -220,7 +222,7 @@ export default function App() {
       await shutdownBackend();
       closeFrontendWindow();
     } catch (error) {
-      console.error(error);
+      setLoadError(error instanceof Error ? error.message : "无法加载练习内容。");
       alert(error instanceof Error ? error.message : "Shutdown failed.");
       setShuttingDown(false);
     }
@@ -230,8 +232,9 @@ export default function App() {
     <div className="app-shell">
       <header className="app-header">
         <div className="app-header-main">
-          <h1>Shadowing Trainer v0.3.1</h1>
+          <h1>Shadowing Trainer v0.3.2</h1>
           <p>上传素材 → 转写切句 → 翻译 → 逐句播放 → 跟读录音 → 基础评估</p>
+          <p className="muted">本地运维令牌仅用于兼容请求头，不构成访问控制；请勿将后端暴露到不可信网络。</p>
         </div>
         <button type="button" className="shutdown-button" disabled={shuttingDown} onClick={handleShutdown}>
           {shuttingDown ? "Closing..." : "Close App"}
@@ -239,6 +242,7 @@ export default function App() {
       </header>
 
       <main className="layout">
+        {loadError && <div className="card error-message" role="alert">{loadError} <button type="button" onClick={() => void loadMaterials()}>重试</button></div>}
         <section className="sidebar">
           <MaterialUploader onUploaded={handleUploaded} />
           <MaterialList
