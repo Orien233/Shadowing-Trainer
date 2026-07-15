@@ -3,6 +3,8 @@ import MaterialList from "./components/MaterialList";
 import MaterialUploader from "./components/MaterialUploader";
 import SentenceTrainer from "./components/SentenceTrainer";
 import WordCollectionPanel from "./components/WordCollectionPanel.jsx";
+import TextGeneratorPanel from "./components/TextGeneratorPanel";
+import SettingsPanel from "./components/SettingsPanel";
 import {
   cleanupRecordingFiles,
   getLatestMaterialEvaluations,
@@ -33,7 +35,7 @@ function getWordCollectionKey(collection: WordCollection): string {
 export default function App() {
   const [materials, setMaterials] = useState<Material[]>([]);
   const [activeMaterialId, setActiveMaterialId] = useState<number | null>(null);
-  const [activePanel, setActivePanel] = useState<"practice" | "wordLibrary">("practice");
+  const [activePanel, setActivePanel] = useState<"practice" | "wordLibrary" | "textGenerator" | "settings">("practice");
   const [sentences, setSentences] = useState<Sentence[]>([]);
   const [latestEvaluations, setLatestEvaluations] = useState<Record<number, SentenceLatestEvaluation>>({});
   const [wordCollections, setWordCollections] = useState<WordCollection[]>([]);
@@ -189,6 +191,12 @@ export default function App() {
     setActivePanel("wordLibrary");
   }
 
+  function handleTextMaterialReady(materialId: number) {
+    void loadMaterials();
+    setActiveMaterialId(materialId);
+    setActivePanel("practice");
+  }
+
   function handleWordCollected(collection: WordCollection) {
     const collectionKey = getWordCollectionKey(collection);
     setWordCollections((prev) => [
@@ -232,10 +240,11 @@ export default function App() {
     <div className="app-shell">
       <header className="app-header">
         <div className="app-header-main">
-          <h1>Shadowing Trainer v0.3.2</h1>
+          <h1>Shadowing Trainer v0.4</h1>
           <p>上传素材 → 转写切句 → 翻译 → 逐句播放 → 跟读录音 → 基础评估</p>
           <p className="muted">本地运维令牌仅用于兼容请求头，不构成访问控制；请勿将后端暴露到不可信网络。</p>
         </div>
+        <div className="top-panel-actions"><button type="button" onClick={() => setActivePanel("textGenerator")}>AI Text</button><button type="button" onClick={() => setActivePanel("settings")}>Settings</button></div>
         <button type="button" className="shutdown-button" disabled={shuttingDown} onClick={handleShutdown}>
           {shuttingDown ? "Closing..." : "Close App"}
         </button>
@@ -264,6 +273,10 @@ export default function App() {
               onRefresh={loadWordCollections}
               onDeleted={handleWordDeleted}
             />
+          ) : activePanel === "textGenerator" ? (
+            <TextGeneratorPanel collections={wordCollections} onMaterialReady={handleTextMaterialReady} />
+          ) : activePanel === "settings" ? (
+            <SettingsPanel />
           ) : loadingSentences ? (
             <div className="card"><p>句子加载中...</p></div>
           ) : (

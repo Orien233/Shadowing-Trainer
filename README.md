@@ -1,5 +1,32 @@
 # Shadowing Trainer v0.3.1
 
+## v0.4: AI text and configurable model providers
+
+The v0.4 project lives in `shadowing_v0_3_1/`. It adds an OpenAI-compatible
+provider layer while preserving the existing upload, sentence training,
+recording, scoring, word collection, and durable-job workflows.
+
+- **Provider types currently implemented:** OpenAI-compatible LLM, TTS, and
+  remote ASR; cached Local Whisper remains available as the local ASR provider.
+- **Configuration:** open **Settings** in the application, add an enabled
+  provider for LLM/TTS/ASR, then mark one provider per capability as default.
+  API keys are stored only by the backend and the list API/UI returns a masked
+  value. A blank API-key update keeps the previous key.
+- **ASR scene switches:** *Use Local Whisper for material transcription*
+  affects uploaded material processing. *Use Local Whisper for recording
+  evaluation* affects learner speech scoring. Turning either switch off uses
+  the default enabled remote ASR provider and returns a clear error if one has
+  not been configured.
+- **AI Text:** choose random or manual collected words, select a preset/custom
+  topic, language, difficulty and length, then generate and edit the text.
+  You can instead paste your own text. Choose TTS speed/voice and create a
+  sentence-level TTS practice; on completion it opens in the existing training
+  page just like an uploaded material.
+
+Copy `backend/.env.example` to `backend/.env` for local runtime settings. The
+legacy `DEEPSEEK_*` values remain a translation compatibility fallback; new
+provider credentials should be entered in Settings.
+
 Shadowing Trainer 是一款本地优先（local-first）的英语口语跟读训练 Web 应用。  
 它支持从素材上传到句级练习、录音与评分的完整流程。
 

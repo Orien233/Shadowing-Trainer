@@ -19,4 +19,6 @@ class Material(SQLModel, table=True):
     processing_stage: str | None = None
     processing_progress: int = 0
     error_message: str | None = None
+    source_type: str = "upload"
+    text_practice_id: int | None = Field(default=None, index=True)
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))

@@ -40,7 +40,7 @@ from app.services.media_service import (
 )
 from app.services.job_service import enqueue_job, update_job
 from app.services.segmentation_service import segment_to_sentences
-from app.services.transcription_service import transcribe_audio_with_word_timestamps
+from app.services.asr_router import MATERIAL_TRANSCRIPTION, transcribe_for_scene
 from app.services.translation_service import translate_sentences
 
 router = APIRouter(prefix="/api/materials", tags=["materials"])
@@ -430,7 +430,12 @@ async def _process_material_in_background(material_id: int, owner: str) -> None:
         audio_path = await asyncio.to_thread(extract_audio, audio_source_path)
         duration_probe_path = audio_source_path if is_video else audio_path
         duration = await asyncio.to_thread(get_audio_duration, duration_probe_path)
-        segments = await asyncio.to_thread(transcribe_audio_with_word_timestamps, str(audio_path))
+        segments = await asyncio.to_thread(
+            transcribe_for_scene,
+            MATERIAL_TRANSCRIPTION,
+            str(audio_path),
+            word_timestamps=True,
+        )
         sentence_candidates = await asyncio.to_thread(segment_to_sentences, segments)
         enriched_candidates, translations = await asyncio.gather(
             asyncio.to_thread(

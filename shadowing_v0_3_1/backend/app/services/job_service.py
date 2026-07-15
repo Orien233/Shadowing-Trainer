@@ -154,6 +154,41 @@ async def _run_evaluation(job_id: str, payload: dict[str, Any]) -> dict[str, Any
         return {"recording_id": recording.id, "evaluation": evaluation.model_dump(mode="json")}
 
 
+async def _run_material_processing(job_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+    update_job(job_id, stage="processing_material", progress=10)
+    from app.api.materials import process_material_job
+    material_id = int(payload["material_id"])
+    await process_material_job(material_id, job_id)
+    return {"material_id": material_id}
+
+
+async def _run_storage_cleanup(_job_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+    for raw_path in payload.get("paths", []):
+        path = Path(raw_path)
+        try:
+            path.resolve().relative_to(settings.data_path.resolve())
+        except ValueError:
+            raise RuntimeError(f"Refusing cleanup outside data directory: {path}")
+        if path.is_dir():
+            shutil.rmtree(path, ignore_errors=True)
+        else:
+            path.unlink(missing_ok=True)
+    return {"deleted": len(payload.get("paths", []))}
+
+
+async def _run_tts_synthesis(job_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+    from app.services.tts_service import run_tts_synthesis
+    return await asyncio.to_thread(run_tts_synthesis, job_id, payload)
+
+
+JOB_HANDLERS = {
+    "evaluation": _run_evaluation,
+    "material_processing": _run_material_processing,
+    "storage_cleanup": _run_storage_cleanup,
+    "tts_synthesis": _run_tts_synthesis,
+}
+
+
 async def _run_job(job_id: str) -> None:
     with Session(engine) as session:
         job = session.get(Job, job_id)
@@ -161,27 +196,10 @@ async def _run_job(job_id: str) -> None:
             return
         kind, payload = job.kind, json.loads(job.payload)
     try:
-        if kind == "evaluation":
-            result = await _run_evaluation(job_id, payload)
-        elif kind == "material_processing":
-            update_job(job_id, stage="processing_material", progress=10)
-            from app.api.materials import process_material_job
-            await process_material_job(int(payload["material_id"]), job_id)
-            result = {"material_id": int(payload["material_id"])}
-        elif kind == "storage_cleanup":
-            for raw_path in payload.get("paths", []):
-                path = Path(raw_path)
-                try:
-                    path.resolve().relative_to(settings.data_path.resolve())
-                except ValueError:
-                    raise RuntimeError(f"Refusing cleanup outside data directory: {path}")
-                if path.is_dir():
-                    shutil.rmtree(path, ignore_errors=True)
-                else:
-                    path.unlink(missing_ok=True)
-            result = {"deleted": len(payload.get("paths", []))}
-        else:
+        handler = JOB_HANDLERS.get(kind)
+        if not handler:
             raise RuntimeError(f"Unsupported job kind: {kind}")
+        result = await handler(job_id, payload)
         finish_job(job_id, result=result)
     except Exception as exc:
         logger.exception("Job %s failed", job_id)
@@ -202,6 +220,14 @@ async def _run_job(job_id: str) -> None:
                     material.error_message = str(exc)[:2000]
                     material.processing_stage = "failed"
                     session.add(material)
+                    session.commit()
+        if kind == "tts_synthesis":
+            with Session(engine) as session:
+                from app.models.text_practice import TextPractice
+                practice = session.get(TextPractice, payload.get("text_practice_id"))
+                if practice:
+                    practice.tts_status = "failed"
+                    session.add(practice)
                     session.commit()
         fail_job(job_id, str(exc))
 

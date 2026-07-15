@@ -9,6 +9,9 @@ from app.models.recording import Recording
 from app.models.sentence import Sentence
 from app.models.word_collection import WordCollection
 from app.models.material_sentence_score import MaterialSentenceScore
+from app.models.ai_provider import AIProvider
+from app.models.asr_scene_setting import ASRSceneSetting
+from app.models.text_practice import TextPractice, TextPracticeWord
 
 sqlite_url = f"sqlite:///{settings.db_path}"
 engine = create_engine(
@@ -123,6 +126,10 @@ def _main_db_tables() -> list:
         MaterialSentenceScore.__table__,
         Job.__table__,
         WordCollection.__table__,
+        AIProvider.__table__,
+        ASRSceneSetting.__table__,
+        TextPractice.__table__,
+        TextPracticeWord.__table__,
     ]
 
 

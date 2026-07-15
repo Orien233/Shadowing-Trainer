@@ -10,6 +10,9 @@ from typing import Any, Iterable, List
 import httpx
 
 from app.core.config import settings
+from app.core.database import engine
+from app.services.provider_factory import get_llm_provider_with_legacy_fallback
+from sqlmodel import Session
 
 
 logger = logging.getLogger(__name__)
@@ -179,16 +182,18 @@ async def translate_sentence(text: str) -> str:
     if not source_text:
         return ""
 
-    if not settings.deepseek_api_key:
-        return f"[DeepSeek API key missing] {source_text}"
-
     max_attempts = settings.translation_max_retries + 1
     async with _translation_semaphore:
         for attempt in range(max_attempts):
             try:
-                data = await _request_translation(source_text)
-                content = _extract_message_content(data)
-                parsed = _extract_json_object(content)
+                with Session(engine) as session:
+                    provider = get_llm_provider_with_legacy_fallback(session)
+                parsed = await asyncio.to_thread(
+                    provider.generate_json,
+                    system_prompt=TRANSLATION_SYSTEM_PROMPT,
+                    user_prompt=_build_translation_prompt(source_text),
+                    temperature=0.2,
+                )
                 translation = parsed.get("translation")
                 if not isinstance(translation, str) or not translation.strip():
                     raise ValueError("DeepSeek JSON response missing 'translation'.")

@@ -20,7 +20,7 @@ from app.services.scoring_service import (
     score_imitation_branch,
     score_prosody_branch,
 )
-from app.services.transcription_service import transcribe_text
+from app.services.asr_router import RECORDING_EVALUATION, transcribe_text_for_scene
 from app.services.vad_service import TrimmedAudioResult, create_trimmed_audio
 from app.services.word_alignment_service import align_word_tokens
 
@@ -143,7 +143,7 @@ def evaluate_recording(
     evaluation_audio_path = trim_result.audio_path
 
     try:
-        asr_text = transcribe_text(evaluation_audio_path)
+        asr_text = transcribe_text_for_scene(RECORDING_EVALUATION, evaluation_audio_path)
         duration = _safe_get_duration(evaluation_audio_path)
         safe_reference_duration = max(float(reference_duration), 0.1)
         resolved_reference_audio_path = _resolve_reference_audio_path(reference_audio_path)

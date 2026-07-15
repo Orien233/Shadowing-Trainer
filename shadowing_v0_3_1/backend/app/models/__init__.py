@@ -5,6 +5,9 @@ from app.models.material_sentence_score import MaterialSentenceScore
 from app.models.recording import Recording
 from app.models.sentence import Sentence
 from app.models.word_collection import WordCollection
+from app.models.ai_provider import AIProvider
+from app.models.asr_scene_setting import ASRSceneSetting
+from app.models.text_practice import TextPractice, TextPracticeWord
 
 __all__ = [
     "Material",
@@ -14,4 +17,8 @@ __all__ = [
     "Job",
     "MaterialSentenceScore",
     "WordCollection",
+    "AIProvider",
+    "ASRSceneSetting",
+    "TextPractice",
+    "TextPracticeWord",
 ]

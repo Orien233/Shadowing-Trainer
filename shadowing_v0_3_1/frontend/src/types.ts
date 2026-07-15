@@ -94,7 +94,7 @@ export interface MaterialLatestEvaluationsResponse {
 
 export interface Job {
   id: string;
-  kind: "evaluation" | "material_processing" | "storage_cleanup";
+  kind: "evaluation" | "material_processing" | "storage_cleanup" | "tts_synthesis";
   status: "queued" | "running" | "succeeded" | "failed" | "cancelled";
   stage: string;
   progress: number;
@@ -121,4 +121,25 @@ export interface WordCollection {
   note: string | null;
   created_at: string;
   updated_at: string;
+}
+
+export type ProviderCapability = "llm" | "tts" | "asr";
+export interface AIProvider {
+  id: number; name: string; capability: ProviderCapability; provider_type: string;
+  base_url: string | null; api_key_masked: string | null; model_name: string | null;
+  is_enabled: boolean; is_default: boolean; extra_config: Record<string, unknown>;
+  created_at: string; updated_at: string;
+}
+export interface ASRSceneSettings {
+  material_transcription_use_local: boolean;
+  recording_evaluation_use_local: boolean;
+  updated_at: string;
+}
+export interface TextPractice {
+  id: number; title: string; body: string; source_type: string; target_language: string;
+  difficulty: string | null; desired_length: number | null; topic: string | null;
+  explanation: string | null; requested_words: string[]; used_words: string[]; unused_words: string[];
+  llm_provider_id: number | null; tts_provider_id: number | null; tts_status: string;
+  tts_job_id: string | null; tts_audio_path: string | null; material_id: number | null;
+  created_at: string; updated_at: string;
 }
