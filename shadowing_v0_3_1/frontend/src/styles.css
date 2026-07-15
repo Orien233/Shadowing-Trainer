@@ -130,7 +130,7 @@ input:not([type]) {
   display: flex;
   justify-content: space-between;
   gap: 10px;
-  align-items: flex-start;
+  align-items: stretch;
   padding: 12px;
   border: 1px solid #e2e8f0;
   border-radius: 14px;
@@ -143,12 +143,19 @@ input:not([type]) {
 
 .material-main {
   flex: 1;
+  min-width: 0;
   cursor: pointer;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  padding: 0;
+  text-align: left;
 }
 
 .material-actions {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
+  flex: 0 0 auto;
   gap: 8px;
 }
 
@@ -213,14 +220,41 @@ input:not([type]) {
 
 .material-title {
   font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .material-meta {
   display: flex;
-  gap: 10px;
+  flex-wrap: wrap;
+  gap: 3px 8px;
   margin-top: 4px;
   color: #64748b;
   font-size: 13px;
+}
+
+.material-progress {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px 8px;
+  margin-top: 7px;
+  color: #2563eb;
+  font-size: 12px;
+  line-height: 1.25;
+}
+
+.material-progress strong {
+  font-weight: 700;
+}
+
+.material-error {
+  margin-top: 7px;
+  overflow: hidden;
+  color: #b91c1c;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .trainer-grid {

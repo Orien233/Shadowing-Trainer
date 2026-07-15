@@ -89,18 +89,25 @@ export default function MaterialList({
               key={material.id}
               className={`material-item ${material.id === activeId ? "active" : ""}`}
             >
-              <div className="material-main" onClick={() => onSelect(material.id)}>
+              <button type="button" className="material-main" onClick={() => onSelect(material.id)}>
                 <div className="material-title">{material.title}</div>
                 <div className="material-meta">
                   <span>{material.file_type}</span>
                   <span>{material.status}</span>
-                  {isProcessing && <span>{material.processing_stage || "queued"} {material.processing_progress ?? 0}%</span>}
                 </div>
-              </div>
+                {isProcessing && (
+                  <div className="material-progress" aria-label="Processing progress">
+                    <span>Processing</span>
+                    <span>{material.processing_stage || "queued"}</span>
+                    <strong>{material.processing_progress ?? 0}%</strong>
+                  </div>
+                )}
+                {material.status === "failed" && material.error_message && (
+                  <div className="material-error" title={material.error_message}>{material.error_message}</div>
+                )}
+              </button>
 
               <div className="material-actions">
-                {isProcessing && <span className="material-state">Processing...</span>}
-                {material.status === "failed" && material.error_message && <span className="material-state">{material.error_message}</span>}
                 {isDeleting && <span className="material-state">Deleting...</span>}
                 <div className="material-menu-anchor">
                   <button

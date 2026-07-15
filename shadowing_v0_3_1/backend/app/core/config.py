@@ -18,7 +18,10 @@ class Settings(BaseSettings):
     debug: bool = True # Default to True for development, but can be overridden by environment variable.
     host: str = "0.0.0.0"
     port: int = 8000
-    cors_origins: List[str] | str = ["http://localhost:5173"]
+    cors_origins: List[str] | str = [
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+    ]
 
     data_dir: str = "./data"
     whisper_model: str = "small"
