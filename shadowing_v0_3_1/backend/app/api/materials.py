@@ -416,8 +416,9 @@ async def _process_material_in_background(material_id: int, owner: str) -> None:
                 )
                 return
             source_path = Path(material.original_path)
+            is_video = material.file_type == "video"
             audio_source_path = source_path
-            if material.file_type == "video":
+            if is_video:
                 audio_source_path = await asyncio.to_thread(transcode_video_for_storage, source_path)
                 source_path.unlink(missing_ok=True)
                 material.original_path = str(audio_source_path)
@@ -427,7 +428,7 @@ async def _process_material_in_background(material_id: int, owner: str) -> None:
                 session.commit()
 
         audio_path = await asyncio.to_thread(extract_audio, audio_source_path)
-        duration_probe_path = audio_source_path if material.file_type == "video" else audio_path
+        duration_probe_path = audio_source_path if is_video else audio_path
         duration = await asyncio.to_thread(get_audio_duration, duration_probe_path)
         segments = await asyncio.to_thread(transcribe_audio_with_word_timestamps, str(audio_path))
         sentence_candidates = await asyncio.to_thread(segment_to_sentences, segments)
