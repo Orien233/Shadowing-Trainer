@@ -5,9 +5,9 @@ from sqlmodel import Session, select
 
 from app.models.ai_provider import AIProvider
 from app.core.config import settings
-from app.services.ai.asr import AzureSpeechASRProvider, OpenAICompatibleRemoteASRProvider
+from app.services.ai.asr import AzureSpeechASRProvider, MiMoASRProvider, OpenAICompatibleRemoteASRProvider
 from app.services.ai.llm import OpenAICompatibleLLMProvider
-from app.services.ai.tts import AzureSpeechTTSProvider, OpenAICompatibleTTSProvider
+from app.services.ai.tts import AzureSpeechTTSProvider, MiMoTTSProvider, OpenAICompatibleTTSProvider
 
 
 class ProviderConfigurationError(RuntimeError):
@@ -51,6 +51,10 @@ def create_provider(provider: AIProvider):
         return AzureSpeechTTSProvider(base_url=base_url, api_key=api_key, model_name=model_name, extra_config=extra)
     if provider.capability == "asr" and provider_type in {"azure_speech", "azure-speech"}:
         return AzureSpeechASRProvider(base_url=base_url, api_key=api_key, model_name=model_name, extra_config=extra)
+    if provider.capability == "tts" and provider_type in {"mimo_tts", "mimo-tts"}:
+        return MiMoTTSProvider(base_url=base_url, api_key=api_key, model_name=model_name, extra_config=extra)
+    if provider.capability == "asr" and provider_type in {"mimo_asr", "mimo-asr"}:
+        return MiMoASRProvider(base_url=base_url, api_key=api_key, model_name=model_name, extra_config=extra)
     raise ProviderConfigurationError(f"Unsupported capability: {provider.capability}.")
 
 

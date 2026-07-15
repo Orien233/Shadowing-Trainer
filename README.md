@@ -19,6 +19,10 @@ recording, scoring, word collection, and durable-job workflows.
 - **TTS endpoint:** for an OpenAI-compatible TTS provider, enter the complete
   synthesis endpoint (for example `https://host/v1/audio/speech`). The app
   deliberately does not append `/audio/speech`.
+- **MiMo:** select `MiMo TTS` or `MiMo ASR` in Settings, set the full Base URL
+  to `https://api.xiaomimimo.com/v1/chat/completions`, and use
+  `mimo-v2.5-tts` or `mimo-v2.5-asr`. The adapter uses MiMo's Chat
+  Completions audio schema and decodes its Base64 audio response.
 - **ASR scene switches:** *Use Local Whisper for material transcription*
   affects uploaded material processing. *Use Local Whisper for recording
   evaluation* affects learner speech scoring. Turning either switch off uses
