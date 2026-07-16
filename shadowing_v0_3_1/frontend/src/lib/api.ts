@@ -85,7 +85,7 @@ export const listProviders = () => request<AIProvider[]>("/api/providers");
 export const createProvider = (payload: ProviderInput) => request<AIProvider>("/api/providers", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
 export const updateProvider = (id: number, payload: Partial<ProviderInput>) => request<AIProvider>(`/api/providers/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
 export const deleteProvider = (id: number) => request<void>(`/api/providers/${id}`, { method: "DELETE" });
-export const testProvider = (id: number) => request<{ ok: boolean; message: string }>(`/api/providers/${id}/test`, { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" }, 130_000);
+export const testProvider = (id: number) => request<{ ok: boolean; message: string; capabilities: string[] }>(`/api/providers/${id}/test`, { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" }, 130_000);
 export const getASRSceneSettings = () => request<ASRSceneSettings>("/api/providers/asr-scenes/settings");
 export const updateASRSceneSettings = (payload: Partial<ASRSceneSettings>) => request<ASRSceneSettings>("/api/providers/asr-scenes/settings", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
 export type TextGenerationInput = { word_selection: "random" | "manual" | "none"; random_word_count: number; word_collection_ids: number[]; preset_topic?: string; custom_topic?: string; target_language: string; difficulty: string; desired_length: number; };

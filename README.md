@@ -8,7 +8,7 @@ recording, scoring, word collection, and durable-job workflows.
 
 - **Audio provider contract:** TTS and ASR use OpenAI Audio API request shapes
   (`/audio/speech`, `/audio/transcriptions`) as a common baseline, while the
-  application exposes its own `AudioCapability`, `TTSResult`, and `ASRResult`.
+  application exposes its own `ProviderCapability`, `TTSResult`, and `ASRResult`.
   Azure Speech and cached Local Whisper are adapters behind that contract.
 - **Provider types currently implemented:** OpenAI-compatible LLM/TTS/remote
   ASR, Azure Speech TTS/ASR, and cached Local Whisper for local ASR.
@@ -28,6 +28,14 @@ recording, scoring, word collection, and durable-job workflows.
   evaluation* affects learner speech scoring. Turning either switch off uses
   the default enabled remote ASR provider and returns a clear error if one has
   not been configured.
+- **Adapter-declared capability gates:** capabilities are static adapter
+  contracts and never require a paid probe request. The Settings list and
+  connection-test result show them safely. LLM text generation requires
+  `generate_text` and `generate_json`; TTS practice requires `synthesize`.
+  Remote material transcription additionally requires `word_timestamps`, so
+  Azure Speech and MiMo ASR keep that scene on Local Whisper while they can
+  still be used for remote recording evaluation. A failed connection test only
+  reports a readable error; it does not alter these capability gates.
 - **AI Text:** choose random or manual collected words, select a preset/custom
   topic, language, difficulty and length, then generate and edit the text.
   You can instead paste your own text. Choose TTS speed/voice and create a

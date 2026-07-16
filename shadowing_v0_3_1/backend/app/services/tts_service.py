@@ -15,9 +15,10 @@ from app.models.sentence import Sentence
 from app.models.text_practice import TextPractice
 from app.schemas.text_practice import TTSOptions
 from app.services.ai.tts.base import TTSRequest
+from app.services.ai.audio_types import ProviderCapability
 from app.services.job_service import update_job
 from app.services.media_service import get_audio_duration
-from app.services.provider_factory import get_provider, get_provider_record
+from app.services.provider_factory import get_provider, require_provider_capabilities
 
 _SPEEDS = {"slow": 0.8, "normal": 1.0, "fast": 1.2}
 
@@ -30,7 +31,12 @@ def split_practice_sentences(text: str) -> list[str]:
 def queue_tts(session: Session, practice: TextPractice, options: TTSOptions):
     from app.services.job_service import enqueue_job
 
-    provider_record = get_provider_record(session, "tts", options.provider_id)
+    provider_record = require_provider_capabilities(
+        session,
+        "tts",
+        {ProviderCapability.SYNTHESIZE},
+        options.provider_id,
+    )
     practice.tts_provider_id = provider_record.id
     practice.tts_options_json = options.model_dump_json()
     practice.tts_status = "queued"
@@ -58,7 +64,15 @@ def run_tts_synthesis(job_id: str, payload: dict) -> dict:
         if not practice:
             raise RuntimeError("Text practice no longer exists.")
         options = TTSOptions.model_validate_json(practice.tts_options_json)
-        provider = get_provider(session, "tts", practice.tts_provider_id)
+        # Recheck the static Adapter contract when a persisted job resumes.
+        # A provider can be disabled or replaced after the job was enqueued.
+        provider_record = require_provider_capabilities(
+            session,
+            "tts",
+            {ProviderCapability.SYNTHESIZE},
+            practice.tts_provider_id,
+        )
+        provider = get_provider(session, "tts", provider_record.id)
         sentences = split_practice_sentences(practice.body)
         if not sentences:
             raise ValueError("Text practice has no sentences to synthesize.")

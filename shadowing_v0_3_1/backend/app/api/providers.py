@@ -7,8 +7,14 @@ from sqlmodel import Session, select
 from app.core.database import get_session
 from app.models.ai_provider import AIProvider
 from app.schemas.ai_provider import AIProviderCreate, AIProviderRead, AIProviderUpdate, ASRSceneSettingRead, ASRSceneSettingUpdate, ProviderTestRequest, ProviderTestResponse
-from app.services.asr_router import get_or_create_scene_settings
-from app.services.provider_factory import create_provider, parse_extra_config
+from app.services.asr_router import (
+    MATERIAL_TRANSCRIPTION,
+    RECORDING_EVALUATION,
+    enforce_scene_capabilities,
+    get_or_create_scene_settings,
+    get_scene_availability,
+)
+from app.services.provider_factory import create_provider, get_declared_capabilities, parse_extra_config
 
 router = APIRouter(prefix="/api/providers", tags=["providers"])
 
@@ -22,7 +28,22 @@ def _mask_key(key: str | None) -> str | None:
 
 
 def _read(provider: AIProvider) -> AIProviderRead:
-    return AIProviderRead(id=provider.id, name=provider.name, capability=provider.capability, provider_type=provider.provider_type, base_url=provider.base_url, api_key_masked=_mask_key(provider.api_key), model_name=provider.model_name, is_enabled=provider.is_enabled, is_default=provider.is_default, extra_config=parse_extra_config(provider.extra_config), created_at=provider.created_at, updated_at=provider.updated_at)
+    return AIProviderRead(id=provider.id, name=provider.name, capability=provider.capability, provider_type=provider.provider_type, base_url=provider.base_url, api_key_masked=_mask_key(provider.api_key), model_name=provider.model_name, is_enabled=provider.is_enabled, is_default=provider.is_default, extra_config=parse_extra_config(provider.extra_config), capabilities=sorted(item.value for item in get_declared_capabilities(provider)), created_at=provider.created_at, updated_at=provider.updated_at)
+
+
+def _scene_read(session: Session) -> ASRSceneSettingRead:
+    value = enforce_scene_capabilities(session, get_or_create_scene_settings(session))
+    material = get_scene_availability(session, MATERIAL_TRANSCRIPTION)
+    recording = get_scene_availability(session, RECORDING_EVALUATION)
+    return ASRSceneSettingRead(
+        material_transcription_use_local=value.material_transcription_use_local,
+        recording_evaluation_use_local=value.recording_evaluation_use_local,
+        updated_at=value.updated_at,
+        material_transcription_remote_available=material.remote_available,
+        material_transcription_missing_capabilities=list(material.missing_capabilities),
+        recording_evaluation_remote_available=recording.remote_available,
+        recording_evaluation_missing_capabilities=list(recording.missing_capabilities),
+    )
 
 
 def _clear_other_defaults(session: Session, capability: str, current_id: int | None = None) -> None:
@@ -89,24 +110,32 @@ def test_ai_provider(provider_id: int, payload: ProviderTestRequest, session: Se
         provider.api_key = payload.api_key
     try:
         message = create_provider(provider).test_connection()
-        return ProviderTestResponse(ok=True, message=message)
+        return ProviderTestResponse(ok=True, message=message, capabilities=sorted(item.value for item in get_declared_capabilities(provider)))
     except Exception as exc:
         # Avoid exposing URLs with query credentials, headers, or API key content.
-        return ProviderTestResponse(ok=False, message=f"Connection test failed: {type(exc).__name__}: {str(exc).replace(provider.api_key or '', '[redacted]')[:400]}")
+        return ProviderTestResponse(ok=False, message=f"Connection test failed: {type(exc).__name__}: {str(exc).replace(provider.api_key or '', '[redacted]')[:400]}", capabilities=sorted(item.value for item in get_declared_capabilities(provider)))
 
 
 @router.get("/asr-scenes/settings", response_model=ASRSceneSettingRead)
 def get_asr_scene_settings(session: Session = Depends(get_session)):
-    return get_or_create_scene_settings(session)
+    return _scene_read(session)
 
 
 @router.patch("/asr-scenes/settings", response_model=ASRSceneSettingRead)
 def update_asr_scene_settings(payload: ASRSceneSettingUpdate, session: Session = Depends(get_session)):
-    value = get_or_create_scene_settings(session)
+    value = enforce_scene_capabilities(session, get_or_create_scene_settings(session))
     if payload.material_transcription_use_local is not None:
+        if not payload.material_transcription_use_local:
+            availability = get_scene_availability(session, MATERIAL_TRANSCRIPTION)
+            if not availability.remote_available:
+                raise HTTPException(status_code=409, detail=f"Remote material transcription is unavailable: {', '.join(availability.missing_capabilities)}.")
         value.material_transcription_use_local = payload.material_transcription_use_local
     if payload.recording_evaluation_use_local is not None:
+        if not payload.recording_evaluation_use_local:
+            availability = get_scene_availability(session, RECORDING_EVALUATION)
+            if not availability.remote_available:
+                raise HTTPException(status_code=409, detail=f"Remote recording evaluation is unavailable: {', '.join(availability.missing_capabilities)}.")
         value.recording_evaluation_use_local = payload.recording_evaluation_use_local
     value.updated_at = datetime.now(UTC)
     session.add(value); session.commit(); session.refresh(value)
-    return value
+    return _scene_read(session)

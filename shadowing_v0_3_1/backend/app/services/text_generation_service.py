@@ -10,7 +10,8 @@ from app.models.text_practice import TextPractice, TextPracticeWord
 from app.models.word_collection import WordCollection
 from app.schemas.text_practice import TextGenerationRequest, TextPracticeCreate
 from app.services.ai.llm.openai_compatible import extract_json_object
-from app.services.provider_factory import get_provider, get_provider_record
+from app.services.ai.audio_types import ProviderCapability
+from app.services.provider_factory import get_provider, require_provider_capabilities
 
 PRESET_TOPICS = {"daily_life", "travel", "workplace", "campus", "news", "story"}
 
@@ -66,7 +67,11 @@ def create_generated_practice(session: Session, request: TextGenerationRequest) 
     collections = _select_collections(session, request)
     requested_words = [item.word_text for item in collections]
     topic = _topic(request)
-    provider_record = get_provider_record(session, "llm")
+    provider_record = require_provider_capabilities(
+        session,
+        "llm",
+        {ProviderCapability.GENERATE_TEXT, ProviderCapability.GENERATE_JSON},
+    )
     provider = get_provider(session, "llm", provider_record.id)
     prompt = _build_prompt(request, requested_words, topic)
     try:

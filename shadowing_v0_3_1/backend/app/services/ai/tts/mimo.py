@@ -24,7 +24,7 @@ class MiMoTTSProvider(TTSProvider):
     endpoint supplied by the user.
     """
 
-    capabilities = frozenset({AudioCapability.SYNTHESIZE, AudioCapability.LIST_VOICES})
+    capabilities = frozenset({AudioCapability.SYNTHESIZE})
 
     def __init__(self, *, base_url: str, api_key: str, model_name: str, extra_config: dict[str, Any] | None = None) -> None:
         self.base_url, self.api_key, self.model_name = base_url.rstrip("/"), api_key, model_name

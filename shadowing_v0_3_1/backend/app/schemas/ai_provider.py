@@ -42,6 +42,7 @@ class AIProviderRead(BaseModel):
     is_enabled: bool
     is_default: bool
     extra_config: dict[str, Any]
+    capabilities: list[str] = Field(default_factory=list)
     created_at: datetime
     updated_at: datetime
 
@@ -56,6 +57,7 @@ class ProviderTestRequest(BaseModel):
 class ProviderTestResponse(BaseModel):
     ok: bool
     message: str
+    capabilities: list[str] = Field(default_factory=list)
 
 
 class ASRSceneSettingRead(BaseModel):
@@ -64,6 +66,10 @@ class ASRSceneSettingRead(BaseModel):
     material_transcription_use_local: bool
     recording_evaluation_use_local: bool
     updated_at: datetime
+    material_transcription_remote_available: bool = False
+    material_transcription_missing_capabilities: list[str] = Field(default_factory=list)
+    recording_evaluation_remote_available: bool = False
+    recording_evaluation_missing_capabilities: list[str] = Field(default_factory=list)
 
 
 class ASRSceneSettingUpdate(BaseModel):

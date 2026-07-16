@@ -5,6 +5,7 @@ from sqlmodel import Session, select
 
 from app.models.ai_provider import AIProvider
 from app.core.config import settings
+from app.services.ai.audio_types import ProviderCapability
 from app.services.ai.asr import AzureSpeechASRProvider, MiMoASRProvider, OpenAICompatibleRemoteASRProvider
 from app.services.ai.llm import OpenAICompatibleLLMProvider
 from app.services.ai.tts import AzureSpeechTTSProvider, MiMoTTSProvider, OpenAICompatibleTTSProvider
@@ -12,6 +13,42 @@ from app.services.ai.tts import AzureSpeechTTSProvider, MiMoTTSProvider, OpenAIC
 
 class ProviderConfigurationError(RuntimeError):
     pass
+
+
+def get_declared_capabilities(provider: AIProvider) -> frozenset[ProviderCapability]:
+    """Return Adapter-declared capabilities without making a network call."""
+    provider_type = provider.provider_type.strip().lower()
+    if provider.capability == "llm" and provider_type in {"openai_compatible", "openai-compatible", "openai"}:
+        return OpenAICompatibleLLMProvider.capabilities
+    if provider.capability == "tts" and provider_type in {"openai_compatible", "openai-compatible", "openai"}:
+        return OpenAICompatibleTTSProvider.capabilities
+    if provider.capability == "asr" and provider_type in {"openai_compatible", "openai-compatible", "openai"}:
+        return OpenAICompatibleRemoteASRProvider.capabilities
+    if provider.capability == "tts" and provider_type in {"azure_speech", "azure-speech"}:
+        return AzureSpeechTTSProvider.capabilities
+    if provider.capability == "asr" and provider_type in {"azure_speech", "azure-speech"}:
+        return AzureSpeechASRProvider.capabilities
+    if provider.capability == "tts" and provider_type in {"mimo_tts", "mimo-tts"}:
+        return MiMoTTSProvider.capabilities
+    if provider.capability == "asr" and provider_type in {"mimo_asr", "mimo-asr"}:
+        return MiMoASRProvider.capabilities
+    return frozenset()
+
+
+def require_provider_capabilities(
+    session: Session,
+    capability: str,
+    required: set[ProviderCapability],
+    provider_id: int | None = None,
+) -> AIProvider:
+    provider = get_provider_record(session, capability, provider_id)
+    missing = required - get_declared_capabilities(provider)
+    if missing:
+        values = ", ".join(sorted(item.value for item in missing))
+        raise ProviderConfigurationError(
+            f"Provider '{provider.name}' does not support required capabilities: {values}."
+        )
+    return provider
 
 
 def parse_extra_config(raw: str | None) -> dict[str, Any]:

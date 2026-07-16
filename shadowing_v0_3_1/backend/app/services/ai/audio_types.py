@@ -5,11 +5,17 @@ from enum import StrEnum
 from typing import Any
 
 
-class AudioCapability(StrEnum):
+class ProviderCapability(StrEnum):
+    GENERATE_TEXT = "generate_text"
+    GENERATE_JSON = "generate_json"
     SYNTHESIZE = "synthesize"
     LIST_VOICES = "list_voices"
     TRANSCRIBE = "transcribe"
     WORD_TIMESTAMPS = "word_timestamps"
+
+
+# Backward-compatible name for existing audio Adapter imports.
+AudioCapability = ProviderCapability
 
 
 class UnsupportedAudioCapabilityError(ValueError):

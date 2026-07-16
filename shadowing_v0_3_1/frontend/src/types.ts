@@ -128,12 +128,17 @@ export interface AIProvider {
   id: number; name: string; capability: ProviderCapability; provider_type: string;
   base_url: string | null; api_key_masked: string | null; model_name: string | null;
   is_enabled: boolean; is_default: boolean; extra_config: Record<string, unknown>;
+  capabilities: string[];
   created_at: string; updated_at: string;
 }
 export interface ASRSceneSettings {
   material_transcription_use_local: boolean;
   recording_evaluation_use_local: boolean;
   updated_at: string;
+  material_transcription_remote_available: boolean;
+  material_transcription_missing_capabilities: string[];
+  recording_evaluation_remote_available: boolean;
+  recording_evaluation_missing_capabilities: string[];
 }
 export interface TextPractice {
   id: number; title: string; body: string; source_type: string; target_language: string;
