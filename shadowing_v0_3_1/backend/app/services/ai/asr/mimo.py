@@ -5,10 +5,10 @@ import mimetypes
 from pathlib import Path
 from typing import Any
 
-import httpx
-
+from app.services.ai.http_transport import provider_http
 from app.services.ai.asr.base import ASRProvider
 from app.services.ai.audio_types import ASRResult, ASRSegment, AudioCapability
+from app.services.ai.audio_utils import configuration_message
 
 
 class MiMoASRProvider(ASRProvider):
@@ -20,7 +20,7 @@ class MiMoASRProvider(ASRProvider):
 
     capabilities = frozenset({AudioCapability.TRANSCRIBE})
 
-    def __init__(self, *, base_url: str, api_key: str, model_name: str, extra_config: dict[str, Any] | None = None) -> None:
+    def __init__(self, base_url: str, api_key: str, model_name: str, extra_config: dict[str, Any] | None = None) -> None:
         self.base_url, self.api_key, self.model_name = base_url.rstrip("/"), api_key, model_name
         self.extra_config = extra_config or {}
 
@@ -42,7 +42,7 @@ class MiMoASRProvider(ASRProvider):
             "messages": [{"role": "user", "content": [{"type": "input_audio", "input_audio": {"data": f"data:{mime_type};base64,{encoded_audio}"}}]}],
             "asr_options": {"language": self.extra_config.get("language", "auto")},
         }
-        response = httpx.post(self.base_url, json=payload, headers=self._headers(), timeout=120)
+        response = provider_http.post(self.base_url, json=payload, headers=self._headers(), timeout=120)
         response.raise_for_status()
         data = response.json()
         try:
@@ -52,6 +52,9 @@ class MiMoASRProvider(ASRProvider):
         return ASRResult(text=text, segments=[ASRSegment(text=text)] if text else [], provider_metadata={"adapter": "mimo_asr", "model": self.model_name})
 
     def test_connection(self) -> str:
-        if not self.api_key:
-            raise ValueError("Provider API key is not configured.")
-        return "MiMo ASR is configured. Submit an audio file to test transcription."
+        return configuration_message(
+            base_url=self.base_url,
+            api_key=self.api_key,
+            model_name=self.model_name,
+            provider_name="MiMo ASR",
+        )

@@ -25,6 +25,10 @@ from app.services.ai.tts.base import TTSRequest
 from app.services.ai.tts.openai_compatible import OpenAICompatibleTTSProvider
 from app.services.ai.tts.mimo import MiMoTTSProvider
 from app.services.ai.asr.mimo import MiMoASRProvider
+from app.services.ai.asr.azure_speech import AzureSpeechASRProvider
+from app.services.ai.adapter_registry import catalog_payload, get_adapter_descriptor
+from app.services.ai.llm._shared import extract_json_object
+from app.services.provider_security import redact_provider_error, sanitize_url
 from app.services.provider_factory import create_provider, get_declared_capabilities
 from app.api import providers as providers_api
 from app.api.providers import _read
@@ -59,14 +63,40 @@ def test_factory_creates_mimo_audio_adapters():
     assert asr.__class__.__name__ == "MiMoASRProvider"
 
 
+def test_adapter_registry_resolves_legacy_aliases_and_exposes_safe_catalog():
+    assert get_adapter_descriptor("llm", "openai_compatible").canonical_key == "openai_chat_compatible"
+    assert get_adapter_descriptor("tts", "openai_compatible").canonical_key == "openai_audio_tts"
+    assert get_adapter_descriptor("asr", "openai_compatible").canonical_key == "openai_compatible_asr"
+    catalog = catalog_payload()
+    keys = {(item["kind"], item["key"]) for item in catalog}
+    assert ("llm", "anthropic_messages") in keys
+    assert ("llm", "gemini_generate_content") in keys
+    assert ("tts", "elevenlabs_tts") in keys
+    assert ("asr", "deepgram_asr") in keys
+    assert all("api_key" not in {field["key"] for field in item["config_fields"]} for item in catalog)
+
+
+def test_ollama_profile_does_not_require_an_api_key():
+    provider = create_provider(
+        AIProvider(
+            name="ollama", capability="llm", provider_type="ollama_chat",
+            base_url="http://localhost:11434/v1", api_key=None, model_name="llama3",
+            extra_config='{"auth_scheme": "none"}',
+        )
+    )
+    assert provider.__class__.__name__ == "OpenAICompatibleLLMProvider"
+
+
 def test_adapter_capabilities_are_static_and_safe_to_read():
     llm = AIProvider(name="llm", capability="llm", provider_type="openai_compatible", base_url="https://example.test/v1", model_name="model")
     remote_asr = AIProvider(name="remote", capability="asr", provider_type="openai_compatible", base_url="https://example.test/v1", model_name="model")
     azure_asr = AIProvider(name="azure", capability="asr", provider_type="azure_speech", base_url="https://example.test", model_name="model")
     mimo_asr = AIProvider(name="mimo", capability="asr", provider_type="mimo_asr", base_url="https://example.test", model_name="model")
     assert get_declared_capabilities(llm) == {ProviderCapability.GENERATE_TEXT, ProviderCapability.GENERATE_JSON}
-    assert get_declared_capabilities(remote_asr) == {ProviderCapability.TRANSCRIBE, ProviderCapability.WORD_TIMESTAMPS}
-    assert get_declared_capabilities(azure_asr) == {ProviderCapability.TRANSCRIBE}
+    # A generic OpenAI-shaped endpoint cannot honestly promise Whisper word
+    # timestamps.  Users select the explicit Whisper adapter when needed.
+    assert get_declared_capabilities(remote_asr) == {ProviderCapability.TRANSCRIBE}
+    assert get_declared_capabilities(azure_asr) == {ProviderCapability.TRANSCRIBE, ProviderCapability.WORD_TIMESTAMPS}
     assert get_declared_capabilities(mimo_asr) == {ProviderCapability.TRANSCRIBE}
 
 
@@ -79,10 +109,21 @@ def test_openai_tts_uses_user_provided_full_endpoint(monkeypatch):
     def fake_post(url, **kwargs):
         called["url"] = url
         return Response()
-    monkeypatch.setattr("app.services.ai.tts.openai_compatible.httpx.post", fake_post)
+    monkeypatch.setattr("app.services.ai.tts.openai_compatible.provider_http.post", fake_post)
     provider = OpenAICompatibleTTSProvider(base_url="https://voice.example/custom/speech", api_key="key", model_name="model")
     provider.synthesize(TTSRequest(text="Hello"))
     assert called["url"] == "https://voice.example/custom/speech"
+
+
+def test_audio_connection_test_never_synthesizes(monkeypatch):
+    monkeypatch.setattr(
+        "app.services.ai.tts.openai_compatible.provider_http.post",
+        lambda *_args, **_kwargs: pytest.fail("connection test must not synthesize audio"),
+    )
+    provider = OpenAICompatibleTTSProvider(
+        base_url="https://voice.example/custom/speech", api_key="key", model_name="tts",
+    )
+    assert "no billable request" in provider.test_connection()
 
 
 def test_mimo_tts_uses_chat_completion_schema_and_decodes_audio(monkeypatch):
@@ -94,7 +135,7 @@ def test_mimo_tts_uses_chat_completion_schema_and_decodes_audio(monkeypatch):
     def fake_post(url, **kwargs):
         called["url"], called["payload"] = url, kwargs["json"]
         return Response()
-    monkeypatch.setattr("app.services.ai.tts.mimo.httpx.post", fake_post)
+    monkeypatch.setattr("app.services.ai.tts.mimo.provider_http.post", fake_post)
     result = MiMoTTSProvider(base_url="https://api.xiaomimimo.com/v1/chat/completions", api_key="key", model_name="mimo-v2.5-tts").synthesize(TTSRequest(text="Hello", voice="Chloe"))
     assert called["url"] == "https://api.xiaomimimo.com/v1/chat/completions"
     assert called["payload"]["messages"][-1] == {"role": "assistant", "content": "Hello"}
@@ -106,9 +147,28 @@ def test_mimo_asr_uses_chat_completion_audio_part(monkeypatch, tmp_path: Path):
     class Response:
         def raise_for_status(self): pass
         def json(self): return {"choices": [{"message": {"content": "hello world"}}]}
-    monkeypatch.setattr("app.services.ai.asr.mimo.httpx.post", lambda *_args, **_kwargs: Response())
+    monkeypatch.setattr("app.services.ai.asr.mimo.provider_http.post", lambda *_args, **_kwargs: Response())
     result = MiMoASRProvider(base_url="https://api.xiaomimimo.com/v1/chat/completions", api_key="key", model_name="mimo-v2.5-asr").transcribe(str(audio))
     assert result.text == "hello world"
+
+
+def test_azure_fast_transcription_parser_normalizes_milliseconds_to_seconds():
+    segments = AzureSpeechASRProvider._segments(
+        {
+            "phrases": [{
+                "text": "hello world", "offsetMilliseconds": 1250, "durationMilliseconds": 900,
+                "words": [
+                    {"text": "hello", "offsetMilliseconds": 1250, "durationMilliseconds": 400},
+                    {"text": "world", "offsetMilliseconds": 1700, "durationMilliseconds": 450},
+                ],
+            }],
+        },
+        include_words=True,
+    )
+    assert segments[0].start == 1.25 and segments[0].end == 2.15
+    assert [(word.text, word.start, word.end) for word in segments[0].words] == [
+        ("hello", 1.25, 1.65), ("world", 1.7, 2.15),
+    ]
 
 
 def test_provider_read_masks_api_key():
@@ -117,6 +177,14 @@ def test_provider_read_masks_api_key():
     assert "very-secret" not in response.api_key_masked
     assert "sk-very-secret-key" not in response.model_dump_json()
     assert response.capabilities == ["generate_json", "generate_text"]
+
+
+def test_provider_error_and_url_redaction_are_safe_with_blank_or_query_credentials():
+    assert redact_provider_error("request failed", "") == "request failed"
+    assert "secret" not in redact_provider_error("failed token=secret", "secret")
+    assert "header-secret" not in redact_provider_error("Headers: Authorization: Bearer header-secret", None)
+    safe_url = sanitize_url("https://example.test/v1?api_key=secret&region=us")
+    assert safe_url is not None and "secret" not in safe_url and "region=us" in safe_url
 
 
 def test_provider_test_response_reports_static_capabilities_without_leaking_key(monkeypatch):
@@ -131,7 +199,52 @@ def test_provider_test_response_reports_static_capabilities_without_leaking_key(
         response = providers_api.test_ai_provider(provider.id, ProviderTestRequest(), session)
     assert response.ok is False
     assert response.capabilities == ["transcribe"]
+    assert response.verification_level == "configuration"
     assert "secret-value" not in response.message
+
+
+def test_provider_catalog_and_draft_test_require_only_no_cost_configuration(monkeypatch):
+    class Provider:
+        def test_connection(self): return "configured only"
+    monkeypatch.setattr(providers_api, "create_provider", lambda *_args: Provider())
+    draft = ProviderTestRequest(
+        name="draft",
+        capability="tts",
+        provider_type="openai_audio_tts",
+        base_url="https://voice.example/custom/speech",
+        api_key="draft-secret",
+        model_name="tts-model",
+        extra_config={"default_voice": "alloy"},
+    )
+    response = providers_api.test_provider_draft(draft)
+    assert response.ok is True
+    assert response.verification_level == "configuration"
+    assert response.capabilities == ["synthesize"]
+
+
+def test_provider_create_rejects_undeclared_extra_config_and_disabled_default():
+    engine = _engine()
+    with Session(engine) as session:
+        with pytest.raises(HTTPException) as unknown:
+            providers_api.create_ai_provider(
+                providers_api.AIProviderCreate(
+                    name="unsafe", capability="tts", provider_type="openai_audio_tts",
+                    base_url="https://voice.example/speech", api_key="secret", model_name="tts",
+                    extra_config={"headers": {"Authorization": "secret"}},
+                ),
+                session,
+            )
+        assert unknown.value.status_code == 422
+        with pytest.raises(HTTPException) as disabled:
+            providers_api.create_ai_provider(
+                providers_api.AIProviderCreate(
+                    name="disabled", capability="llm", provider_type="openai_chat_compatible",
+                    base_url="https://example.test/v1", api_key="secret", model_name="model",
+                    is_enabled=False, is_default=True,
+                ),
+                session,
+            )
+        assert disabled.value.status_code == 422
 
 
 def test_asr_router_honours_independent_scene_switches(monkeypatch):
@@ -166,7 +279,7 @@ def test_mimo_asr_locks_material_scene_but_allows_remote_recording():
 def test_word_timestamp_remote_asr_unlocks_both_scenes():
     engine = _engine()
     with Session(engine) as session:
-        session.add(AIProvider(name="remote", capability="asr", provider_type="openai_compatible", base_url="https://example.test/v1", api_key="key", model_name="asr", is_default=True))
+        session.add(AIProvider(name="remote", capability="asr", provider_type="openai_whisper_asr", base_url="https://example.test/v1", api_key="key", model_name="whisper-1", is_default=True))
         session.add(ASRSceneSetting())
         session.commit()
         result = providers_api.update_asr_scene_settings(
@@ -179,11 +292,33 @@ def test_word_timestamp_remote_asr_unlocks_both_scenes():
         assert result.recording_evaluation_use_local is False
 
 
-def test_generated_word_selection_and_invalid_json_fallback(monkeypatch):
+def test_azure_word_timestamp_asr_unlocks_both_scenes():
+    engine = _engine()
+    with Session(engine) as session:
+        session.add(AIProvider(name="azure", capability="asr", provider_type="azure_speech", base_url="https://example.test", api_key="key", model_name="conversation", is_default=True))
+        session.add(ASRSceneSetting())
+        session.commit()
+        result = providers_api.update_asr_scene_settings(
+            ASRSceneSettingUpdate(material_transcription_use_local=False, recording_evaluation_use_local=False),
+            session,
+        )
+        assert result.material_transcription_remote_available is True
+        assert result.material_transcription_use_local is False
+
+
+def test_asr_settings_get_is_read_only_when_no_settings_row_exists():
+    engine = _engine()
+    with Session(engine) as session:
+        assert session.get(ASRSceneSetting, 1) is None
+        response = providers_api.get_asr_scene_settings(session)
+        assert response.material_transcription_use_local is True
+        assert session.get(ASRSceneSetting, 1) is None
+
+
+def test_generated_word_selection_uses_single_structured_response(monkeypatch):
     engine = _engine()
     class Provider:
-        def generate_json(self, **_kwargs): raise ValueError("bad json")
-        def generate_text(self, **_kwargs): return "```json\n{\"title\": \"Trip\", \"body\": \"I travel with apple.\", \"used_words\": [\"apple\"], \"unused_words\": [\"book\"]}\n```"
+        def generate_json(self, **_kwargs): return {"title": "Trip", "body": "I travel with apple.", "used_words": ["apple"], "unused_words": ["book"]}
     record = AIProvider(id=7, name="fake", capability="llm", provider_type="openai_compatible", base_url="x", model_name="x")
     monkeypatch.setattr(text_generation_service, "require_provider_capabilities", lambda *_args, **_kwargs: record)
     monkeypatch.setattr(text_generation_service, "get_provider", lambda *_args: Provider())
@@ -195,6 +330,30 @@ def test_generated_word_selection_and_invalid_json_fallback(monkeypatch):
         assert practice.title == "Trip"
         assert text_generation_service.json_words(practice.used_words_json) == ["apple"]
         assert text_generation_service.json_words(practice.unused_words_json) == ["book"]
+
+
+def test_llm_json_fence_parser_tolerates_common_invalid_wrapping():
+    assert extract_json_object("```json\n{\"title\": \"Trip\"}\n```") == {"title": "Trip"}
+
+
+def test_invalid_llm_json_does_not_issue_a_second_generation(monkeypatch):
+    engine = _engine()
+    calls = {"json": 0, "text": 0}
+    class Provider:
+        def generate_json(self, **_kwargs):
+            calls["json"] += 1
+            raise ValueError("invalid response")
+        def generate_text(self, **_kwargs):
+            calls["text"] += 1
+            return "should not be called"
+    record = AIProvider(id=7, name="fake", capability="llm", provider_type="openai_compatible", base_url="x", model_name="x")
+    monkeypatch.setattr(text_generation_service, "require_provider_capabilities", lambda *_args, **_kwargs: record)
+    monkeypatch.setattr(text_generation_service, "get_provider", lambda *_args: Provider())
+    with Session(engine) as session:
+        session.add(WordCollection(material_id=1, sentence_id=1, word_text="apple", normalized_word="apple")); session.commit()
+        with pytest.raises(ValueError, match="invalid structured"):
+            text_generation_service.create_generated_practice(session, TextGenerationRequest(word_selection="manual", word_collection_ids=[1], target_language="en", difficulty="beginner", desired_length=80))
+    assert calls == {"json": 1, "text": 0}
 
 
 def test_tts_job_creates_material_and_sentences(monkeypatch, tmp_path: Path):

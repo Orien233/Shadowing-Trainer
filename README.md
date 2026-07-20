@@ -1,50 +1,50 @@
-# Shadowing Trainer v0.3.1
+# Shadowing Trainer v0.4
 
-## v0.4: AI text and configurable model providers
+## Adapter-driven AI text, speech, and transcription
 
-The v0.4 project lives in `shadowing_v0_3_1/`. It adds an OpenAI-compatible
-provider layer while preserving the existing upload, sentence training,
-recording, scoring, word collection, and durable-job workflows.
+The v0.4 application lives in `shadowing_v0_3_1/`. It preserves the existing
+upload, material processing, sentence training, recording, scoring, word
+collection, and durable-job workflows while adding a descriptor-driven model
+provider layer.
 
-- **Audio provider contract:** TTS and ASR use OpenAI Audio API request shapes
-  (`/audio/speech`, `/audio/transcriptions`) as a common baseline, while the
-  application exposes its own `ProviderCapability`, `TTSResult`, and `ASRResult`.
-  Azure Speech and cached Local Whisper are adapters behind that contract.
-- **Provider types currently implemented:** OpenAI-compatible LLM/TTS/remote
-  ASR, Azure Speech TTS/ASR, and cached Local Whisper for local ASR.
-- **Configuration:** open **Settings** in the application, add an enabled
-  provider for LLM/TTS/ASR, then mark one provider per capability as default.
-  API keys are stored only by the backend and the list API/UI returns a masked
-  value. A blank API-key update keeps the previous key.
-- **TTS endpoint:** for an OpenAI-compatible TTS provider, enter the complete
-  synthesis endpoint (for example `https://host/v1/audio/speech`). The app
-  deliberately does not append `/audio/speech`.
-- **MiMo:** select `MiMo TTS` or `MiMo ASR` in Settings, set the full Base URL
-  to `https://api.xiaomimimo.com/v1/chat/completions`, and use
-  `mimo-v2.5-tts` or `mimo-v2.5-asr`. The adapter uses MiMo's Chat
-  Completions audio schema and decodes its Base64 audio response.
-- **ASR scene switches:** *Use Local Whisper for material transcription*
-  affects uploaded material processing. *Use Local Whisper for recording
-  evaluation* affects learner speech scoring. Turning either switch off uses
-  the default enabled remote ASR provider and returns a clear error if one has
-  not been configured.
-- **Adapter-declared capability gates:** capabilities are static adapter
-  contracts and never require a paid probe request. The Settings list and
-  connection-test result show them safely. LLM text generation requires
-  `generate_text` and `generate_json`; TTS practice requires `synthesize`.
-  Remote material transcription additionally requires `word_timestamps`, so
-  Azure Speech and MiMo ASR keep that scene on Local Whisper while they can
-  still be used for remote recording evaluation. A failed connection test only
-  reports a readable error; it does not alter these capability gates.
-- **AI Text:** choose random or manual collected words, select a preset/custom
-  topic, language, difficulty and length, then generate and edit the text.
-  You can instead paste your own text. Choose TTS speed/voice and create a
-  sentence-level TTS practice; on completion it opens in the existing training
-  page just like an uploaded material.
+- **One static adapter catalog:** Settings fetches `GET /api/providers/catalog`
+  rather than maintaining a second hard-coded provider list. Each adapter
+  declares its capabilities, endpoint shape, public configuration fields,
+  presets, documentation link, and no-cost test strategy.
+- **LLM adapters:** OpenAI Chat Completions and Responses, Azure OpenAI,
+  Anthropic Messages, Gemini Generate Content, and profiles for DeepSeek,
+  Qwen/DashScope, Ollama, vLLM, MiMo, and conservative text-only compatible
+  endpoints. Use a JSON-capable profile for AI Text generation.
+- **TTS adapters:** OpenAI Audio/compatible, Azure Speech, DashScope/Qwen,
+  MiMo, Deepgram Aura, and ElevenLabs. The OpenAI-compatible TTS endpoint is
+  always entered as a complete URL; the application never appends
+  `/audio/speech` for you.
+- **ASR adapters:** cached Local Whisper, OpenAI Whisper, OpenAI GPT
+  Transcribe, conservative generic compatible ASR, Azure Speech Fast
+  Transcription, DashScope synchronous-response ASR, MiMo, Deepgram, and
+  ElevenLabs Scribe. Batch, polling, realtime, and WebSocket ASR protocols are
+  intentionally outside this release.
+- **Safe credentials and tests:** API keys are only stored by the backend and
+  reads return a mask. A blank API-key edit keeps the existing key. Connection
+  tests report `network` or `configuration` verification and never generate
+  text, synthesize audio, or upload test speech; a failed test does not alter
+  capabilities or ASR routing.
+- **Capability gates:** AI Text needs a default LLM with `generate_text` and
+  `generate_json`; TTS practice needs `synthesize`. Remote material
+  transcription needs `transcribe` plus `word_timestamps`; remote recording
+  evaluation only needs `transcribe`. If a selected remote adapter is missing
+  a scene's required capability, that scene is forced to cached Local Whisper
+  both in the UI and in the backend router.
+- **AI Text workflow:** select random/manual collected words or a topic,
+  generate or paste text, edit it, set TTS speed/voice/accent/gender/model,
+  then queue sentence-level synthesis. The resulting Material/Sentence data
+  reuses the existing practice and recording-evaluation pages.
 
-Copy `backend/.env.example` to `backend/.env` for local runtime settings. The
-legacy `DEEPSEEK_*` values remain a translation compatibility fallback; new
-provider credentials should be entered in Settings.
+See [PROVIDERS.md](PROVIDERS.md) for the current adapter matrix, endpoint
+examples, capability notes, and provider-specific setup. Copy
+`shadowing_v0_3_1/backend/.env.example` to `backend/.env` for local runtime
+settings. The legacy `DEEPSEEK_*` values remain a translation fallback; all new
+provider credentials are configured in **Settings**.
 
 Shadowing Trainer 是一款本地优先（local-first）的英语口语跟读训练 Web 应用。  
 它支持从素材上传到句级练习、录音与评分的完整流程。

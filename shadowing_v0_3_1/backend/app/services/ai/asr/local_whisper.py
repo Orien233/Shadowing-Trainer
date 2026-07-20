@@ -1,3 +1,5 @@
+from typing import Any
+
 from app.services.ai.asr.base import ASRProvider
 from app.services.ai.audio_types import ASRResult, ASRSegment, ASRWord, AudioCapability
 from app.services.transcription_service import transcribe_audio
@@ -7,6 +9,20 @@ class LocalWhisperASRProvider(ASRProvider):
     """Thin provider wrapper retaining the cached faster-whisper model."""
 
     capabilities = frozenset({AudioCapability.TRANSCRIBE, AudioCapability.WORD_TIMESTAMPS})
+
+    def __init__(
+        self,
+        base_url: str = "",
+        api_key: str = "",
+        model_name: str = "",
+        extra_config: dict[str, Any] | None = None,
+    ) -> None:
+        # These fields are accepted for uniform adapter construction.  Local
+        # Whisper intentionally ignores remote credentials and model names.
+        self.base_url = base_url
+        self.api_key = api_key
+        self.model_name = model_name
+        self.extra_config = dict(extra_config or {})
 
     def transcribe(self, audio_path: str, *, word_timestamps: bool = False) -> ASRResult:
         if word_timestamps:

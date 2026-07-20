@@ -33,6 +33,12 @@ class ASRSceneAvailability:
 
 
 def get_or_create_scene_settings(session: Session) -> ASRSceneSetting:
+    """Return the persisted settings, creating the one settings row on writes.
+
+    Read APIs must use :func:`get_scene_settings_for_read` instead.  Keeping
+    this write explicitly named avoids a seemingly harmless GET request
+    changing a user's database.
+    """
     settings = session.get(ASRSceneSetting, 1)
     if not settings:
         settings = ASRSceneSetting(id=1)
@@ -40,6 +46,11 @@ def get_or_create_scene_settings(session: Session) -> ASRSceneSetting:
         session.commit()
         session.refresh(settings)
     return settings
+
+
+def get_scene_settings_for_read(session: Session) -> ASRSceneSetting:
+    """Return saved settings or the default values without persisting them."""
+    return session.get(ASRSceneSetting, 1) or ASRSceneSetting(id=1)
 
 
 def get_scene_availability(session: Session, scene: str) -> ASRSceneAvailability:
@@ -76,6 +87,22 @@ def enforce_scene_capabilities(session: Session, value: ASRSceneSetting | None =
     return value
 
 
+def effective_scene_flags(session: Session, value: ASRSceneSetting | None = None) -> tuple[bool, bool]:
+    """Calculate safe scene routing without mutating the settings row.
+
+    A disabled remote capability always wins over a previously persisted
+    ``False`` toggle.  This makes direct database/API bypasses safe and lets
+    a GET accurately show the forced-local state without causing a write.
+    """
+    value = value or get_scene_settings_for_read(session)
+    material = get_scene_availability(session, MATERIAL_TRANSCRIPTION)
+    recording = get_scene_availability(session, RECORDING_EVALUATION)
+    return (
+        value.material_transcription_use_local or not material.remote_available,
+        value.recording_evaluation_use_local or not recording.remote_available,
+    )
+
+
 def require_remote_scene_available(session: Session, scene: str) -> None:
     availability = get_scene_availability(session, scene)
     if not availability.remote_available:
@@ -86,12 +113,10 @@ def require_remote_scene_available(session: Session, scene: str) -> None:
 
 
 def get_asr_provider(session: Session, scene: str):
-    scene_settings = enforce_scene_capabilities(session)
+    material_local, recording_local = effective_scene_flags(session)
     local = (
-        scene_settings.material_transcription_use_local
-        if scene == MATERIAL_TRANSCRIPTION
-        else scene_settings.recording_evaluation_use_local
-        if scene == RECORDING_EVALUATION
+        material_local if scene == MATERIAL_TRANSCRIPTION
+        else recording_local if scene == RECORDING_EVALUATION
         else None
     )
     if local is None:

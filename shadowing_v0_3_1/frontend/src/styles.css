@@ -674,7 +674,16 @@ input:not([type]) {
 .word-picker { display: flex; flex-wrap: wrap; gap: 8px 14px; max-height: 180px; overflow: auto; }
 .provider-section { border-top: 1px solid #e2e8f0; padding-top: 10px; display: flex; flex-direction: column; gap: 8px; }
 .provider-row { display: flex; justify-content: space-between; gap: 12px; align-items: center; border: 1px solid #e2e8f0; border-radius: 8px; padding: 8px; }
-.provider-row div { display: flex; gap: 6px; flex-wrap: wrap; }
+.provider-row > div:last-child { display: flex; gap: 6px; flex-wrap: wrap; }
+.provider-details { display: flex; min-width: 0; flex-direction: column; gap: 4px; }
+.provider-voices { color: #475569; font-size: 13px; overflow-wrap: anywhere; }
+.catalog-summary { display: flex; flex-wrap: wrap; gap: 6px 12px; color: #475569; font-size: 13px; }
+.catalog-summary a { color: #2563eb; }
+.config-checkbox { justify-content: center; }
+.config-checkbox small, .form-grid small { color: #64748b; font-size: 12px; font-weight: 400; }
+.provider-test { margin: 0; font-size: 13px; }
+.provider-test.success { color: #15803d; }
+.provider-test.error { color: #b91c1c; }
 
 @media (max-width: 640px) {
   .word-collection-item {

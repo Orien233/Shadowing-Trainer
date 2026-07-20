@@ -3,9 +3,9 @@ from __future__ import annotations
 import base64
 from typing import Any
 
-import httpx
-
+from app.services.ai.http_transport import provider_http
 from app.services.ai.audio_types import AudioCapability, TTSResult
+from app.services.ai.audio_utils import configuration_message, normalized_voices
 from app.services.ai.tts.base import TTSProvider, TTSRequest
 
 
@@ -26,7 +26,7 @@ class MiMoTTSProvider(TTSProvider):
 
     capabilities = frozenset({AudioCapability.SYNTHESIZE})
 
-    def __init__(self, *, base_url: str, api_key: str, model_name: str, extra_config: dict[str, Any] | None = None) -> None:
+    def __init__(self, base_url: str, api_key: str, model_name: str, extra_config: dict[str, Any] | None = None) -> None:
         self.base_url, self.api_key, self.model_name = base_url.rstrip("/"), api_key, model_name
         self.extra_config = extra_config or {}
 
@@ -59,7 +59,7 @@ class MiMoTTSProvider(TTSProvider):
             "messages": messages,
             "audio": {"format": audio_format, "voice": request.voice or self.extra_config.get("default_voice", "mimo_default")},
         }
-        response = httpx.post(self.base_url, json=payload, headers=self._headers(), timeout=120)
+        response = provider_http.post(self.base_url, json=payload, headers=self._headers(), timeout=120)
         response.raise_for_status()
         data = response.json()
         try:
@@ -73,8 +73,12 @@ class MiMoTTSProvider(TTSProvider):
         return TTSResult(audio=audio, media_type=_MEDIA_TYPES.get(audio_format, "application/octet-stream"), extension=extension, provider_metadata={"adapter": "mimo_tts", "model": payload["model"], "voice": payload["audio"]["voice"]})
 
     def list_voices(self) -> list[dict[str, Any]]:
-        return [{"id": value, "name": value} for value in self.extra_config.get("voices", []) if isinstance(value, str)]
+        return normalized_voices(self.extra_config.get("voices", []))
 
     def test_connection(self) -> str:
-        self.synthesize(TTSRequest(text="Connection test."))
-        return "MiMo TTS connection succeeded."
+        return configuration_message(
+            base_url=self.base_url,
+            api_key=self.api_key,
+            model_name=self.model_name,
+            provider_name="MiMo TTS",
+        )

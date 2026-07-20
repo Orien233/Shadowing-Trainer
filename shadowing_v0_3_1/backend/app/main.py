@@ -15,6 +15,7 @@ from app.core.migrations import run_migrations
 from app.services.job_service import start_job_worker, stop_job_worker
 from app.services.media_service import ensure_directories
 from app.services.translation_service import close_translation_http_client
+from app.services.ai.http_transport import close_provider_http_client
 import app.models  # noqa: F401
 
 app = FastAPI(title=settings.app_name, version=settings.app_version, debug=settings.debug)
@@ -39,6 +40,7 @@ async def on_startup():
 async def on_shutdown():
     await stop_job_worker()
     await close_translation_http_client()
+    close_provider_http_client()
 
 
 @app.get("/health")

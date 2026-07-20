@@ -1,38 +1,77 @@
-import json
-import re
 from typing import Any
 
-import httpx
-
+from app.services.ai.http_transport import provider_http
 from app.services.ai.llm.base import LLMProvider
-
-
-def extract_json_object(raw_text: str) -> dict[str, Any]:
-    content = raw_text.strip()
-    content = re.sub(r"^```(?:json)?\\s*|\\s*```$", "", content, flags=re.IGNORECASE).strip()
-    try:
-        value = json.loads(content)
-    except json.JSONDecodeError:
-        start, end = content.find("{"), content.rfind("}")
-        if start < 0 or end <= start:
-            raise ValueError("Provider returned invalid JSON.")
-        value = json.loads(content[start : end + 1])
-    if not isinstance(value, dict):
-        raise ValueError("Provider JSON response must be an object.")
-    return value
+from app.services.ai.llm._shared import (
+    extract_json_object,
+    json_system_prompt,
+    require_api_key,
+    require_nonempty_text,
+)
 
 
 class OpenAICompatibleLLMProvider(LLMProvider):
-    def __init__(self, *, base_url: str, api_key: str, model_name: str, timeout: float = 60) -> None:
-        self.base_url, self.api_key, self.model_name, self.timeout = base_url.rstrip("/"), api_key, model_name, timeout
+    """OpenAI Chat Completions request-shape adapter.
 
-    def _complete(self, system_prompt: str, user_prompt: str, temperature: float, json_mode: bool) -> str:
-        if not self.api_key:
-            raise ValueError("Provider API key is not configured.")
+    This class keeps its historical public name.  The registry exposes the
+    canonical protocol key as ``openai_chat_compatible`` and maps the legacy
+    ``openai_compatible`` aliases here.
+    """
+
+    def __init__(
+        self,
+        *,
+        base_url: str,
+        api_key: str,
+        model_name: str,
+        timeout: float = 60,
+        extra_config: dict[str, Any] | None = None,
+    ) -> None:
+        self.base_url, self.api_key, self.model_name, self.timeout = base_url.rstrip("/"), api_key, model_name, timeout
+        self.extra_config = extra_config or {}
+
+    @property
+    def _auth_scheme(self) -> str:
+        return str(self.extra_config.get("auth_scheme", "bearer")).strip().lower()
+
+    def _headers(self) -> dict[str, str]:
+        if self._auth_scheme == "none":
+            return {"Content-Type": "application/json"}
+        if self._auth_scheme in {"api-key", "api_key"}:
+            return {"api-key": self.api_key, "Content-Type": "application/json"}
+        return {"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"}
+
+    def _require_credential(self) -> None:
+        if self._auth_scheme != "none":
+            require_api_key(self.api_key)
+
+    def _complete(
+        self,
+        system_prompt: str,
+        user_prompt: str,
+        temperature: float,
+        json_mode: bool,
+        json_schema: dict[str, Any] | None = None,
+    ) -> str:
+        self._require_credential()
+        if json_mode and str(self.extra_config.get("json_mode", "response_format")).lower() == "prompt_only":
+            system_prompt = json_system_prompt(system_prompt, json_schema)
         payload: dict[str, Any] = {"model": self.model_name, "messages": [{"role": "system", "content": system_prompt}, {"role": "user", "content": user_prompt}], "temperature": temperature}
         if json_mode:
-            payload["response_format"] = {"type": "json_object"}
-        response = httpx.post(f"{self.base_url}/chat/completions", json=payload, headers={"Authorization": f"Bearer {self.api_key}"}, timeout=self.timeout)
+            mode = str(self.extra_config.get("json_mode", "response_format")).lower()
+            if mode != "prompt_only":
+                if mode == "json_schema" and json_schema:
+                    payload["response_format"] = {
+                        "type": "json_schema",
+                        "json_schema": {
+                            "name": str(self.extra_config.get("json_schema_name", "response")),
+                            "schema": json_schema,
+                            "strict": True,
+                        },
+                    }
+                else:
+                    payload["response_format"] = {"type": "json_object"}
+        response = provider_http.post(f"{self.base_url}/chat/completions", json=payload, headers=self._headers(), timeout=self.timeout)
         response.raise_for_status()
         data = response.json()
         try:
@@ -41,16 +80,30 @@ class OpenAICompatibleLLMProvider(LLMProvider):
             raise ValueError("Provider response did not contain a chat completion.") from exc
         if isinstance(content, list):
             content = "".join(str(item.get("text", "")) for item in content if isinstance(item, dict))
-        if not isinstance(content, str) or not content.strip():
+        if not isinstance(content, str):
             raise ValueError("Provider returned an empty response.")
-        return content.strip()
+        return require_nonempty_text(content)
 
     def generate_text(self, *, system_prompt: str, user_prompt: str, temperature: float = 0.4) -> str:
         return self._complete(system_prompt, user_prompt, temperature, False)
 
-    def generate_json(self, *, system_prompt: str, user_prompt: str, temperature: float = 0.3) -> dict[str, Any]:
-        return extract_json_object(self._complete(system_prompt, user_prompt, temperature, True))
+    def generate_json(
+        self,
+        *,
+        system_prompt: str,
+        user_prompt: str,
+        temperature: float = 0.3,
+        json_schema: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        return extract_json_object(self._complete(system_prompt, user_prompt, temperature, True, json_schema))
 
     def test_connection(self) -> str:
-        self.generate_text(system_prompt="Reply with OK.", user_prompt="Connection test.", temperature=0)
-        return "LLM connection succeeded."
+        self._require_credential()
+        # Listing models is metadata-only and avoids spending generation tokens.
+        response = provider_http.get(
+            f"{self.base_url}/models",
+            headers=self._headers(),
+            timeout=min(self.timeout, 20),
+        )
+        response.raise_for_status()
+        return "LLM connection succeeded (metadata endpoint)."

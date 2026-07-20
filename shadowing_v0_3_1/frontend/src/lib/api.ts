@@ -1,6 +1,7 @@
 import type {
   Job, Material, MaterialLatestEvaluationsResponse, RecordingUploadAccepted,
-  AIProvider, ASRSceneSettings, Sentence, SentenceLatestEvaluation, TextPractice, WordCollection,
+  AIProvider, ASRSceneSettings, ASRSceneSettingsUpdate, ProviderCatalogEntry, ProviderTestResponse,
+  ProviderVoice, Sentence, SentenceLatestEvaluation, TextPractice, WordCollection,
 } from "../types";
 
 const API_BASE = (import.meta.env.VITE_API_BASE || "http://localhost:8000").replace(/\/$/, "");
@@ -82,12 +83,15 @@ export const shutdownBackend = () => request<void>("/api/system/shutdown", { met
 
 export type ProviderInput = { name: string; capability: "llm" | "tts" | "asr"; provider_type: string; base_url?: string | null; api_key?: string | null; model_name?: string | null; is_enabled?: boolean; is_default?: boolean; extra_config?: Record<string, unknown>; };
 export const listProviders = () => request<AIProvider[]>("/api/providers");
+export const listProviderCatalog = () => request<ProviderCatalogEntry[]>("/api/providers/catalog");
 export const createProvider = (payload: ProviderInput) => request<AIProvider>("/api/providers", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
 export const updateProvider = (id: number, payload: Partial<ProviderInput>) => request<AIProvider>(`/api/providers/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
 export const deleteProvider = (id: number) => request<void>(`/api/providers/${id}`, { method: "DELETE" });
-export const testProvider = (id: number) => request<{ ok: boolean; message: string; capabilities: string[] }>(`/api/providers/${id}/test`, { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" }, 130_000);
+export const testProvider = (id: number, payload: Partial<ProviderInput> = {}) => request<ProviderTestResponse>(`/api/providers/${id}/test`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) }, 130_000);
+export const testProviderDraft = (payload: ProviderInput) => request<ProviderTestResponse>("/api/providers/test", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) }, 130_000);
+export const listProviderVoices = (id: number) => request<ProviderVoice[]>(`/api/providers/${id}/voices`, {}, 60_000);
 export const getASRSceneSettings = () => request<ASRSceneSettings>("/api/providers/asr-scenes/settings");
-export const updateASRSceneSettings = (payload: Partial<ASRSceneSettings>) => request<ASRSceneSettings>("/api/providers/asr-scenes/settings", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+export const updateASRSceneSettings = (payload: ASRSceneSettingsUpdate) => request<ASRSceneSettings>("/api/providers/asr-scenes/settings", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
 export type TextGenerationInput = { word_selection: "random" | "manual" | "none"; random_word_count: number; word_collection_ids: number[]; preset_topic?: string; custom_topic?: string; target_language: string; difficulty: string; desired_length: number; };
 export const generateTextPractice = (payload: TextGenerationInput) => request<TextPractice>("/api/text-practices/generate", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) }, 90_000);
 export const importTextPractice = (payload: { title: string; body: string; target_language?: string; difficulty?: string; topic?: string }) => request<TextPractice>("/api/text-practices/import", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });

@@ -124,6 +124,52 @@ export interface WordCollection {
 }
 
 export type ProviderCapability = "llm" | "tts" | "asr";
+
+export type ProviderConfigFieldType = "string" | "number" | "boolean" | "select";
+
+export interface ProviderConfigField {
+  key: string;
+  label: string;
+  field_type: ProviderConfigFieldType;
+  required: boolean;
+  options: string[];
+  default: unknown;
+  placeholder: string | null;
+  help_text: string | null;
+}
+
+export interface ProviderVoice {
+  id: string;
+  name: string;
+  languages?: string[];
+  locale?: string;
+  gender?: string | null;
+  accent?: string | null;
+  styles?: string[];
+  preview_url?: string | null;
+  provider_metadata?: Record<string, unknown>;
+}
+
+export interface ProviderCatalogEntry {
+  key: string;
+  label: string;
+  kind: ProviderCapability;
+  capabilities: string[];
+  endpoint_mode: "base_url" | "full_endpoint" | "none";
+  endpoint_hint: string | null;
+  required_fields: string[];
+  config_fields: ProviderConfigField[];
+  voice_presets: ProviderVoice[];
+  docs_url: string | null;
+}
+
+export interface ProviderTestResponse {
+  ok: boolean;
+  message: string;
+  capabilities: string[];
+  verification_level: string;
+}
+
 export interface AIProvider {
   id: number; name: string; capability: ProviderCapability; provider_type: string;
   base_url: string | null; api_key_masked: string | null; model_name: string | null;
@@ -139,6 +185,11 @@ export interface ASRSceneSettings {
   material_transcription_missing_capabilities: string[];
   recording_evaluation_remote_available: boolean;
   recording_evaluation_missing_capabilities: string[];
+}
+
+export interface ASRSceneSettingsUpdate {
+  material_transcription_use_local?: boolean;
+  recording_evaluation_use_local?: boolean;
 }
 export interface TextPractice {
   id: number; title: string; body: string; source_type: string; target_language: string;

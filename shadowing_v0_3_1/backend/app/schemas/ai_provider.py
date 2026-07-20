@@ -4,6 +4,52 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 Capability = Literal["llm", "tts", "asr"]
+VerificationLevel = Literal["network", "configuration"]
+
+
+class ProviderConfigFieldRead(BaseModel):
+    """A safe, adapter-declared configuration field shown by the settings UI.
+
+    Provider descriptors own this schema.  It deliberately describes only
+    non-secret fields; credentials continue to live in ``api_key`` and are
+    never included in a catalog or read response.
+    """
+
+    key: str
+    label: str
+    field_type: Literal["string", "number", "boolean", "select"] = "string"
+    required: bool = False
+    options: list[str] = Field(default_factory=list)
+    default: Any | None = None
+    placeholder: str | None = None
+    help_text: str | None = None
+
+
+class ProviderVoiceRead(BaseModel):
+    id: str
+    name: str
+    languages: list[str] = Field(default_factory=list)
+    gender: str | None = None
+    accent: str | None = None
+    styles: list[str] = Field(default_factory=list)
+    preview_url: str | None = None
+    provider_metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class ProviderCatalogItemRead(BaseModel):
+    key: str
+    label: str
+    kind: Capability
+    capabilities: list[str] = Field(default_factory=list)
+    endpoint_mode: Literal["base_url", "full_endpoint", "none"] = "base_url"
+    endpoint_hint: str | None = None
+    required_fields: list[str] = Field(default_factory=list)
+    config_fields: list[ProviderConfigFieldRead] = Field(default_factory=list)
+    voice_presets: list[ProviderVoiceRead] = Field(default_factory=list)
+    docs_url: str | None = None
+    # Catalog descriptors can include richer no-cost test metadata.  The
+    # actual test response exposes the concise ``verification_level`` field.
+    test_strategy: dict[str, Any] | VerificationLevel = "configuration"
 
 
 class AIProviderCreate(BaseModel):
@@ -49,15 +95,22 @@ class AIProviderRead(BaseModel):
 
 class ProviderTestRequest(BaseModel):
     # Optional unsaved data lets the UI test credentials before persisting them.
+    # ``capability`` and ``provider_type`` make POST /providers/test usable for
+    # a draft; when omitted, POST /{id}/test uses the saved record.
+    name: str | None = None
+    capability: Capability | None = None
+    provider_type: str | None = None
     base_url: str | None = None
     api_key: str | None = None
     model_name: str | None = None
+    extra_config: dict[str, Any] | None = None
 
 
 class ProviderTestResponse(BaseModel):
     ok: bool
     message: str
     capabilities: list[str] = Field(default_factory=list)
+    verification_level: VerificationLevel = "configuration"
 
 
 class ASRSceneSettingRead(BaseModel):

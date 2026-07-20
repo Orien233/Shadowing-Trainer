@@ -9,13 +9,25 @@ from sqlmodel import Session, select
 from app.models.text_practice import TextPractice, TextPracticeWord
 from app.models.word_collection import WordCollection
 from app.schemas.text_practice import TextGenerationRequest, TextPracticeCreate
-from app.services.ai.llm.openai_compatible import extract_json_object
 from app.services.ai.audio_types import ProviderCapability
 from app.services.provider_factory import get_provider, require_provider_capabilities
 
 PRESET_TOPICS = {"daily_life", "travel", "workplace", "campus", "news", "story"}
 
 SYSTEM_PROMPT = """You create concise, natural shadowing practice texts. Return only a JSON object with title, body, used_words, unused_words, and explanation. The body must be coherent and suited to spoken practice; selected words should appear naturally, never as a word list."""
+
+PRACTICE_RESULT_SCHEMA = {
+    "type": "object",
+    "additionalProperties": False,
+    "required": ["title", "body", "used_words", "unused_words"],
+    "properties": {
+        "title": {"type": "string"},
+        "body": {"type": "string"},
+        "used_words": {"type": "array", "items": {"type": "string"}},
+        "unused_words": {"type": "array", "items": {"type": "string"}},
+        "explanation": {"type": "string"},
+    },
+}
 
 
 def _select_collections(session: Session, request: TextGenerationRequest) -> list[WordCollection]:
@@ -75,12 +87,22 @@ def create_generated_practice(session: Session, request: TextGenerationRequest) 
     provider = get_provider(session, "llm", provider_record.id)
     prompt = _build_prompt(request, requested_words, topic)
     try:
+        payload = provider.generate_json(
+            system_prompt=SYSTEM_PROMPT,
+            user_prompt=prompt,
+            json_schema=PRACTICE_RESULT_SCHEMA,
+        )
+    except TypeError as exc:
+        # A third-party legacy implementation can reject the new optional
+        # parameter before issuing a request.  Retrying without it preserves
+        # compatibility without generating a second paid response.
+        if "json_schema" not in str(exc):
+            raise
         payload = provider.generate_json(system_prompt=SYSTEM_PROMPT, user_prompt=prompt)
-    except ValueError:
-        # Compatible endpoints occasionally ignore JSON mode. Preserve a usable result
-        # if they return a JSON object wrapped in prose.
-        raw = provider.generate_text(system_prompt=SYSTEM_PROMPT, user_prompt=prompt, temperature=0.3)
-        payload = extract_json_object(raw)
+    except ValueError as exc:
+        raise ValueError(
+            "LLM returned invalid structured practice JSON. Please retry after checking the provider's JSON capability."
+        ) from exc
     title = str(payload.get("title", "Generated practice")).strip() or "Generated practice"
     body = str(payload.get("body", "")).strip()
     if not body:
