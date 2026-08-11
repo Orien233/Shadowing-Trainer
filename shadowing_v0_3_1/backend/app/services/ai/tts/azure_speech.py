@@ -14,6 +14,7 @@ from app.services.ai.audio_utils import (
     extension_from_format,
     media_type_for_extension,
     normalized_voices,
+    raw_pcm_from_azure_output_format,
     require_configured,
     response_media_type,
 )
@@ -88,6 +89,7 @@ class AzureSpeechTTSProvider(TTSProvider):
             f"{escape(request.text)}</prosody></voice></speak>"
         )
         output_format = str(self.extra_config.get("output_format", "audio-24khz-48kbitrate-mono-mp3"))
+        raw_pcm = raw_pcm_from_azure_output_format(output_format, provider_name="Azure Speech TTS")
         response = provider_http.post(
             _synthesis_endpoint(self.base_url, self.extra_config),
             content=ssml.encode("utf-8"),
@@ -103,6 +105,7 @@ class AzureSpeechTTSProvider(TTSProvider):
             audio=audio,
             media_type=response_media_type(response, media_type_for_extension(extension)),
             extension=extension,
+            raw_pcm=raw_pcm,
             provider_metadata={"adapter": "azure_speech_tts", "voice": voice, "output_format": output_format},
         )
 

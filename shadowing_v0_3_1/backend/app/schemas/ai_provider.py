@@ -41,6 +41,8 @@ class ProviderCatalogItemRead(BaseModel):
     label: str
     kind: Capability
     capabilities: list[str] = Field(default_factory=list)
+    available_capabilities: list[str] = Field(default_factory=list)
+    available_formats: list[str] = Field(default_factory=list)
     endpoint_mode: Literal["base_url", "full_endpoint", "none"] = "base_url"
     endpoint_hint: str | None = None
     required_fields: list[str] = Field(default_factory=list)
@@ -61,6 +63,8 @@ class AIProviderCreate(BaseModel):
     model_name: str | None = None
     is_enabled: bool = True
     is_default: bool = False
+    enabled_capabilities: list[str] = Field(default_factory=list)
+    enabled_formats: list[str] = Field(default_factory=list)
     extra_config: dict[str, Any] = Field(default_factory=dict)
 
 
@@ -72,6 +76,8 @@ class AIProviderUpdate(BaseModel):
     model_name: str | None = None
     is_enabled: bool | None = None
     is_default: bool | None = None
+    enabled_capabilities: list[str] | None = None
+    enabled_formats: list[str] | None = None
     extra_config: dict[str, Any] | None = None
 
 
@@ -89,6 +95,11 @@ class AIProviderRead(BaseModel):
     is_default: bool
     extra_config: dict[str, Any]
     capabilities: list[str] = Field(default_factory=list)
+    available_capabilities: list[str] = Field(default_factory=list)
+    enabled_capabilities: list[str] = Field(default_factory=list)
+    available_formats: list[str] = Field(default_factory=list)
+    enabled_formats: list[str] = Field(default_factory=list)
+    is_deprecated: bool = False
     created_at: datetime
     updated_at: datetime
 
@@ -104,12 +115,18 @@ class ProviderTestRequest(BaseModel):
     api_key: str | None = None
     model_name: str | None = None
     extra_config: dict[str, Any] | None = None
+    enabled_capabilities: list[str] | None = None
+    enabled_formats: list[str] | None = None
 
 
 class ProviderTestResponse(BaseModel):
     ok: bool
     message: str
     capabilities: list[str] = Field(default_factory=list)
+    available_capabilities: list[str] = Field(default_factory=list)
+    enabled_capabilities: list[str] = Field(default_factory=list)
+    available_formats: list[str] = Field(default_factory=list)
+    enabled_formats: list[str] = Field(default_factory=list)
     verification_level: VerificationLevel = "configuration"
 
 

@@ -12,7 +12,8 @@ from sqlmodel import Session
 
 from app.core.config import settings
 from app.core.database import engine
-from app.services.provider_factory import get_llm_provider_with_legacy_fallback
+from app.services.ai.audio_types import ProviderCapability
+from app.services.provider_factory import get_llm_provider_with_legacy_fallback, require_provider_capabilities
 
 
 logger = logging.getLogger(__name__)
@@ -88,6 +89,7 @@ async def translate_sentence(text: str, *, provider: Any | None = None) -> str:
                 active_provider = provider
                 if active_provider is None:
                     with Session(engine) as session:
+                        require_provider_capabilities(session, "llm", {ProviderCapability.GENERATE_TEXT, ProviderCapability.GENERATE_JSON})
                         active_provider = get_llm_provider_with_legacy_fallback(session)
                 parsed = await asyncio.to_thread(
                     active_provider.generate_json,
@@ -144,6 +146,7 @@ async def translate_sentences(texts: Iterable[str]) -> List[str]:
         settings.translation_concurrency,
     )
     with Session(engine) as session:
+        require_provider_capabilities(session, "llm", {ProviderCapability.GENERATE_TEXT, ProviderCapability.GENERATE_JSON})
         provider = get_llm_provider_with_legacy_fallback(session)
 
     results: list[str] = [""] * sentence_count

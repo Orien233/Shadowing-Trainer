@@ -23,6 +23,27 @@ class UnsupportedAudioCapabilityError(ValueError):
 
 
 @dataclass(frozen=True)
+class RawPCMFormat:
+    """The decoding contract for a headerless PCM response.
+
+    Raw PCM has no container metadata.  Providers must attach this structure
+    before a worker is allowed to turn it into a playable sentence clip.
+    """
+
+    sample_rate: int
+    channels: int = 1
+    sample_format: str = "s16le"
+
+    def __post_init__(self) -> None:
+        if self.sample_rate <= 0:
+            raise ValueError("Raw PCM sample_rate must be positive.")
+        if self.channels <= 0:
+            raise ValueError("Raw PCM channels must be positive.")
+        if self.sample_format not in {"s16le", "s24le", "s32le", "f32le"}:
+            raise ValueError("Unsupported raw PCM sample format.")
+
+
+@dataclass(frozen=True)
 class ASRWord:
     text: str
     start: float | None = None
@@ -56,4 +77,5 @@ class TTSResult:
     audio: bytes
     media_type: str = "audio/mpeg"
     extension: str = "mp3"
+    raw_pcm: RawPCMFormat | None = None
     provider_metadata: dict[str, Any] = field(default_factory=dict)

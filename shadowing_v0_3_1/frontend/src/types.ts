@@ -155,6 +155,8 @@ export interface ProviderCatalogEntry {
   label: string;
   kind: ProviderCapability;
   capabilities: string[];
+  available_capabilities?: string[];
+  available_formats?: string[];
   endpoint_mode: "base_url" | "full_endpoint" | "none";
   endpoint_hint: string | null;
   required_fields: string[];
@@ -167,6 +169,10 @@ export interface ProviderTestResponse {
   ok: boolean;
   message: string;
   capabilities: string[];
+  available_capabilities?: string[];
+  enabled_capabilities?: string[];
+  available_formats?: string[];
+  enabled_formats?: string[];
   verification_level: string;
 }
 
@@ -175,6 +181,11 @@ export interface AIProvider {
   base_url: string | null; api_key_masked: string | null; model_name: string | null;
   is_enabled: boolean; is_default: boolean; extra_config: Record<string, unknown>;
   capabilities: string[];
+  available_capabilities?: string[];
+  enabled_capabilities?: string[];
+  available_formats?: string[];
+  enabled_formats?: string[];
+  is_deprecated?: boolean;
   created_at: string; updated_at: string;
 }
 export interface ASRSceneSettings {

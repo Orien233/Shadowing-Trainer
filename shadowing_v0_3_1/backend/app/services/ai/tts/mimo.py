@@ -5,7 +5,12 @@ from typing import Any
 
 from app.services.ai.http_transport import provider_http
 from app.services.ai.audio_types import AudioCapability, TTSResult
-from app.services.ai.audio_utils import configuration_message, normalized_voices
+from app.services.ai.audio_utils import (
+    configuration_message,
+    extension_from_format,
+    normalized_voices,
+    raw_pcm_from_config,
+)
 from app.services.ai.tts.base import TTSProvider, TTSRequest
 
 
@@ -50,6 +55,11 @@ class MiMoTTSProvider(TTSProvider):
         if not self.api_key:
             raise ValueError("Provider API key is not configured.")
         audio_format = str(self.extra_config.get("audio_format", "wav")).lower()
+        raw_pcm = (
+            raw_pcm_from_config(self.extra_config, provider_name="MiMo TTS")
+            if audio_format == "pcm16"
+            else None
+        )
         messages: list[dict[str, str]] = []
         if instruction := self._instruction(request):
             messages.append({"role": "user", "content": instruction})
@@ -69,8 +79,8 @@ class MiMoTTSProvider(TTSProvider):
             raise ValueError("MiMo TTS response did not contain valid Base64 audio data.") from exc
         if not audio:
             raise ValueError("MiMo TTS returned empty audio data.")
-        extension = "pcm" if audio_format == "pcm16" else audio_format
-        return TTSResult(audio=audio, media_type=_MEDIA_TYPES.get(audio_format, "application/octet-stream"), extension=extension, provider_metadata={"adapter": "mimo_tts", "model": payload["model"], "voice": payload["audio"]["voice"]})
+        extension = extension_from_format(audio_format)
+        return TTSResult(audio=audio, media_type=_MEDIA_TYPES.get(audio_format, "application/octet-stream"), extension=extension, raw_pcm=raw_pcm, provider_metadata={"adapter": "mimo_tts", "model": payload["model"], "voice": payload["audio"]["voice"]})
 
     def list_voices(self) -> list[dict[str, Any]]:
         return normalized_voices(self.extra_config.get("voices", []))

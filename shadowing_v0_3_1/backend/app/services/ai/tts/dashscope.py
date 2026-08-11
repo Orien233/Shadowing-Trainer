@@ -14,6 +14,7 @@ from app.services.ai.audio_utils import (
     extension_from_format,
     media_type_for_extension,
     normalized_voices,
+    raw_pcm_from_config,
     require_configured,
     response_media_type,
 )
@@ -77,6 +78,11 @@ class DashScopeTTSProvider(TTSProvider):
             provider_name="DashScope TTS",
         )
         audio_format = str(self.extra_config.get("audio_format", self.extra_config.get("format", "mp3")))
+        raw_pcm = (
+            raw_pcm_from_config(self.extra_config, provider_name="DashScope TTS")
+            if extension_from_format(audio_format) == "pcm"
+            else None
+        )
         response = provider_http.post(
             _generation_endpoint(self.base_url, self.extra_config),
             json=self._payload(request, audio_format),
@@ -92,6 +98,7 @@ class DashScopeTTSProvider(TTSProvider):
             audio=audio,
             media_type=content_type or media_type_for_extension(extension),
             extension=extension,
+            raw_pcm=raw_pcm,
             provider_metadata={"adapter": "dashscope_tts", "model": request.model or self.model_name},
         )
 

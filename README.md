@@ -11,13 +11,16 @@ provider layer.
   rather than maintaining a second hard-coded provider list. Each adapter
   declares its capabilities, endpoint shape, public configuration fields,
   presets, documentation link, and no-cost test strategy.
-- **LLM adapters:** OpenAI Chat Completions and Responses, Azure OpenAI,
-  Anthropic Messages, Gemini Generate Content, and profiles for DeepSeek,
-  Qwen/DashScope, Ollama, vLLM, MiMo, and conservative text-only compatible
-  endpoints. Use a JSON-capable profile for AI Text generation.
-- **TTS adapters:** OpenAI Audio/compatible, Azure Speech, DashScope/Qwen,
-  MiMo, Deepgram Aura, and ElevenLabs. The OpenAI-compatible TTS endpoint is
-  always entered as a complete URL; the application never appends
+- **Supported remote adapters:** OpenAI Chat Completions for LLM, OpenAI Audio
+  and MiMo for TTS, plus OpenAI Audio Transcription and MiMo for ASR. Other
+  historical adapter source files and saved records are retained for future
+  migration, but are not selectable or runnable.
+- **User-declared boundaries:** the catalog describes protocol *maximums*;
+  each saved provider explicitly selects the capabilities and formats it can
+  actually use. The backend enforces those selections. JSON generation needs
+  a selected JSON method; TTS synthesis needs at least one output format.
+  Training automatically prefers `wav → mp3 → flac → opus → aac → pcm` and
+  normalizes sentence audio to WAV and full-material audio to MP3.
   `/audio/speech` for you.
 - **ASR adapters:** cached Local Whisper, OpenAI Whisper, OpenAI GPT
   Transcribe, conservative generic compatible ASR, Azure Speech Fast
@@ -39,6 +42,10 @@ provider layer.
   generate or paste text, edit it, set TTS speed/voice/accent/gender/model,
   then queue sentence-level synthesis. The resulting Material/Sentence data
   reuses the existing practice and recording-evaluation pages.
+- **TTS audio safety:** all provider responses are normalized to 24 kHz mono
+  WAV sentence clips before merging. Raw PCM needs explicit sample rate,
+  channels, and sample format; incomplete raw-PCM settings are rejected before
+  an external synthesis request is sent.
 
 See [PROVIDERS.md](PROVIDERS.md) for the current adapter matrix, endpoint
 examples, capability notes, and provider-specific setup. Copy

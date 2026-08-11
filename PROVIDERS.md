@@ -51,6 +51,19 @@ accent/locale, gender preference, and an optional model override, then select
 `tts_synthesis` job, merged, and saved as an ordinary Material with Sentence
 records, so no ASR is used to reconstruct known text.
 
+### Sentence-audio normalization
+
+Every TTS response is first normalized to a 24 kHz mono WAV sentence clip
+before the full MP3 is merged. This makes mixed provider container formats
+safe for the trainer and keeps the saved sentence clips directly playable.
+
+For headerless PCM, the adapter must provide a decoding contract: sample rate,
+channel count, and sample format. Native OpenAI PCM defaults to 24 kHz mono
+`s16le`; for compatible endpoints, DashScope, MiMo, or Deepgram raw PCM,
+enter the matching `Raw PCM` settings shown in **Settings**. The backend
+rejects incomplete raw-PCM settings before requesting synthesis, so an invalid
+configuration does not produce a billable partial job.
+
 ## ASR adapters and scene routing
 
 | Adapter | `transcribe` | `word_timestamps` | Material remote mode |
@@ -95,3 +108,12 @@ Tests are intentionally non-billable:
 The response always includes the adapter's static capabilities. Errors remove
 API keys, authorization headers, and sensitive URL query values before they
 reach the UI.
+# Current support boundary
+
+Only these remote adapters are registered: OpenAI Chat Completions (LLM),
+OpenAI Audio TTS, MiMo TTS, OpenAI Audio Transcription, and MiMo ASR. Provider
+capabilities and formats are selected by the user in Settings and are a strict
+backend execution boundary, rather than an inferred vendor promise. OpenAI ASR
+may opt into word timestamps; MiMo ASR may only opt into ordinary transcription.
+When word timestamps are absent, material transcription is forced to Local
+Whisper, while recording evaluation may still use a remote transcribe provider.

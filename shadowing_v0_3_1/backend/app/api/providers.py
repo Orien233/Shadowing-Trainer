@@ -37,8 +37,10 @@ from app.services.provider_factory import (
     ProviderConfigurationError,
     create_provider,
     get_declared_capabilities,
+    get_enabled_capabilities,
     get_provider_descriptor,
     parse_extra_config,
+    parse_string_list,
     public_extra_config,
     validate_provider_configuration,
 )
@@ -81,8 +83,13 @@ def _read(provider: AIProvider) -> AIProviderRead:
         model_name=provider.model_name,
         is_enabled=provider.is_enabled,
         is_default=provider.is_default,
-        extra_config=extra,
-        capabilities=sorted(item.value for item in get_declared_capabilities(provider)),
+    extra_config=extra,
+        capabilities=sorted(item.value for item in get_enabled_capabilities(provider)),
+        available_capabilities=sorted(item.value for item in get_declared_capabilities(provider)),
+        enabled_capabilities=sorted(parse_string_list(provider.enabled_capabilities)),
+        available_formats=list(descriptor.format_options) if descriptor else [],
+        enabled_formats=sorted(parse_string_list(provider.enabled_formats)),
+        is_deprecated=descriptor is None,
         created_at=provider.created_at,
         updated_at=provider.updated_at,
     )
@@ -138,6 +145,8 @@ def _make_provider(
     is_enabled: bool,
     is_default: bool,
     extra_config: Mapping[str, Any] | None,
+    enabled_capabilities: list[str] | set[str] | None = None,
+    enabled_formats: list[str] | set[str] | None = None,
     source_id: int | None = None,
     created_at: datetime | None = None,
     updated_at: datetime | None = None,
@@ -150,9 +159,13 @@ def _make_provider(
             api_key=api_key,
             model_name=model_name,
             extra_config=extra_config,
+            enabled_capabilities={str(item).lower() for item in (enabled_capabilities or [])},
+            enabled_formats={str(item).lower() for item in (enabled_formats or [])},
         )
     except ProviderConfigurationError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
+    if is_enabled and not enabled_capabilities:
+        raise HTTPException(status_code=422, detail="An enabled provider must declare at least one capability.")
     if is_default and not is_enabled:
         raise HTTPException(status_code=422, detail="A default provider must be enabled.")
     return AIProvider(
@@ -165,6 +178,8 @@ def _make_provider(
         model_name=_trim(model_name),
         is_enabled=is_enabled,
         is_default=is_default,
+        enabled_capabilities=json.dumps(sorted({str(item).lower() for item in (enabled_capabilities or [])})),
+        enabled_formats=json.dumps(sorted({str(item).lower() for item in (enabled_formats or [])})),
         extra_config=json.dumps(cleaned_extra, ensure_ascii=False),
         created_at=created_at or datetime.now(UTC),
         updated_at=updated_at or datetime.now(UTC),
@@ -198,6 +213,8 @@ def _candidate_for_update(provider: AIProvider, payload: AIProviderUpdate) -> AI
         is_enabled=changes.get("is_enabled", provider.is_enabled),
         is_default=changes.get("is_default", provider.is_default),
         extra_config=extra,
+        enabled_capabilities=changes.get("enabled_capabilities", parse_string_list(provider.enabled_capabilities)),
+        enabled_formats=changes.get("enabled_formats", parse_string_list(provider.enabled_formats)),
         source_id=provider.id,
         created_at=provider.created_at,
     )
@@ -213,7 +230,7 @@ def _verification_level(descriptor: AdapterDescriptor) -> str:
 
 def _test_provider(provider: AIProvider) -> ProviderTestResponse:
     descriptor = get_provider_descriptor(provider.capability, provider.provider_type)
-    capabilities = sorted(item.value for item in descriptor.capabilities)
+    capabilities = sorted(item.value for item in get_enabled_capabilities(provider))
     verification_level = _verification_level(descriptor)
     try:
         message = create_provider(provider).test_connection()
@@ -221,6 +238,10 @@ def _test_provider(provider: AIProvider) -> ProviderTestResponse:
             ok=True,
             message=message,
             capabilities=capabilities,
+            available_capabilities=sorted(item.value for item in descriptor.capabilities),
+            enabled_capabilities=capabilities,
+            available_formats=list(descriptor.format_options),
+            enabled_formats=sorted(parse_string_list(provider.enabled_formats)),
             verification_level=verification_level,
         )
     except Exception as exc:  # Expected connection/configuration failures are data, not a 500.
@@ -228,6 +249,10 @@ def _test_provider(provider: AIProvider) -> ProviderTestResponse:
             ok=False,
             message=f"Connection test failed: {type(exc).__name__}: {redact_provider_error(exc, provider.api_key)}",
             capabilities=capabilities,
+            available_capabilities=sorted(item.value for item in descriptor.capabilities),
+            enabled_capabilities=capabilities,
+            available_formats=list(descriptor.format_options),
+            enabled_formats=sorted(parse_string_list(provider.enabled_formats)),
             verification_level=verification_level,
         )
 
@@ -278,6 +303,8 @@ def test_provider_draft(payload: ProviderTestRequest):
         is_enabled=True,
         is_default=False,
         extra_config=payload.extra_config,
+        enabled_capabilities=payload.enabled_capabilities,
+        enabled_formats=payload.enabled_formats,
     )
     return _test_provider(provider)
 
@@ -294,6 +321,8 @@ def create_ai_provider(payload: AIProviderCreate, session: Session = Depends(get
         is_enabled=payload.is_enabled,
         is_default=payload.is_default,
         extra_config=payload.extra_config,
+        enabled_capabilities=payload.enabled_capabilities,
+        enabled_formats=payload.enabled_formats,
     )
     if provider.is_default:
         _clear_other_defaults(session, provider.capability)
@@ -309,13 +338,15 @@ def update_ai_provider(provider_id: int, payload: AIProviderUpdate, session: Ses
     provider = session.get(AIProvider, provider_id)
     if not provider:
         raise HTTPException(status_code=404, detail="Provider not found.")
+    if _descriptor_or_none(provider) is None:
+        raise HTTPException(status_code=409, detail="Deprecated provider records can only be viewed or deleted.")
     candidate = _candidate_for_update(provider, payload)
     # Disabling a default must not leave an invisible disabled default record.
     if not candidate.is_enabled:
         candidate.is_default = False
     if candidate.is_default:
         _clear_other_defaults(session, candidate.capability, provider.id)
-    for field in ("name", "provider_type", "base_url", "api_key", "model_name", "is_enabled", "is_default", "extra_config"):
+    for field in ("name", "provider_type", "base_url", "api_key", "model_name", "is_enabled", "is_default", "extra_config", "enabled_capabilities", "enabled_formats"):
         setattr(provider, field, getattr(candidate, field))
     provider.updated_at = datetime.now(UTC)
     session.add(provider)
@@ -368,6 +399,8 @@ def test_ai_provider(
     saved = session.get(AIProvider, provider_id)
     if not saved:
         raise HTTPException(status_code=404, detail="Provider not found.")
+    if _descriptor_or_none(saved) is None:
+        raise HTTPException(status_code=409, detail="Deprecated provider records cannot be tested.")
     # Reuse draft construction so endpoint/model/key overrides are never
     # flushed into the session or persisted by a connection test.
     provider = _make_provider(
@@ -385,6 +418,8 @@ def test_ai_provider(
                 parse_extra_config(saved.extra_config),
             )
         ),
+        enabled_capabilities=payload.enabled_capabilities if payload.enabled_capabilities is not None else parse_string_list(saved.enabled_capabilities),
+        enabled_formats=payload.enabled_formats if payload.enabled_formats is not None else parse_string_list(saved.enabled_formats),
     )
     return _test_provider(provider)
 

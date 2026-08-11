@@ -8,7 +8,6 @@ from typing import Any, Mapping
 
 from sqlmodel import Session, select
 
-from app.core.config import settings
 from app.models.ai_provider import AIProvider
 from app.services.ai.adapter_registry import AdapterDescriptor, get_adapter_descriptor
 from app.services.ai.audio_types import ProviderCapability
@@ -25,6 +24,39 @@ def parse_extra_config(raw: str | None) -> dict[str, Any]:
     except (TypeError, json.JSONDecodeError):
         return {}
     return value if isinstance(value, dict) else {}
+
+
+def parse_string_list(raw: str | None) -> set[str]:
+    try:
+        value = json.loads(raw or "[]")
+    except (TypeError, json.JSONDecodeError):
+        return set()
+    return {str(item).strip().lower() for item in value if str(item).strip()} if isinstance(value, list) else set()
+
+
+def _preferred_format(capability: str, formats: set[str]) -> str | None:
+    order = ("json_schema", "response_format", "prompt_only") if capability == "llm" else ("wav", "mp3", "flac", "opus", "aac", "pcm", "pcm16")
+    return next((item for item in order if item in formats), None)
+
+
+def validate_provider_boundaries(descriptor: AdapterDescriptor, capability: str, enabled_capabilities: set[str], enabled_formats: set[str]) -> tuple[set[str], set[str]]:
+    available_capabilities = {item.value for item in descriptor.capabilities}
+    unknown = enabled_capabilities - available_capabilities
+    if unknown:
+        raise ProviderConfigurationError("Unsupported enabled capability/capabilities: " + ", ".join(sorted(unknown)) + ".")
+    available_formats = set(descriptor.format_options)
+    unknown_formats = enabled_formats - available_formats
+    if unknown_formats:
+        raise ProviderConfigurationError("Unsupported enabled format(s): " + ", ".join(sorted(unknown_formats)) + ".")
+    if ProviderCapability.WORD_TIMESTAMPS.value in enabled_capabilities and ProviderCapability.TRANSCRIBE.value not in enabled_capabilities:
+        raise ProviderConfigurationError("word_timestamps requires transcribe.")
+    if capability == "llm" and ProviderCapability.GENERATE_JSON.value in enabled_capabilities and not enabled_formats:
+        raise ProviderConfigurationError("generate_json requires at least one JSON output format.")
+    if capability == "tts" and ProviderCapability.SYNTHESIZE.value in enabled_capabilities and not enabled_formats:
+        raise ProviderConfigurationError("synthesize requires at least one output format.")
+    if capability == "asr" and enabled_formats:
+        raise ProviderConfigurationError("ASR does not accept output formats.")
+    return enabled_capabilities, enabled_formats
 
 
 def get_provider_descriptor(capability: str, provider_type: str | None) -> AdapterDescriptor:
@@ -99,6 +131,8 @@ def validate_provider_configuration(
     api_key: str | None,
     model_name: str | None,
     extra_config: Mapping[str, Any] | None,
+    enabled_capabilities: set[str] | None = None,
+    enabled_formats: set[str] | None = None,
 ) -> tuple[AdapterDescriptor, dict[str, Any]]:
     """Validate only fields required by the chosen adapter descriptor."""
     descriptor = get_provider_descriptor(capability, provider_type)
@@ -113,13 +147,34 @@ def validate_provider_configuration(
             raise ProviderConfigurationError(
                 f"{descriptor.label or descriptor.canonical_key}: {label} is required."
             )
-    return descriptor, validate_extra_config(descriptor, extra_config)
+    extra = validate_extra_config(descriptor, extra_config)
+    capabilities = enabled_capabilities if enabled_capabilities is not None else {item.value for item in descriptor.capabilities}
+    formats = enabled_formats if enabled_formats is not None else set(descriptor.format_options)
+    validate_provider_boundaries(descriptor, capability, capabilities, formats)
+    selected = _preferred_format(capability, formats)
+    if selected:
+        if capability == "llm": extra["json_mode"] = selected
+        elif descriptor.canonical_key == "openai_audio_tts": extra["response_format"] = selected
+        elif descriptor.canonical_key == "mimo_tts": extra["audio_format"] = selected
+    return descriptor, extra
 
 
 def get_declared_capabilities(provider: AIProvider) -> frozenset[ProviderCapability]:
     """Return Adapter-declared capabilities without making a network call."""
     descriptor = get_adapter_descriptor(provider.capability, provider.provider_type)
     return descriptor.capabilities if descriptor else frozenset()
+
+
+def get_enabled_capabilities(provider: AIProvider) -> frozenset[ProviderCapability]:
+    """Capabilities explicitly enabled by the user, never merely advertised."""
+    descriptor = get_adapter_descriptor(provider.capability, provider.provider_type)
+    if not descriptor:
+        return frozenset()
+    # Direct model construction in older tests is allowed pre-migration; real
+    # migrated/API records always contain a JSON array.
+    raw = getattr(provider, "enabled_capabilities", "")
+    selected = {item.value for item in descriptor.capabilities} if raw in (None, "") else parse_string_list(raw)
+    return frozenset(item for item in descriptor.capabilities if item.value in selected)
 
 
 def require_provider_capabilities(
@@ -129,7 +184,7 @@ def require_provider_capabilities(
     provider_id: int | None = None,
 ) -> AIProvider:
     provider = get_provider_record(session, capability, provider_id)
-    missing = required - get_declared_capabilities(provider)
+    missing = required - get_enabled_capabilities(provider)
     if missing:
         values = ", ".join(sorted(item.value for item in missing))
         raise ProviderConfigurationError(
@@ -195,6 +250,8 @@ def create_provider(provider: AIProvider):
             get_provider_descriptor(provider.capability, provider.provider_type),
             parse_extra_config(provider.extra_config),
         ),
+        enabled_capabilities=parse_string_list(getattr(provider, "enabled_capabilities", "")) if getattr(provider, "enabled_capabilities", "") not in (None, "") else None,
+        enabled_formats=parse_string_list(getattr(provider, "enabled_formats", "")) if getattr(provider, "enabled_formats", "") not in (None, "") else None,
     )
     return _create_from_descriptor(
         descriptor,
@@ -210,20 +267,7 @@ def get_provider(session: Session, capability: str, provider_id: int | None = No
 
 
 def get_llm_provider_with_legacy_fallback(session: Session):
-    """Keep the pre-v0.4 DeepSeek environment settings usable during migration."""
-    try:
-        return get_provider(session, "llm")
-    except ProviderConfigurationError:
-        if settings.deepseek_api_key:
-            descriptor = get_provider_descriptor("llm", "openai_compatible")
-            return _create_from_descriptor(
-                descriptor,
-                base_url=settings.deepseek_base_url,
-                api_key=settings.deepseek_api_key,
-                model_name=settings.deepseek_model,
-                extra_config={},
-            )
-        raise
+    return get_provider(session, "llm")
 
 
 __all__ = [
@@ -231,13 +275,16 @@ __all__ = [
     "create_provider",
     "descriptor_config_fields",
     "get_declared_capabilities",
+    "get_enabled_capabilities",
     "get_llm_provider_with_legacy_fallback",
     "get_provider",
     "get_provider_descriptor",
     "get_provider_record",
     "parse_extra_config",
+    "parse_string_list",
     "public_extra_config",
     "require_provider_capabilities",
     "validate_extra_config",
+    "validate_provider_boundaries",
     "validate_provider_configuration",
 ]

@@ -32,6 +32,8 @@ type ProviderDraft = {
   api_key: string;
   model_name: string;
   extra_config: Record<string, string | number | boolean | null>;
+  enabled_capabilities: string[];
+  enabled_formats: string[];
 };
 
 const standardFields = new Set(["base_url", "api_key", "model_name"]);
@@ -55,24 +57,9 @@ const FALLBACK_CATALOG: ProviderCatalogEntry[] = [
     docs_url: null,
   },
   {
-    key: "openai_compatible", label: "OpenAI-compatible transcription", kind: "asr",
-    capabilities: ["transcribe"], endpoint_mode: "full_endpoint",
-    endpoint_hint: "Full transcription endpoint supplied by the provider", required_fields: ["base_url", "api_key", "model_name"],
-    config_fields: [], voice_presets: [], docs_url: null,
-  },
-  {
-    key: "azure_speech", label: "Azure Speech", kind: "tts",
-    capabilities: ["synthesize", "list_voices"], endpoint_mode: "base_url",
-    endpoint_hint: "Speech resource endpoint, for example https://your-resource.cognitiveservices.azure.com", required_fields: ["base_url", "api_key", "model_name"],
-    config_fields: [
-      { key: "locale", label: "Locale", field_type: "string", required: false, options: [], default: "en-US", placeholder: "en-US", help_text: "Voice locale used in generated SSML." },
-      { key: "output_format", label: "Output format", field_type: "string", required: false, options: [], default: "audio-24khz-48kbitrate-mono-mp3", placeholder: null, help_text: null },
-    ], voice_presets: [], docs_url: null,
-  },
-  {
-    key: "azure_speech", label: "Azure Speech", kind: "asr",
+    key: "openai_audio_asr", label: "OpenAI Audio Transcription", kind: "asr",
     capabilities: ["transcribe", "word_timestamps"], endpoint_mode: "base_url",
-    endpoint_hint: "Speech resource endpoint, for example https://your-resource.cognitiveservices.azure.com", required_fields: ["base_url", "api_key", "model_name"],
+    endpoint_hint: "https://api.openai.com/v1", required_fields: ["base_url", "api_key", "model_name"],
     config_fields: [], voice_presets: [], docs_url: null,
   },
   {
@@ -113,6 +100,8 @@ function newDraft(entry: ProviderCatalogEntry, name = ""): ProviderDraft {
     api_key: "",
     model_name: "",
     extra_config: configDefaults(entry),
+    enabled_capabilities: [...(entry.available_capabilities || entry.capabilities)],
+    enabled_formats: entry.kind === "llm" ? ["response_format"] : entry.kind === "tts" ? (entry.available_formats?.includes("wav") ? ["wav"] : entry.available_formats?.slice(0, 1) || []) : [],
   };
 }
 
@@ -204,6 +193,8 @@ export default function SettingsPanel() {
       api_key: draft.api_key.trim() || null,
       model_name: draft.model_name.trim() || null,
       extra_config: Object.fromEntries(Object.entries(draft.extra_config).filter(([, value]) => value !== null && value !== "")),
+      enabled_capabilities: draft.enabled_capabilities,
+      enabled_formats: draft.enabled_formats,
     };
   }
 
@@ -213,7 +204,7 @@ export default function SettingsPanel() {
       if (field === "api_key") return hasValue(draft.api_key);
       if (field === "model_name") return hasValue(draft.model_name);
       return hasValue(draft.extra_config[field]);
-    }) && selectedConfigFields.filter((field) => field.required && !standardFields.has(field.key)).every((field) => hasValue(draft.extra_config[field.key]));
+    }) && selectedConfigFields.filter((field) => field.required && !standardFields.has(field.key)).every((field) => hasValue(draft.extra_config[field.key])) && draft.enabled_capabilities.length > 0 && !(draft.capability === "tts" && draft.enabled_capabilities.includes("synthesize") && draft.enabled_formats.length === 0) && !(draft.capability === "llm" && draft.enabled_capabilities.includes("generate_json") && draft.enabled_formats.length === 0) && !(draft.enabled_capabilities.includes("word_timestamps") && !draft.enabled_capabilities.includes("transcribe"));
   }
 
   async function add() {
@@ -343,6 +334,15 @@ export default function SettingsPanel() {
     return <label key={field.key}>{field.label}{field.required ? " *" : ""}<input value={value == null ? "" : String(value)} placeholder={field.placeholder || ""} onChange={(event) => setConfigValue(field, event.target.value)} />{field.help_text && <small>{field.help_text}</small>}</label>;
   }
 
+  function toggleBoundary(key: "enabled_capabilities" | "enabled_formats", value: string, checked: boolean) {
+    setDraft((current) => {
+      let next = checked ? [...new Set([...current[key], value])] : current[key].filter((item) => item !== value);
+      if (key === "enabled_capabilities" && value === "word_timestamps" && checked) next = [...new Set([...next, "transcribe"])];
+      return { ...current, [key]: next };
+    });
+    setDraftTest(null);
+  }
+
   const materialRemoteAvailable = scenes?.material_transcription_remote_available ?? false;
   const recordingRemoteAvailable = scenes?.recording_evaluation_remote_available ?? false;
 
@@ -356,9 +356,11 @@ export default function SettingsPanel() {
         {selectedCatalog.required_fields.includes("api_key") && <label>API key *<input type="password" value={draft.api_key} onChange={(event) => setDraftValue("api_key", event.target.value)} /></label>}
         {selectedCatalog.required_fields.includes("model_name") && <label>Model / voice *<input value={draft.model_name} onChange={(event) => setDraftValue("model_name", event.target.value)} /></label>}
         {selectedConfigFields.map(renderConfigField)}
+        <div className="boundary-options"><strong>Enabled capabilities</strong>{(selectedCatalog.available_capabilities || selectedCatalog.capabilities).map((item) => <label key={item} className="config-checkbox"><input type="checkbox" checked={draft.enabled_capabilities.includes(item)} onChange={(event) => toggleBoundary("enabled_capabilities", item, event.target.checked)} /> {item}</label>)}</div>
+        {(selectedCatalog.available_formats || []).length > 0 && <div className="boundary-options"><strong>{draft.capability === "llm" ? "JSON output methods" : "Enabled output formats"}</strong>{(selectedCatalog.available_formats || []).map((item) => <label key={item} className="config-checkbox"><input type="checkbox" checked={draft.enabled_formats.includes(item)} onChange={(event) => toggleBoundary("enabled_formats", item, event.target.checked)} /> {item}</label>)}</div>}
         {selectedCatalog.voice_presets?.length && !selectedConfigFields.some((field) => field.key === "default_voice") && <label>Default voice<select value={String(draft.extra_config.default_voice || "")} onChange={(event) => setConfigValue({ key: "default_voice", label: "Default voice", field_type: "select", required: false, options: [], default: null, placeholder: null, help_text: null }, event.target.value || null)}><option value="">No default voice</option>{selectedCatalog.voice_presets.map((voice) => <option key={voice.id} value={voice.id}>{displayVoice(voice)}</option>)}</select></label>}
       </div>
-      <div className="catalog-summary"><span>Declared capabilities: {selectedCatalog.capabilities.length ? selectedCatalog.capabilities.join(", ") : "none"}.</span>{selectedCatalog.endpoint_hint && <span> Endpoint: {selectedCatalog.endpoint_hint}</span>}{selectedCatalog.docs_url && <a href={selectedCatalog.docs_url} target="_blank" rel="noreferrer">Adapter documentation</a>}</div>
+      <div className="catalog-summary"><span>Protocol allows: {(selectedCatalog.available_capabilities || selectedCatalog.capabilities).join(", ") || "none"}. Checked boundaries are enforced by the backend.</span>{selectedCatalog.endpoint_hint && <span> Endpoint: {selectedCatalog.endpoint_hint}</span>}{selectedCatalog.docs_url && <a href={selectedCatalog.docs_url} target="_blank" rel="noreferrer">Adapter documentation</a>}</div>
       <div className="panel-actions"><button disabled={!isDraftComplete() || testingDraft} onClick={() => void testDraft()}>{testingDraft ? "Testing…" : "Test draft"}</button><button disabled={!isDraftComplete()} onClick={() => void add()}>Add provider</button></div>
       {draftTest && <p className={`provider-test ${draftTest.ok ? "success" : "error"}`}>Verification level: {draftTest.verification_level || "unspecified"}</p>}
     </section>

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import base64
+import shutil
 from pathlib import Path
 
 import pytest
@@ -20,7 +21,7 @@ from app.schemas.ai_provider import ASRSceneSettingUpdate, ProviderTestRequest
 from app.schemas.text_practice import TextGenerationRequest
 from app.services import asr_router, text_generation_service, tts_service
 from app.services.ai.asr.local_whisper import LocalWhisperASRProvider
-from app.services.ai.audio_types import ProviderCapability, TTSResult
+from app.services.ai.audio_types import ProviderCapability, RawPCMFormat, TTSResult
 from app.services.ai.tts.base import TTSRequest
 from app.services.ai.tts.openai_compatible import OpenAICompatibleTTSProvider
 from app.services.ai.tts.mimo import MiMoTTSProvider
@@ -29,7 +30,7 @@ from app.services.ai.asr.azure_speech import AzureSpeechASRProvider
 from app.services.ai.adapter_registry import catalog_payload, get_adapter_descriptor
 from app.services.ai.llm._shared import extract_json_object
 from app.services.provider_security import redact_provider_error, sanitize_url
-from app.services.provider_factory import create_provider, get_declared_capabilities
+from app.services.provider_factory import ProviderConfigurationError, create_provider, get_declared_capabilities, get_enabled_capabilities, validate_provider_boundaries
 from app.api import providers as providers_api
 from app.api.providers import _read
 
@@ -43,17 +44,15 @@ def _engine():
 def test_factory_creates_openai_compatible_provider():
     llm = create_provider(AIProvider(name="x", capability="llm", provider_type="openai_compatible", base_url="https://example.test/v1", api_key="secret", model_name="model"))
     tts = create_provider(AIProvider(name="x", capability="tts", provider_type="openai_compatible", base_url="https://example.test/v1", api_key="secret", model_name="model"))
-    asr = create_provider(AIProvider(name="x", capability="asr", provider_type="openai_compatible", base_url="https://example.test/v1", api_key="secret", model_name="model"))
+    asr = create_provider(AIProvider(name="x", capability="asr", provider_type="openai_audio_asr", base_url="https://example.test/v1", api_key="secret", model_name="model"))
     assert llm.__class__.__name__ == "OpenAICompatibleLLMProvider"
     assert tts.__class__.__name__ == "OpenAICompatibleTTSProvider"
-    assert asr.__class__.__name__ == "OpenAICompatibleRemoteASRProvider"
+    assert asr.__class__.__name__ == "OpenAIWhisperASRProvider"
 
 
-def test_factory_creates_azure_audio_adapters():
-    tts = create_provider(AIProvider(name="azure", capability="tts", provider_type="azure_speech", base_url="https://westus.tts.speech.microsoft.com", api_key="secret", model_name="en-US-AvaMultilingualNeural"))
-    asr = create_provider(AIProvider(name="azure", capability="asr", provider_type="azure_speech", base_url="https://westus.stt.speech.microsoft.com", api_key="secret", model_name="conversation"))
-    assert tts.__class__.__name__ == "AzureSpeechTTSProvider"
-    assert asr.__class__.__name__ == "AzureSpeechASRProvider"
+def test_unsupported_adapter_cannot_be_created():
+    with pytest.raises(ProviderConfigurationError):
+        create_provider(AIProvider(name="azure", capability="tts", provider_type="azure_speech", base_url="https://example.test", api_key="secret", model_name="voice"))
 
 
 def test_factory_creates_mimo_audio_adapters():
@@ -66,37 +65,23 @@ def test_factory_creates_mimo_audio_adapters():
 def test_adapter_registry_resolves_legacy_aliases_and_exposes_safe_catalog():
     assert get_adapter_descriptor("llm", "openai_compatible").canonical_key == "openai_chat_compatible"
     assert get_adapter_descriptor("tts", "openai_compatible").canonical_key == "openai_audio_tts"
-    assert get_adapter_descriptor("asr", "openai_compatible").canonical_key == "openai_compatible_asr"
+    assert get_adapter_descriptor("asr", "openai_compatible") is None
     catalog = catalog_payload()
     keys = {(item["kind"], item["key"]) for item in catalog}
-    assert ("llm", "anthropic_messages") in keys
-    assert ("llm", "gemini_generate_content") in keys
-    assert ("tts", "elevenlabs_tts") in keys
-    assert ("asr", "deepgram_asr") in keys
+    assert keys == {("llm", "openai_chat_compatible"), ("tts", "openai_audio_tts"), ("tts", "mimo_tts"), ("asr", "openai_audio_asr"), ("asr", "mimo_asr")}
     assert all("api_key" not in {field["key"] for field in item["config_fields"]} for item in catalog)
 
 
-def test_ollama_profile_does_not_require_an_api_key():
-    provider = create_provider(
-        AIProvider(
-            name="ollama", capability="llm", provider_type="ollama_chat",
-            base_url="http://localhost:11434/v1", api_key=None, model_name="llama3",
-            extra_config='{"auth_scheme": "none"}',
-        )
-    )
-    assert provider.__class__.__name__ == "OpenAICompatibleLLMProvider"
+def test_legacy_profiles_are_not_registered():
+    assert get_adapter_descriptor("llm", "ollama_chat") is None
 
 
 def test_adapter_capabilities_are_static_and_safe_to_read():
     llm = AIProvider(name="llm", capability="llm", provider_type="openai_compatible", base_url="https://example.test/v1", model_name="model")
-    remote_asr = AIProvider(name="remote", capability="asr", provider_type="openai_compatible", base_url="https://example.test/v1", model_name="model")
-    azure_asr = AIProvider(name="azure", capability="asr", provider_type="azure_speech", base_url="https://example.test", model_name="model")
+    remote_asr = AIProvider(name="remote", capability="asr", provider_type="openai_audio_asr", base_url="https://example.test/v1", model_name="model")
     mimo_asr = AIProvider(name="mimo", capability="asr", provider_type="mimo_asr", base_url="https://example.test", model_name="model")
     assert get_declared_capabilities(llm) == {ProviderCapability.GENERATE_TEXT, ProviderCapability.GENERATE_JSON}
-    # A generic OpenAI-shaped endpoint cannot honestly promise Whisper word
-    # timestamps.  Users select the explicit Whisper adapter when needed.
-    assert get_declared_capabilities(remote_asr) == {ProviderCapability.TRANSCRIBE}
-    assert get_declared_capabilities(azure_asr) == {ProviderCapability.TRANSCRIBE, ProviderCapability.WORD_TIMESTAMPS}
+    assert get_declared_capabilities(remote_asr) == {ProviderCapability.TRANSCRIBE, ProviderCapability.WORD_TIMESTAMPS}
     assert get_declared_capabilities(mimo_asr) == {ProviderCapability.TRANSCRIBE}
 
 
@@ -113,6 +98,36 @@ def test_openai_tts_uses_user_provided_full_endpoint(monkeypatch):
     provider = OpenAICompatibleTTSProvider(base_url="https://voice.example/custom/speech", api_key="key", model_name="model")
     provider.synthesize(TTSRequest(text="Hello"))
     assert called["url"] == "https://voice.example/custom/speech"
+
+
+def test_openai_pcm_result_declares_the_decoding_contract(monkeypatch):
+    class Response:
+        content = b"raw-pcm"
+        headers: dict[str, str] = {}
+        def raise_for_status(self): pass
+    monkeypatch.setattr("app.services.ai.tts.openai_compatible.provider_http.post", lambda *_args, **_kwargs: Response())
+    result = OpenAICompatibleTTSProvider(
+        base_url="https://voice.example/custom/speech",
+        api_key="key",
+        model_name="tts",
+        extra_config={"response_format": "pcm"},
+    ).synthesize(TTSRequest(text="Hello"))
+    assert result.raw_pcm == RawPCMFormat(sample_rate=24000, channels=1, sample_format="s16le")
+
+
+def test_mimo_pcm_requires_explicit_sample_rate_before_request(monkeypatch):
+    monkeypatch.setattr(
+        "app.services.ai.tts.mimo.provider_http.post",
+        lambda *_args, **_kwargs: pytest.fail("invalid PCM config must fail before a billable request"),
+    )
+    provider = MiMoTTSProvider(
+        base_url="https://api.xiaomimimo.com/v1/chat/completions",
+        api_key="key",
+        model_name="mimo-v2.5-tts",
+        extra_config={"audio_format": "pcm16"},
+    )
+    with pytest.raises(ValueError, match="pcm_sample_rate"):
+        provider.synthesize(TTSRequest(text="Hello"))
 
 
 def test_audio_connection_test_never_synthesizes(monkeypatch):
@@ -194,7 +209,7 @@ def test_provider_test_response_reports_static_capabilities_without_leaking_key(
             raise RuntimeError("request rejected for secret-value")
     monkeypatch.setattr(providers_api, "create_provider", lambda *_args: Provider())
     with Session(engine) as session:
-        provider = AIProvider(name="private", capability="asr", provider_type="mimo_asr", base_url="https://example.test", api_key="secret-value", model_name="mimo")
+        provider = AIProvider(name="private", capability="asr", provider_type="mimo_asr", base_url="https://example.test", api_key="secret-value", model_name="mimo", enabled_capabilities='["transcribe"]', enabled_formats="[]")
         session.add(provider); session.commit(); session.refresh(provider)
         response = providers_api.test_ai_provider(provider.id, ProviderTestRequest(), session)
     assert response.ok is False
@@ -214,7 +229,7 @@ def test_provider_catalog_and_draft_test_require_only_no_cost_configuration(monk
         base_url="https://voice.example/custom/speech",
         api_key="draft-secret",
         model_name="tts-model",
-        extra_config={"default_voice": "alloy"},
+        extra_config={"default_voice": "alloy"}, enabled_capabilities=["synthesize"], enabled_formats=["wav"],
     )
     response = providers_api.test_provider_draft(draft)
     assert response.ok is True
@@ -252,7 +267,7 @@ def test_asr_router_honours_independent_scene_switches(monkeypatch):
     remote = object()
     monkeypatch.setattr(asr_router, "get_provider", lambda *_args, **_kwargs: remote)
     with Session(engine) as session:
-        session.add(AIProvider(name="remote", capability="asr", provider_type="openai_compatible", base_url="https://example.test/v1", api_key="key", model_name="asr", is_default=True))
+        session.add(AIProvider(name="remote", capability="asr", provider_type="openai_audio_asr", base_url="https://example.test/v1", api_key="key", model_name="asr", is_default=True))
         setting = ASRSceneSetting(material_transcription_use_local=True, recording_evaluation_use_local=False)
         session.add(setting); session.commit()
         assert isinstance(asr_router.get_asr_provider(session, asr_router.MATERIAL_TRANSCRIPTION), LocalWhisperASRProvider)
@@ -292,18 +307,12 @@ def test_word_timestamp_remote_asr_unlocks_both_scenes():
         assert result.recording_evaluation_use_local is False
 
 
-def test_azure_word_timestamp_asr_unlocks_both_scenes():
-    engine = _engine()
-    with Session(engine) as session:
-        session.add(AIProvider(name="azure", capability="asr", provider_type="azure_speech", base_url="https://example.test", api_key="key", model_name="conversation", is_default=True))
-        session.add(ASRSceneSetting())
-        session.commit()
-        result = providers_api.update_asr_scene_settings(
-            ASRSceneSettingUpdate(material_transcription_use_local=False, recording_evaluation_use_local=False),
-            session,
-        )
-        assert result.material_transcription_remote_available is True
-        assert result.material_transcription_use_local is False
+def test_user_boundaries_reject_invalid_dependency_combinations():
+    descriptor = get_adapter_descriptor("asr", "openai_audio_asr")
+    with pytest.raises(ProviderConfigurationError, match="requires transcribe"):
+        validate_provider_boundaries(descriptor, "asr", {"word_timestamps"}, set())
+    with pytest.raises(ProviderConfigurationError, match="requires at least one output format"):
+        validate_provider_boundaries(get_adapter_descriptor("tts", "openai_audio_tts"), "tts", {"synthesize"}, set())
 
 
 def test_asr_settings_get_is_read_only_when_no_settings_row_exists():
@@ -364,6 +373,11 @@ def test_tts_job_creates_material_and_sentences(monkeypatch, tmp_path: Path):
     class Provider:
         def synthesize(self, _request): return TTSResult(audio=b"audio")
     monkeypatch.setattr(tts_service, "get_provider", lambda *_args: Provider())
+    def fake_normalize(_result, *, index, output_dir):
+        target = output_dir / f"{index:04d}.wav"
+        target.write_bytes(b"wav")
+        return target
+    monkeypatch.setattr(tts_service, "_normalize_sentence_audio", fake_normalize)
     monkeypatch.setattr(tts_service, "_merge_audio", lambda _parts, target: target.write_bytes(b"merged"))
     monkeypatch.setattr(tts_service, "get_audio_duration", lambda path: 1.25 if path.name != "text_practice_1.mp3" else 2.5)
     try:
@@ -377,6 +391,45 @@ def test_tts_job_creates_material_and_sentences(monkeypatch, tmp_path: Path):
         with Session(engine) as session:
             assert len(session.exec(select(Sentence).where(Sentence.material_id == 1)).all()) == 2
             assert session.get(Material, 1).status == "ready"
+            assert all(item.clip_audio_path.endswith(".wav") for item in session.exec(select(Sentence).where(Sentence.material_id == 1)).all())
     finally:
         tts_service.settings.data_dir = old_data_dir
         monkeypatch.setattr(tts_service, "engine", old_engine)
+
+
+def test_raw_pcm_is_normalized_with_explicit_ffmpeg_parameters(monkeypatch, tmp_path: Path):
+    commands: list[list[str]] = []
+
+    def fake_ffmpeg(command, *, operation):
+        commands.append(command)
+        Path(command[-1]).write_bytes(b"wav")
+
+    monkeypatch.setattr(tts_service, "_ffmpeg", fake_ffmpeg)
+    result = TTSResult(
+        audio=b"pcm",
+        extension="pcm",
+        raw_pcm=RawPCMFormat(sample_rate=16000, channels=2, sample_format="s16le"),
+    )
+    output = tts_service._normalize_sentence_audio(result, index=1, output_dir=tmp_path)
+    assert output.name == "0001.wav"
+    assert output.read_bytes() == b"wav"
+    assert commands == [[
+        "ffmpeg", "-y", "-f", "s16le", "-ar", "16000", "-ac", "2",
+        "-i", str(tmp_path / "0001.source.pcm"), "-vn", "-ar", "24000", "-ac", "1",
+        "-c:a", "pcm_s16le", str(tmp_path / "0001.normalizing.wav"),
+    ]]
+    assert not (tmp_path / "0001.source.pcm").exists()
+
+
+@pytest.mark.skipif(shutil.which("ffmpeg") is None, reason="FFmpeg is required for the PCM integration check")
+def test_raw_pcm_normalization_creates_a_playable_wav(tmp_path: Path):
+    # One second of 16-bit little-endian mono silence at 16 kHz.
+    result = TTSResult(
+        audio=b"\x00\x00" * 16000,
+        extension="pcm",
+        raw_pcm=RawPCMFormat(sample_rate=16000, channels=1, sample_format="s16le"),
+    )
+    output = tts_service._normalize_sentence_audio(result, index=1, output_dir=tmp_path)
+    assert output.suffix == ".wav"
+    assert output.read_bytes().startswith(b"RIFF")
+    assert 0.9 <= tts_service.get_audio_duration(output) <= 1.1

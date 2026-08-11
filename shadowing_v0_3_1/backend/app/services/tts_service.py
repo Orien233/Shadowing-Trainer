@@ -15,7 +15,7 @@ from app.models.sentence import Sentence
 from app.models.text_practice import TextPractice
 from app.schemas.text_practice import TTSOptions
 from app.services.ai.tts.base import TTSRequest
-from app.services.ai.audio_types import ProviderCapability
+from app.services.ai.audio_types import ProviderCapability, TTSResult
 from app.services.job_service import update_job
 from app.services.media_service import get_audio_duration
 from app.services.provider_factory import get_provider, require_provider_capabilities
@@ -48,11 +48,72 @@ def queue_tts(session: Session, practice: TextPractice, options: TTSOptions):
     return job
 
 
+def _ffmpeg(command: list[str], *, operation: str) -> None:
+    """Run ffmpeg with an actionable failure instead of opaque job stderr."""
+    try:
+        subprocess.run(command, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    except FileNotFoundError as exc:
+        raise RuntimeError("FFmpeg is required for TTS audio normalization but was not found on PATH.") from exc
+    except subprocess.CalledProcessError as exc:
+        detail = exc.stderr.decode("utf-8", errors="replace").strip()
+        raise RuntimeError(f"FFmpeg failed while {operation}: {detail[-1000:]}") from exc
+
+
+def _safe_extension(value: str) -> str:
+    extension = value.strip().lower().lstrip(".")
+    if not re.fullmatch(r"[a-z0-9]{1,10}", extension):
+        raise ValueError("TTS adapter returned an unsafe audio file extension.")
+    return extension
+
+
+def _normalize_sentence_audio(result: TTSResult, *, index: int, output_dir: Path) -> Path:
+    """Convert every provider response into a uniform, playable WAV clip.
+
+    The sentence trainer receives only 24 kHz mono WAV files.  This makes
+    concat deterministic across providers and, crucially, supplies FFmpeg
+    with explicit decoding details for headerless PCM responses.
+    """
+    extension = _safe_extension(result.extension)
+    source_path = output_dir / f"{index:04d}.source.{extension}"
+    target_path = output_dir / f"{index:04d}.wav"
+    temporary_path = output_dir / f"{index:04d}.normalizing.wav"
+    source_path.write_bytes(result.audio)
+    command = ["ffmpeg", "-y"]
+    if result.raw_pcm:
+        command.extend(
+            [
+                "-f", result.raw_pcm.sample_format,
+                "-ar", str(result.raw_pcm.sample_rate),
+                "-ac", str(result.raw_pcm.channels),
+            ]
+        )
+    command.extend(
+        [
+            "-i", str(source_path),
+            "-vn",
+            "-ar", "24000",
+            "-ac", "1",
+            "-c:a", "pcm_s16le",
+            str(temporary_path),
+        ]
+    )
+    try:
+        _ffmpeg(command, operation=f"normalizing TTS sentence {index}")
+        temporary_path.replace(target_path)
+    finally:
+        temporary_path.unlink(missing_ok=True)
+        source_path.unlink(missing_ok=True)
+    return target_path
+
+
 def _merge_audio(segment_paths: list[Path], target_path: Path) -> None:
     concat_file = target_path.with_suffix(".concat.txt")
     concat_file.write_text("".join(f"file '{path.as_posix()}'\n" for path in segment_paths), encoding="utf-8")
     try:
-        subprocess.run(["ffmpeg", "-y", "-f", "concat", "-safe", "0", "-i", str(concat_file), "-c:a", "libmp3lame", "-q:a", "3", str(target_path)], check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        _ffmpeg(
+            ["ffmpeg", "-y", "-f", "concat", "-safe", "0", "-i", str(concat_file), "-c:a", "libmp3lame", "-q:a", "3", str(target_path)],
+            operation="merging normalized TTS sentences",
+        )
     finally:
         concat_file.unlink(missing_ok=True)
 
@@ -83,8 +144,7 @@ def run_tts_synthesis(job_id: str, payload: dict) -> dict:
     for index, sentence in enumerate(sentences, start=1):
         update_job(job_id, stage=f"synthesizing_sentence_{index}", progress=max(5, int(index / len(sentences) * 75)))
         result = provider.synthesize(TTSRequest(text=sentence, voice=options.voice, model=options.model, speed=_SPEEDS[options.speed_preset], accent=options.accent, gender=options.gender))
-        path = output_dir / f"{index:04d}.{result.extension}"
-        path.write_bytes(result.audio)
+        path = _normalize_sentence_audio(result, index=index, output_dir=output_dir)
         paths.append(path)
     update_job(job_id, stage="merging_audio", progress=82)
     merged_path = settings.audio_dir / f"text_practice_{practice_id}.mp3"

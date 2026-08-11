@@ -12,6 +12,7 @@ from app.services.ai.audio_utils import (
     extension_from_media_type,
     media_type_for_extension,
     normalized_voices,
+    raw_pcm_from_config,
     require_configured,
     response_media_type,
 )
@@ -52,6 +53,17 @@ class OpenAIAudioTTSProvider(TTSProvider):
             provider_name="OpenAI Audio TTS",
         )
         response_format = str(self.extra_config.get("response_format", "mp3"))
+        raw_pcm = (
+            raw_pcm_from_config(
+                self.extra_config,
+                # Native OpenAI PCM is 24 kHz mono signed 16-bit little-endian.
+                # Compatible endpoints may override every value below.
+                default_sample_rate=24000,
+                provider_name="OpenAI Audio TTS",
+            )
+            if response_format.strip().lower() == "pcm"
+            else None
+        )
         payload: dict[str, Any] = {
             "model": request.model or self.model_name,
             "input": request.text,
@@ -80,6 +92,7 @@ class OpenAIAudioTTSProvider(TTSProvider):
             audio=audio,
             media_type=media_type,
             extension=extension,
+            raw_pcm=raw_pcm,
             provider_metadata={"adapter": "openai_audio_tts", "model": payload["model"], "voice": payload["voice"]},
         )
 

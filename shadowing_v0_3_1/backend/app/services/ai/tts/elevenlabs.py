@@ -14,6 +14,7 @@ from app.services.ai.audio_utils import (
     extension_from_format,
     media_type_for_extension,
     normalized_voices,
+    raw_pcm_from_elevenlabs_output_format,
     require_configured,
     response_media_type,
 )
@@ -104,6 +105,10 @@ class ElevenLabsTTSProvider(TTSProvider):
         )
         voice = _voice_id(request, self.extra_config)
         output_format = str(self.extra_config.get("output_format", "mp3_44100_128"))
+        raw_pcm = raw_pcm_from_elevenlabs_output_format(
+            output_format,
+            provider_name="ElevenLabs TTS",
+        )
         voice_settings = self.extra_config.get("voice_settings")
         payload: dict[str, Any] = {"text": request.text, "model_id": request.model or self.model_name}
         if isinstance(voice_settings, dict):
@@ -127,6 +132,7 @@ class ElevenLabsTTSProvider(TTSProvider):
             audio=audio,
             media_type=response_media_type(response, media_type_for_extension(extension)),
             extension=extension,
+            raw_pcm=raw_pcm,
             provider_metadata={"adapter": "elevenlabs_tts", "model": payload["model_id"], "voice": voice or None},
         )
 

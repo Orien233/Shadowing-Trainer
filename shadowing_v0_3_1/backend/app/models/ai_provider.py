@@ -16,6 +16,10 @@ class AIProvider(SQLModel, table=True):
     model_name: str | None = None
     is_enabled: bool = Field(default=True, index=True)
     is_default: bool = Field(default=False, index=True)
+    # Empty is a pre-migration compatibility sentinel. New API writes always
+    # persist JSON arrays, making the user's declaration authoritative.
+    enabled_capabilities: str = Field(default="")
+    enabled_formats: str = Field(default="")
     extra_config: str = Field(default="{}")
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     updated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))

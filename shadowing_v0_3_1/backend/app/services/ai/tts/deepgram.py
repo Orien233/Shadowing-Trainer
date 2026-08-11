@@ -11,6 +11,7 @@ from app.services.ai.audio_utils import (
     extension_from_format,
     media_type_for_extension,
     normalized_voices,
+    raw_pcm_from_config,
     require_configured,
     response_media_type,
 )
@@ -74,6 +75,15 @@ class DeepgramTTSProvider(TTSProvider):
             provider_name="Deepgram TTS",
         )
         params = self._params(request)
+        extension = extension_from_format(params.get("container") or params.get("encoding") or "mp3")
+        raw_config = dict(self.extra_config)
+        if params.get("sample_rate") is not None:
+            raw_config.setdefault("pcm_sample_rate", params["sample_rate"])
+        raw_pcm = (
+            raw_pcm_from_config(raw_config, provider_name="Deepgram TTS")
+            if extension == "pcm"
+            else None
+        )
         response = provider_http.post(
             _speak_endpoint(self.base_url, self.extra_config),
             params=params,
@@ -85,11 +95,11 @@ class DeepgramTTSProvider(TTSProvider):
         audio = getattr(response, "content", b"")
         if not audio:
             raise ValueError("Deepgram TTS returned an empty audio file.")
-        extension = extension_from_format(params.get("container") or params.get("encoding") or "mp3")
         return TTSResult(
             audio=audio,
             media_type=response_media_type(response, media_type_for_extension(extension)),
             extension=extension,
+            raw_pcm=raw_pcm,
             provider_metadata={"adapter": "deepgram_tts", "model": params["model"]},
         )
 

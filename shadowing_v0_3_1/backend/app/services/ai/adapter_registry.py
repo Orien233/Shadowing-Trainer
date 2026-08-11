@@ -97,6 +97,9 @@ class AdapterDescriptor:
     factory: AdapterFactory | None = None
     aliases: tuple[str, ...] = ()
     capabilities: frozenset[ProviderCapability] = frozenset()
+    # Formats are protocol options, not promises: a saved provider must opt in
+    # explicitly before the corresponding capability can be used.
+    format_options: tuple[str, ...] = ()
     label: str = ""
     endpoint_mode: str = "base_url"
     endpoint_hint: str = ""
@@ -163,6 +166,8 @@ class AdapterDescriptor:
             "label": self.label or self.canonical_key,
             "aliases": list(self.aliases),
             "capabilities": sorted(item.value for item in self.capabilities),
+            "available_capabilities": sorted(item.value for item in self.capabilities),
+            "available_formats": list(self.format_options),
             "endpoint_mode": self.endpoint_mode,
             "endpoint_hint": self.endpoint_hint,
             "required_fields": list(self.required_fields),

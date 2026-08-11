@@ -9,6 +9,8 @@ from __future__ import annotations
 
 from typing import Any, Mapping
 
+from app.services.ai.audio_types import RawPCMFormat
+
 
 _MEDIA_TYPES_BY_EXTENSION = {
     "aac": "audio/aac",
@@ -64,7 +66,7 @@ def extension_from_format(value: Any, default: str = "mp3") -> str:
         return "ulaw"
     if "alaw" in normalized or "a-law" in normalized:
         return "alaw"
-    if "pcm" in normalized or "raw" in normalized:
+    if "pcm" in normalized or "linear16" in normalized or "raw" in normalized:
         return "pcm"
     if "mp3" in normalized or "mpeg" in normalized:
         return "mp3"
@@ -99,6 +101,72 @@ def response_media_type(response: Any, fallback: str) -> str:
         if value:
             return str(value)
     return fallback
+
+
+def raw_pcm_from_config(
+    config: Mapping[str, Any],
+    *,
+    default_sample_rate: int | None = None,
+    provider_name: str,
+) -> RawPCMFormat:
+    """Read the explicit PCM decoding fields required by FFmpeg.
+
+    A compatible endpoint must never be guessed from a ``.pcm`` suffix.  Known
+    native APIs can supply a documented default sample rate; all other
+    adapters require the user to configure it before the billable request.
+    """
+    sample_rate_value = config.get("pcm_sample_rate")
+    if sample_rate_value is None or str(sample_rate_value).strip() == "":
+        sample_rate_value = default_sample_rate
+    try:
+        sample_rate = int(sample_rate_value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(
+            f"{provider_name} raw PCM requires pcm_sample_rate before synthesis."
+        ) from exc
+    try:
+        channels = int(config.get("pcm_channels", 1))
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"{provider_name} pcm_channels must be an integer.") from exc
+    sample_format = str(config.get("pcm_sample_format", "s16le")).strip().lower()
+    try:
+        return RawPCMFormat(
+            sample_rate=sample_rate,
+            channels=channels,
+            sample_format=sample_format,
+        )
+    except ValueError as exc:
+        raise ValueError(f"{provider_name} raw PCM configuration is invalid: {exc}") from exc
+
+
+def raw_pcm_from_azure_output_format(output_format: str, *, provider_name: str) -> RawPCMFormat | None:
+    """Parse Azure's ``raw-24khz-16bit-mono-pcm`` style output names."""
+    normalized = output_format.strip().lower().replace("_", "-")
+    if "pcm" not in normalized or "riff" in normalized:
+        return None
+    import re
+
+    rate = re.search(r"(\d+)khz", normalized)
+    width = re.search(r"(16|24|32)bit", normalized)
+    channels = 2 if "stereo" in normalized else 1 if "mono" in normalized else None
+    if not rate or not width or channels is None:
+        raise ValueError(
+            f"{provider_name} raw PCM output format must state sample rate, bit depth, and mono/stereo."
+        )
+    sample_format = {"16": "s16le", "24": "s24le", "32": "s32le"}[width.group(1)]
+    return RawPCMFormat(sample_rate=int(rate.group(1)) * 1000, channels=channels, sample_format=sample_format)
+
+
+def raw_pcm_from_elevenlabs_output_format(output_format: str, *, provider_name: str) -> RawPCMFormat | None:
+    """Parse ElevenLabs ``pcm_24000`` output format names."""
+    normalized = output_format.strip().lower().replace("-", "_")
+    if not normalized.startswith("pcm_"):
+        return None
+    try:
+        sample_rate = int(normalized.removeprefix("pcm_").split("_", 1)[0])
+    except ValueError as exc:
+        raise ValueError(f"{provider_name} PCM output format must include a sample rate.") from exc
+    return RawPCMFormat(sample_rate=sample_rate, channels=1, sample_format="s16le")
 
 
 def as_mapping(value: Any) -> dict[str, Any]:

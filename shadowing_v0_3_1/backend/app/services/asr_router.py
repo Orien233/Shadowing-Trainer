@@ -8,7 +8,7 @@ from app.services.ai.asr import LocalWhisperASRProvider
 from app.services.ai.audio_types import ProviderCapability
 from app.services.provider_factory import (
     ProviderConfigurationError,
-    get_declared_capabilities,
+    get_enabled_capabilities,
     get_provider,
     get_provider_record,
 )
@@ -61,7 +61,7 @@ def get_scene_availability(session: Session, scene: str) -> ASRSceneAvailability
         provider = get_provider_record(session, "asr")
     except ProviderConfigurationError:
         return ASRSceneAvailability(scene, False, ("remote_asr_provider",))
-    missing = required - get_declared_capabilities(provider)
+    missing = required - get_enabled_capabilities(provider)
     return ASRSceneAvailability(
         scene,
         not missing,
