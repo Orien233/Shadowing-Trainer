@@ -92,16 +92,17 @@ function configDefaults(entry: ProviderCatalogEntry): ProviderDraft["extra_confi
 }
 
 function newDraft(entry: ProviderCatalogEntry, name = ""): ProviderDraft {
+  const preset = entry.preset_defaults || {};
   return {
-    name,
+    name: name || entry.label,
     capability: entry.kind,
     provider_type: entry.key,
-    base_url: "",
+    base_url: typeof preset.base_url === "string" ? preset.base_url : "",
     api_key: "",
     model_name: "",
     extra_config: configDefaults(entry),
-    enabled_capabilities: [...(entry.available_capabilities || entry.capabilities)],
-    enabled_formats: entry.kind === "llm" ? ["response_format"] : entry.kind === "tts" ? (entry.available_formats?.includes("wav") ? ["wav"] : entry.available_formats?.slice(0, 1) || []) : [],
+    enabled_capabilities: Array.isArray(preset.enabled_capabilities) ? preset.enabled_capabilities.filter((item): item is string => typeof item === "string") : [...(entry.available_capabilities || entry.capabilities)],
+    enabled_formats: Array.isArray(preset.enabled_formats) ? preset.enabled_formats.filter((item): item is string => typeof item === "string") : entry.kind === "llm" ? ["response_format"] : entry.kind === "tts" ? (entry.available_formats?.includes("wav") ? ["wav"] : entry.available_formats?.slice(0, 1) || []) : [],
   };
 }
 
@@ -131,6 +132,7 @@ export default function SettingsPanel() {
   const [providerVoices, setProviderVoices] = useState<Record<number, ProviderVoice[]>>({});
   const [loadingVoices, setLoadingVoices] = useState<number | null>(null);
   const [draft, setDraft] = useState<ProviderDraft>(() => newDraft(FALLBACK_CATALOG[0]));
+  const [editingProviderId, setEditingProviderId] = useState<number | null>(null);
 
   const adapters = useMemo(() => catalog.filter((entry) => entry.kind === draft.capability), [catalog, draft.capability]);
   const selectedCatalog = useMemo(
@@ -169,6 +171,7 @@ export default function SettingsPanel() {
   function selectCapability(capability: ProviderCapability) {
     const entry = catalog.find((item) => item.kind === capability) || FALLBACK_CATALOG.find((item) => item.kind === capability) || FALLBACK_CATALOG[0];
     setDraft(newDraft(entry, draft.name));
+    setEditingProviderId(null);
     setDraftTest(null);
   }
 
@@ -176,6 +179,7 @@ export default function SettingsPanel() {
     const entry = adapters.find((item) => catalogId(item) === id);
     if (!entry) return;
     setDraft(newDraft(entry, draft.name));
+    setEditingProviderId(null);
     setDraftTest(null);
   }
 
@@ -207,13 +211,18 @@ export default function SettingsPanel() {
     }) && selectedConfigFields.filter((field) => field.required && !standardFields.has(field.key)).every((field) => hasValue(draft.extra_config[field.key])) && draft.enabled_capabilities.length > 0 && !(draft.capability === "tts" && draft.enabled_capabilities.includes("synthesize") && draft.enabled_formats.length === 0) && !(draft.capability === "llm" && draft.enabled_capabilities.includes("generate_json") && draft.enabled_formats.length === 0) && !(draft.enabled_capabilities.includes("word_timestamps") && !draft.enabled_capabilities.includes("transcribe"));
   }
 
-  async function add() {
+  async function saveConfiguration() {
     try {
       const payload = draftPayload();
-      await createProvider({ ...payload, is_enabled: true, is_default: !providers.some((provider) => provider.capability === draft.capability && provider.is_default) });
+      if (editingProviderId !== null) {
+        await updateProvider(editingProviderId, { ...payload, api_key: payload.api_key || undefined });
+      } else {
+        await createProvider({ ...payload, is_enabled: true, is_default: !providers.some((provider) => provider.capability === draft.capability && provider.is_default) });
+      }
       setDraft(newDraft(catalog.find((entry) => entry.kind === "llm") || FALLBACK_CATALOG[0]));
+      setEditingProviderId(null);
       setDraftTest(null);
-      setMessage("Provider saved.");
+      setMessage(editingProviderId !== null ? "Provider configuration updated." : "Provider configuration saved.");
       await load();
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Could not add provider.");
@@ -273,19 +282,19 @@ export default function SettingsPanel() {
     }
   }
 
-  async function edit(provider: AIProvider) {
-    const base_url = window.prompt("Provider base URL", provider.base_url || "");
-    if (base_url === null) return;
-    const model_name = window.prompt("Model name", provider.model_name || "");
-    if (model_name === null) return;
-    const api_key = window.prompt("New API key (leave blank to retain saved key)", "");
-    if (api_key === null) return;
-    try {
-      await updateProvider(provider.id, { base_url, model_name, api_key: api_key || undefined });
-      await load();
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Could not update provider.");
-    }
+  function edit(provider: AIProvider) {
+    const entry = catalog.find((item) => item.kind === provider.capability && item.key === provider.provider_type);
+    if (!entry || provider.is_deprecated) return;
+    setDraft({
+      name: provider.name, capability: provider.capability, provider_type: provider.provider_type,
+      base_url: provider.base_url || "", api_key: "", model_name: provider.model_name || "",
+      extra_config: Object.fromEntries(Object.entries(provider.extra_config).filter(([, value]) => typeof value === "string" || typeof value === "number" || typeof value === "boolean" || value === null)) as ProviderDraft["extra_config"],
+      enabled_capabilities: provider.enabled_capabilities || provider.capabilities,
+      enabled_formats: provider.enabled_formats || [],
+    });
+    setEditingProviderId(provider.id);
+    setDraftTest(null);
+    setMessage(`Editing ${provider.name}. Leave API key blank to retain it.`);
   }
 
   async function remove(id: number) {
@@ -347,7 +356,8 @@ export default function SettingsPanel() {
   const recordingRemoteAvailable = scenes?.recording_evaluation_remote_available ?? false;
 
   return <div className="card settings-panel"><h2>Settings</h2><p className="muted">Credentials stay in the backend. A blank API-key edit retains the saved key.</p>
-    <section className="provider-section provider-draft"><h3>Add provider</h3>
+    <section className="provider-section"><h3>Quick templates</h3><p className="muted">OpenAI and MiMo templates are built in and cannot be edited or deleted. Using one only pre-fills a new configuration; it does not save credentials.</p><div className="panel-actions">{catalog.filter((entry) => entry.preset !== false).map((entry) => <button key={catalogId(entry)} onClick={() => { setDraft(newDraft(entry)); setEditingProviderId(null); setDraftTest(null); }}>{entry.label}</button>)}</div></section>
+    <section className="provider-section provider-draft"><h3>{editingProviderId === null ? "New provider configuration" : "Edit provider configuration"}</h3>
       <div className="form-grid">
         <label>Name<input value={draft.name} placeholder={selectedCatalog.label} onChange={(event) => setDraftValue("name", event.target.value)} /></label>
         <label>Capability<select value={draft.capability} onChange={(event) => selectCapability(event.target.value as ProviderCapability)}>{capabilities.map((capability) => <option key={capability} value={capability}>{capability.toUpperCase()}</option>)}</select></label>
@@ -361,7 +371,7 @@ export default function SettingsPanel() {
         {selectedCatalog.voice_presets?.length && !selectedConfigFields.some((field) => field.key === "default_voice") && <label>Default voice<select value={String(draft.extra_config.default_voice || "")} onChange={(event) => setConfigValue({ key: "default_voice", label: "Default voice", field_type: "select", required: false, options: [], default: null, placeholder: null, help_text: null }, event.target.value || null)}><option value="">No default voice</option>{selectedCatalog.voice_presets.map((voice) => <option key={voice.id} value={voice.id}>{displayVoice(voice)}</option>)}</select></label>}
       </div>
       <div className="catalog-summary"><span>Protocol allows: {(selectedCatalog.available_capabilities || selectedCatalog.capabilities).join(", ") || "none"}. Checked boundaries are enforced by the backend.</span>{selectedCatalog.endpoint_hint && <span> Endpoint: {selectedCatalog.endpoint_hint}</span>}{selectedCatalog.docs_url && <a href={selectedCatalog.docs_url} target="_blank" rel="noreferrer">Adapter documentation</a>}</div>
-      <div className="panel-actions"><button disabled={!isDraftComplete() || testingDraft} onClick={() => void testDraft()}>{testingDraft ? "Testing…" : "Test draft"}</button><button disabled={!isDraftComplete()} onClick={() => void add()}>Add provider</button></div>
+      <div className="panel-actions"><button disabled={!isDraftComplete() || testingDraft} onClick={() => void testDraft()}>{testingDraft ? "Testing…" : "Test draft"}</button><button disabled={!isDraftComplete()} onClick={() => void saveConfiguration()}>{editingProviderId === null ? "Save configuration" : "Save changes"}</button>{editingProviderId !== null && <button onClick={() => { setEditingProviderId(null); setDraft(newDraft(catalog[0] || FALLBACK_CATALOG[0])); }}>Cancel edit</button>}</div>
       {draftTest && <p className={`provider-test ${draftTest.ok ? "success" : "error"}`}>Verification level: {draftTest.verification_level || "unspecified"}</p>}
     </section>
     {capabilities.map((capability) => {

@@ -69,6 +69,8 @@ def test_adapter_registry_resolves_legacy_aliases_and_exposes_safe_catalog():
     catalog = catalog_payload()
     keys = {(item["kind"], item["key"]) for item in catalog}
     assert keys == {("llm", "openai_chat_compatible"), ("tts", "openai_audio_tts"), ("tts", "mimo_tts"), ("asr", "openai_audio_asr"), ("asr", "mimo_asr")}
+    assert all(item["preset"] is True and isinstance(item["preset_defaults"], dict) for item in catalog)
+    assert next(item for item in catalog if item["key"] == "openai_audio_tts")["preset_defaults"]["base_url"].endswith("/audio/speech")
     assert all("api_key" not in {field["key"] for field in item["config_fields"]} for item in catalog)
 
 

@@ -117,3 +117,11 @@ backend execution boundary, rather than an inferred vendor promise. OpenAI ASR
 may opt into word timestamps; MiMo ASR may only opt into ordinary transcription.
 When word timestamps are absent, material transcription is forced to Local
 Whisper, while recording evaluation may still use a remote transcribe provider.
+
+## Configuration profiles and quick templates
+
+The OpenAI and MiMo entries shown in Settings are built-in, read-only quick
+templates. Selecting one only pre-fills a new provider configuration and never
+saves credentials automatically. Saved configurations are independent profiles:
+they may be renamed, edited, enabled, made default, or deleted without changing
+the built-in templates.

@@ -43,6 +43,8 @@ class ProviderCatalogItemRead(BaseModel):
     capabilities: list[str] = Field(default_factory=list)
     available_capabilities: list[str] = Field(default_factory=list)
     available_formats: list[str] = Field(default_factory=list)
+    preset: bool = True
+    preset_defaults: dict[str, Any] = Field(default_factory=dict)
     endpoint_mode: Literal["base_url", "full_endpoint", "none"] = "base_url"
     endpoint_hint: str | None = None
     required_fields: list[str] = Field(default_factory=list)

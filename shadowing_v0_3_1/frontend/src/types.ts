@@ -157,6 +157,8 @@ export interface ProviderCatalogEntry {
   capabilities: string[];
   available_capabilities?: string[];
   available_formats?: string[];
+  preset?: boolean;
+  preset_defaults?: Record<string, unknown>;
   endpoint_mode: "base_url" | "full_endpoint" | "none";
   endpoint_hint: string | null;
   required_fields: string[];

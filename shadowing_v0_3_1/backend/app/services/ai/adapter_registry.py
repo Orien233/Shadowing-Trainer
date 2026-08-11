@@ -100,6 +100,10 @@ class AdapterDescriptor:
     # Formats are protocol options, not promises: a saved provider must opt in
     # explicitly before the corresponding capability can be used.
     format_options: tuple[str, ...] = ()
+    # Registered adapters double as read-only quick-start templates. Their
+    # metadata is never persisted as an AIProvider record.
+    preset: bool = True
+    preset_defaults: Mapping[str, Any] = field(default_factory=dict)
     label: str = ""
     endpoint_mode: str = "base_url"
     endpoint_hint: str = ""
@@ -168,6 +172,8 @@ class AdapterDescriptor:
             "capabilities": sorted(item.value for item in self.capabilities),
             "available_capabilities": sorted(item.value for item in self.capabilities),
             "available_formats": list(self.format_options),
+            "preset": self.preset,
+            "preset_defaults": dict(self.preset_defaults),
             "endpoint_mode": self.endpoint_mode,
             "endpoint_hint": self.endpoint_hint,
             "required_fields": list(self.required_fields),

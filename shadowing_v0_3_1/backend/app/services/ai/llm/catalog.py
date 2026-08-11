@@ -16,6 +16,7 @@ LLM_ADAPTER_DESCRIPTORS = (
         aliases=("openai_compatible", "openai-compatible", "openai"),
         capabilities=LLM_CAPABILITIES,
         format_options=("json_schema", "response_format", "prompt_only"),
+        preset_defaults={"base_url": "https://api.openai.com/v1", "enabled_capabilities": ["generate_text", "generate_json"], "enabled_formats": ["response_format"]},
         label="OpenAI Chat Completions",
         endpoint_mode="base_url",
         endpoint_hint="https://api.openai.com/v1  (adds /chat/completions)",
