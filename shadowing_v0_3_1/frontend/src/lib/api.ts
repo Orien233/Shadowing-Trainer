@@ -2,6 +2,7 @@ import type {
   Job, Material, MaterialLatestEvaluationsResponse, RecordingUploadAccepted,
   AIProvider, ASRSceneSettings, ASRSceneSettingsUpdate, LocalASRStatus, ProviderCatalogEntry, ProviderTestResponse,
   ProviderVoice, Sentence, SentenceLatestEvaluation, TextPractice, WordCollection,
+  LanguageCatalogItem, LearningLanguagePreference,
 } from "../types";
 
 // Keep the browser default aligned with the development backend listener.
@@ -50,10 +51,13 @@ export interface WordCollectionListOptions { sort?: WordCollectionSortMode; }
 export class WordCollectionApiError extends ApiError {}
 
 export const listMaterials = () => request<Material[]>("/api/materials");
-export const uploadMaterial = (title: string, file: File) => {
-  const body = new FormData(); body.append("title", title); body.append("file", file);
+export const uploadMaterial = (title: string, file: File, contentLanguage = "en", translationLanguage = "zh-CN") => {
+  const body = new FormData(); body.append("title", title); body.append("content_language", contentLanguage); body.append("translation_language", translationLanguage); body.append("file", file);
   return request<Material>("/api/materials/upload", { method: "POST", body }, 60_000);
 };
+export const listLanguages = () => request<LanguageCatalogItem[]>("/api/languages");
+export const getLanguagePreferences = () => request<LearningLanguagePreference>("/api/languages/preferences");
+export const updateLanguagePreferences = (payload: Pick<LearningLanguagePreference, "ui_locale" | "learning_language" | "translation_language">) => request<LearningLanguagePreference>("/api/languages/preferences", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
 export const processMaterial = (id: number) => request<Material>(`/api/materials/${id}/process`, { method: "POST" });
 export const deleteMaterial = (id: number) => request<void>(`/api/materials/${id}`, { method: "DELETE" });
 export const getSentences = (id: number) => request<Sentence[]>(`/api/materials/${id}/sentences`);

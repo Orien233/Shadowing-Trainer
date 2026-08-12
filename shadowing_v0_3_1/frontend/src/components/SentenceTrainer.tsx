@@ -4,6 +4,7 @@ import type { Evaluation, Material, Sentence, SentenceLatestEvaluation, WordColl
 import CollectableSentenceText from "./CollectableSentenceText.jsx";
 import EvaluationPanel from "./EvaluationPanel";
 import RecorderPanel from "./RecorderPanel";
+import { useLanguage } from "../i18n/LanguageContext";
 
 interface Props {
   material: Material | null;
@@ -170,6 +171,7 @@ export default function SentenceTrainer({
   onWordCollected,
   onRefreshWordCollections,
 }: Props) {
+  const { t } = useLanguage();
   const [segmentIndex, setSegmentIndex] = useState(0);
   const [loop, setLoop] = useState(false);
   const [autoPlay, setAutoPlay] = useState(false);
@@ -394,7 +396,7 @@ export default function SentenceTrainer({
     };
     const handleError = () => {
       clearStopTimer();
-      setMediaError("Audio file could not be loaded. Please reprocess the material.");
+      setMediaError(t("trainer.audioLoadFailed"));
     };
 
     audio.addEventListener("timeupdate", handleTimeUpdate);
@@ -414,7 +416,7 @@ export default function SentenceTrainer({
         audioRef.current = null;
       }
     };
-  }, [clearStopTimer, material?.file_type, material?.id, material?.status, syncPlaybackTime]);
+  }, [clearStopTimer, material?.file_type, material?.id, material?.status, syncPlaybackTime, t]);
 
   useEffect(() => {
     if (material?.status !== "processing") {
@@ -719,7 +721,7 @@ export default function SentenceTrainer({
 
   function handleVideoError() {
     clearStopTimer();
-    setMediaError("Video file could not be loaded. Please reprocess the material.");
+    setMediaError(t("trainer.videoLoadFailed"));
   }
 
   const handleEvaluated = useCallback(
@@ -738,8 +740,8 @@ export default function SentenceTrainer({
   if (!material) {
     return (
       <div className="card">
-        <h2>分句练习</h2>
-        <p className="muted">Select a processed material from the left panel to start practicing.</p>
+        <h2>{t("trainer.title")}</h2>
+        <p className="muted">{t("trainer.selectMaterial")}</p>
       </div>
     );
   }
@@ -748,9 +750,9 @@ export default function SentenceTrainer({
     const dots = ".".repeat(processingDots);
     return (
       <div className="card">
-        <h2>分句练习</h2>
-        <p className="muted">Current material is processing in the background{dots}</p>
-        <p className="muted">You can switch to other materials while this one finishes.</p>
+        <h2>{t("trainer.title")}</h2>
+        <p className="muted">{t("trainer.processing", { dots })}</p>
+        <p className="muted">{t("trainer.processingHint")}</p>
       </div>
     );
   }
@@ -758,8 +760,8 @@ export default function SentenceTrainer({
   if (material.status === "failed") {
     return (
       <div className="card">
-        <h2>分句练习</h2>
-        <p className="muted">Processing failed. Re-run processing from the material "More" menu.</p>
+        <h2>{t("trainer.title")}</h2>
+        <p className="muted">{t("trainer.processingFailed")}</p>
       </div>
     );
   }
@@ -767,8 +769,8 @@ export default function SentenceTrainer({
   if (material.status !== "ready") {
     return (
       <div className="card">
-        <h2>分句练习</h2>
-        <p className="muted">Current material is not ready yet.</p>
+        <h2>{t("trainer.title")}</h2>
+        <p className="muted">{t("trainer.notReady")}</p>
       </div>
     );
   }
@@ -776,8 +778,8 @@ export default function SentenceTrainer({
   if (!currentSegment) {
     return (
       <div className="card">
-        <h2>分句练习</h2>
-        <p className="muted">No playable segment data found for this material.</p>
+        <h2>{t("trainer.title")}</h2>
+        <p className="muted">{t("trainer.noPlayableSegments")}</p>
       </div>
     );
   }
@@ -786,12 +788,13 @@ export default function SentenceTrainer({
     <div className="trainer-grid">
       {material.file_type === "video" && (
         <div className="card video-card">
-          <h2>视频回放</h2>
+          <h2>{t("trainer.videoPlayback")}</h2>
           <div className="video-frame">
             <video
               ref={videoRef}
               className="material-video"
               controls
+              aria-label={t("trainer.videoAria")}
               preload="metadata"
               src={`${apiBase}/api/materials/${material.id}/video`}
               onPause={handleVideoPause}
@@ -808,22 +811,26 @@ export default function SentenceTrainer({
       )}
 
       <div className="card">
-        <h2>分句练习</h2>
+        <h2>{t("trainer.title")}</h2>
         <div className="sentence-badge">
           {isGapSegment
-            ? `Silent Segment ${currentSegment.displayOrder}`
-            : `Sentence ${currentSentence?.display_order ?? 0} / ${sentences.length}`}
+            ? t("trainer.silentSegment", { index: currentSegment.displayOrder })
+            : t("trainer.sentenceProgress", {
+                current: currentSentence?.display_order ?? 0,
+                total: sentences.length,
+              })}
         </div>
 
         <div className="sentence-text">
           {isGapSegment ? (
-            "[Silent Segment]"
+            t("trainer.silentSegmentText")
           ) : (
             <CollectableSentenceText
               sourceText={currentSentence?.source_text ?? ""}
               tokens={referenceAlignmentTokens}
               materialId={material.id}
               sentenceId={currentSentence?.id}
+              language={material.content_language}
               collectedWordSet={collectedWordSet}
               onCollected={onWordCollected}
               onRefreshCollections={onRefreshWordCollections}
@@ -831,17 +838,17 @@ export default function SentenceTrainer({
           )}
         </div>
         {!isGapSegment && (
-          <div className="sentence-translation">{currentSentence?.translation ?? "No translation yet."}</div>
+          <div className="sentence-translation">{currentSentence?.translation ?? t("trainer.noTranslation")}</div>
         )}
         {isGapSegment && (
-          <div className="sentence-translation muted">No spoken sentence detected in this time range.</div>
+          <div className="sentence-translation muted">{t("trainer.noSpeechDetected")}</div>
         )}
         {mediaError && <p className="media-error">{mediaError}</p>}
 
         <div className="row gap wrap">
-          <button type="button" onClick={prevSegment}>Prev Segment</button>
-          <button type="button" onClick={playCurrentSegment}>Play Current Segment</button>
-          <button type="button" onClick={nextSegment}>Next Segment</button>
+          <button type="button" onClick={prevSegment}>{t("trainer.previousSegment")}</button>
+          <button type="button" onClick={playCurrentSegment}>{t("trainer.playCurrentSegment")}</button>
+          <button type="button" onClick={nextSegment}>{t("trainer.nextSegment")}</button>
           {!isGapSegment && (
             <div className="row gap">
               <label className="checkbox">
@@ -850,7 +857,7 @@ export default function SentenceTrainer({
                   checked={autoPlay}
                   onChange={(event) => handleAutoPlayChange(event.target.checked)}
                 />
-                Auto Play
+                {t("trainer.autoPlay")}
               </label>
               <label className="checkbox">
                 <input
@@ -858,7 +865,7 @@ export default function SentenceTrainer({
                   checked={loop}
                   onChange={(event) => handleLoopChange(event.target.checked)}
                 />
-                Loop Segment
+                {t("trainer.loopSegment")}
               </label>
             </div>
           )}
@@ -877,6 +884,7 @@ export default function SentenceTrainer({
           value={currentSegment.duration > 0 ? currentSegmentPlaybackTime : 0}
           onChange={(event) => handleSegmentTimelineChange(event.target.value)}
           disabled={currentSegment.duration <= 0}
+          aria-label={t("trainer.timelineAria")}
         />
 
         <div className="time-row">
@@ -884,7 +892,10 @@ export default function SentenceTrainer({
           <span>{currentSegment.end.toFixed(2)}s</span>
         </div>
         <p className="muted">
-          Global Position: {playbackTime.toFixed(2)}s / {timelineDuration.toFixed(2)}s
+          {t("trainer.globalPosition", {
+            current: playbackTime.toFixed(2),
+            total: timelineDuration.toFixed(2),
+          })}
         </p>
       </div>
 

@@ -14,7 +14,7 @@ ENV_FILES = (
 # Centralized configuration management using Pydantic's BaseSettings, loading from .env files and providing convenient properties for file paths.
 class Settings(BaseSettings):
     app_name: str = "Shadowing Trainer"
-    app_version: str = "0.4.0"
+    app_version: str = "0.4.1"
     debug: bool = True # Default to True for development, but can be overridden by environment variable.
     host: str = "0.0.0.0"
     port: int = 8000

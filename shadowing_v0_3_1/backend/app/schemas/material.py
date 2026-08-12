@@ -17,6 +17,8 @@ class MaterialRead(BaseModel):
     processing_stage: str | None = None
     processing_progress: int = 0
     error_message: str | None = None
+    content_language: str = "en"
+    translation_language: str = "zh-CN"
     created_at: datetime
 
 

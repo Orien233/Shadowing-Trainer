@@ -1,9 +1,12 @@
-# Shadowing Trainer v0.4
+# Shadowing Trainer v0.4.1
 
 ## Adapter-driven AI text, speech, and transcription
 
-The v0.4 application lives in `shadowing_v0_3_1/`. It preserves the existing
-upload, material processing, sentence training, recording, scoring, word
+The v0.4.1 branch continues to use the historical `shadowing_v0_3_1/` source
+directory. The directory name is retained to avoid breaking local scripts and
+data paths; version development is tracked by Git branch and package version.
+This version preserves the existing upload, material processing, sentence
+training, recording, scoring, word
 collection, and durable-job workflows while adding a descriptor-driven model
 provider layer.
 

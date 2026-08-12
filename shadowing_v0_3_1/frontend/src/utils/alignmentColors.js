@@ -18,6 +18,16 @@ const SEVERITY_CLASSES = {
   default: STATUS_CLASSES.default,
 };
 
+const INSERTION_LABELS = {
+  "zh-CN": { filler: "\u8bed\u6c14\u8bcd", repetition: "\u91cd\u590d", correction: "\u81ea\u6211\u4fee\u6b63", extra: "\u591a\u4f59" },
+  "en-US": { filler: "filler", repetition: "repeat", correction: "self-correction", extra: "extra" },
+};
+
+function getUILocale() {
+  if (typeof document !== "undefined" && document.documentElement.lang.toLowerCase().startsWith("zh")) return "zh-CN";
+  return "en-US";
+}
+
 export function getAlignmentTokenClass(token) {
   const status = token?.status ?? "default";
   const severity = token?.severity ?? "default";
@@ -27,9 +37,10 @@ export function getAlignmentTokenClass(token) {
 
 export function getInsertionLabel(token) {
   if (!token) return null;
-  if (token.status === "filler") return "filler";
+  const labels = INSERTION_LABELS[getUILocale()];
+  if (token.status === "filler") return labels.filler;
   if (token.status !== "insertion") return null;
-  if (token.insertion_type === "repetition") return "repeat";
-  if (token.insertion_type === "correction") return "self-correction";
-  return "extra";
+  if (token.insertion_type === "repetition") return labels.repetition;
+  if (token.insertion_type === "correction") return labels.correction;
+  return labels.extra;
 }

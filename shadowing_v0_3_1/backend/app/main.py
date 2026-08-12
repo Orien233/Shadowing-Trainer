@@ -10,6 +10,7 @@ from app.api.system import router as system_router
 from app.api.words import router as words_router
 from app.api.providers import router as providers_router
 from app.api.text_practices import router as text_practices_router
+from app.api.language_preferences import router as language_preferences_router
 from app.core.config import settings
 from app.core.migrations import run_migrations
 from app.services.job_service import start_job_worker, stop_job_worker
@@ -57,3 +58,4 @@ app.include_router(system_router)
 app.include_router(words_router)
 app.include_router(providers_router)
 app.include_router(text_practices_router)
+app.include_router(language_preferences_router)

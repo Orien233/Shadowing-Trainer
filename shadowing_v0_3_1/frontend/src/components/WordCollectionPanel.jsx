@@ -1,11 +1,12 @@
 import { useEffect, useState } from "react";
+import { useLanguage } from "../i18n/LanguageContext";
 import { deleteWordCollection } from "../lib/api";
 import { normalizeWordText } from "../utils/sentenceTokenText.js";
 
 const SORT_OPTIONS = [
-  { value: "collected_time_asc", label: "收藏时间正序（新到旧）" },
-  { value: "collected_time_desc", label: "收藏时间倒序（旧到新）" },
-  { value: "alphabetical", label: "字母顺序" },
+  { value: "collected_time_asc", labelKey: "wordCollection.sort.collectedAsc" },
+  { value: "collected_time_desc", labelKey: "wordCollection.sort.collectedDesc" },
+  { value: "alphabetical", labelKey: "wordCollection.sort.alphabetical" },
 ];
 
 export default function WordCollectionPanel({
@@ -14,6 +15,7 @@ export default function WordCollectionPanel({
   onRefresh,
   onDeleted,
 }) {
+  const { t } = useLanguage();
   const [deletingIds, setDeletingIds] = useState(() => new Set());
   const [sortMode, setSortMode] = useState("collected_time_asc");
   const visibleCollections = collections ?? [];
@@ -28,16 +30,14 @@ export default function WordCollectionPanel({
   }
 
   async function handleDelete(collection) {
-    if (deletingIds.has(collection.id)) {
-      return;
-    }
+    if (deletingIds.has(collection.id)) return;
 
     setDeletingIds((prev) => new Set([...prev, collection.id]));
     try {
       await deleteWordCollection(collection.id);
       onDeleted?.(collection.id);
     } catch (error) {
-      alert(error instanceof Error ? error.message : "取消收藏失败");
+      alert(error instanceof Error ? error.message : t("wordCollection.removeFailed"));
     } finally {
       setDeletingIds((prev) => {
         const next = new Set(prev);
@@ -50,24 +50,24 @@ export default function WordCollectionPanel({
   return (
     <div className="card word-collection-panel">
       <div className="word-collection-heading">
-        <h2>收藏单词</h2>
+        <h2>{t("wordCollection.title")}</h2>
         <div className="word-collection-controls">
           <label className="word-collection-sort">
-            <span>排序</span>
+            <span>{t("wordCollection.sort")}</span>
             <select value={sortMode} onChange={handleSortChange}>
               {SORT_OPTIONS.map((option) => (
                 <option key={option.value} value={option.value}>
-                  {option.label}
+                  {t(option.labelKey)}
                 </option>
               ))}
             </select>
           </label>
-          {isLoading && <span className="material-state">Loading...</span>}
+          {isLoading && <span className="material-state">{t("wordCollection.loading")}</span>}
         </div>
       </div>
 
       {visibleCollections.length === 0 ? (
-        <p className="muted">还没有收藏单词。</p>
+        <p className="muted">{t("wordCollection.empty")}</p>
       ) : (
         <div className="word-collection-list">
           {visibleCollections.map((collection) => {
@@ -81,15 +81,13 @@ export default function WordCollectionPanel({
                 type="button"
                 className="word-collection-item"
                 disabled={isDeleting}
-                onClick={() => {
-                  void handleDelete(collection);
-                }}
-                title="点击取消收藏"
+                onClick={() => void handleDelete(collection)}
+                title={t("wordCollection.remove")}
               >
                 <span className="word-collection-text">{displayWord}</span>
                 <span className="word-collection-meta">
                   {collection.language || "en"}
-                  {isDeleting ? " · Removing..." : ""}
+                  {isDeleting ? ` · ${t("wordCollection.removing")}` : ""}
                 </span>
               </button>
             );

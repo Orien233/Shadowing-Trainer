@@ -10,7 +10,23 @@ export interface Material {
   processing_stage?: string | null;
   processing_progress?: number;
   error_message?: string | null;
+  content_language: string;
+  translation_language: string;
   created_at: string;
+}
+
+export interface LanguageCatalogItem {
+  code: string;
+  english_name: string;
+  native_name: string;
+}
+
+export interface LearningLanguagePreference {
+  id: number;
+  ui_locale: string;
+  learning_language: string;
+  translation_language: string;
+  updated_at: string;
 }
 
 export interface Sentence {

@@ -8,6 +8,7 @@ from app.models.word_collection import WordCollection
 from app.models.ai_provider import AIProvider
 from app.models.asr_scene_setting import ASRSceneSetting
 from app.models.text_practice import TextPractice, TextPracticeWord
+from app.models.learning_language_preference import LearningLanguagePreference
 
 __all__ = [
     "Material",
@@ -21,4 +22,5 @@ __all__ = [
     "ASRSceneSetting",
     "TextPractice",
     "TextPracticeWord",
+    "LearningLanguagePreference",
 ]

@@ -8,7 +8,7 @@ interface Props {
 }
 
 export default function MaterialUploader({ onUploaded }: Props) {
-  const { t } = useLanguage();
+  const { learningLanguage, translationLanguage, t } = useLanguage();
   const [title, setTitle] = useState("");
   const [file, setFile] = useState<File | null>(null);
   const [loading, setLoading] = useState(false);
@@ -19,7 +19,7 @@ export default function MaterialUploader({ onUploaded }: Props) {
 
     setLoading(true);
     try {
-      const uploaded = await uploadMaterial(title, file);
+      const uploaded = await uploadMaterial(title, file, learningLanguage, translationLanguage);
       let material = uploaded;
       if (uploaded.status === "uploaded") {
         try {
@@ -41,6 +41,10 @@ export default function MaterialUploader({ onUploaded }: Props) {
   return (
     <form className="card upload-form" onSubmit={handleSubmit}>
       <h2>{t("material.uploadTitle")}</h2>
+      <div className="material-language-summary">
+        <span>{t("material.contentLanguage")}: <strong>{learningLanguage}</strong></span>
+        <span>{t("material.translationLanguage")}: <strong>{translationLanguage}</strong></span>
+      </div>
       <input
         value={title}
         onChange={(e) => setTitle(e.target.value)}

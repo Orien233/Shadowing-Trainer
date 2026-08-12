@@ -12,6 +12,7 @@ from app.models.material_sentence_score import MaterialSentenceScore
 from app.models.ai_provider import AIProvider
 from app.models.asr_scene_setting import ASRSceneSetting
 from app.models.text_practice import TextPractice, TextPracticeWord
+from app.models.learning_language_preference import LearningLanguagePreference
 
 sqlite_url = f"sqlite:///{settings.db_path}"
 engine = create_engine(
@@ -130,6 +131,7 @@ def _main_db_tables() -> list:
         ASRSceneSetting.__table__,
         TextPractice.__table__,
         TextPracticeWord.__table__,
+        LearningLanguagePreference.__table__,
     ]
 
 

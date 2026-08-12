@@ -42,6 +42,7 @@ from app.services.job_service import enqueue_job, update_job
 from app.services.segmentation_service import segment_to_sentences
 from app.services.asr_router import MATERIAL_TRANSCRIPTION, transcribe_for_scene
 from app.services.translation_service import translate_sentences
+from app.services.language_catalog import LanguageValidationError, normalize_language_tag
 
 router = APIRouter(prefix="/api/materials", tags=["materials"])
 logger = logging.getLogger(__name__)
@@ -161,9 +162,16 @@ async def _run_lock_heartbeat(material_id: int, owner: str, stop_event: asyncio.
 @router.post("/upload", response_model=MaterialRead)
 async def upload_material(
     title: str = Form(...),
+    content_language: str = Form(default="en"),
+    translation_language: str = Form(default="zh-CN"),
     file: UploadFile = File(...),
     session: Session = Depends(get_session),
 ):
+    try:
+        normalized_content_language = normalize_language_tag(content_language)
+        normalized_translation_language = normalize_language_tag(translation_language)
+    except LanguageValidationError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
     try:
         original_path = await save_upload(file, settings.materials_dir)
         file_type = detect_file_type(original_path)
@@ -179,6 +187,8 @@ async def upload_material(
         file_type=file_type,
         original_path=str(original_path),
         status="queued",
+        content_language=normalized_content_language,
+        translation_language=normalized_translation_language,
     )
     session.add(material)
     session.commit()

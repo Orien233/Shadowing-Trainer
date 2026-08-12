@@ -96,6 +96,8 @@ export default function MaterialList({
                 <div className="material-meta">
                   <span>{material.file_type}</span>
                   <span>{material.status}</span>
+                  <span>{material.content_language}</span>
+                  <span>→ {material.translation_language}</span>
                 </div>
                 {isProcessing && (
                   <div className="material-progress" aria-label={t("material.processingProgress")}>

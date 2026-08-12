@@ -21,4 +21,8 @@ class Material(SQLModel, table=True):
     error_message: str | None = None
     source_type: str = "upload"
     text_practice_id: int | None = Field(default=None, index=True)
+    # Canonical BCP-47 tags. ``und`` is reserved for genuinely unknown source
+    # language; normal UI/API writes use the supported language catalog.
+    content_language: str = Field(default="en", index=True)
+    translation_language: str = Field(default="zh-CN", index=True)
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
