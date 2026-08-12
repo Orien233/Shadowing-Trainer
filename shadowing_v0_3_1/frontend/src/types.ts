@@ -176,6 +176,7 @@ export interface ProviderTestResponse {
   available_formats?: string[];
   enabled_formats?: string[];
   verification_level: string;
+  billable?: boolean;
 }
 
 export interface AIProvider {
@@ -196,8 +197,30 @@ export interface ASRSceneSettings {
   updated_at: string;
   material_transcription_remote_available: boolean;
   material_transcription_missing_capabilities: string[];
+  material_transcription_local_available?: boolean;
+  material_transcription_local_unavailable_reason?: string | null;
+  material_transcription_effective_route?: "local" | "remote" | "unavailable";
+  material_transcription_available?: boolean;
   recording_evaluation_remote_available: boolean;
   recording_evaluation_missing_capabilities: string[];
+  recording_evaluation_local_available?: boolean;
+  recording_evaluation_local_unavailable_reason?: string | null;
+  recording_evaluation_effective_route?: "local" | "remote" | "unavailable";
+  recording_evaluation_available?: boolean;
+}
+
+export interface LocalASRStatus {
+  installed: boolean;
+  runtime_ready: boolean;
+  model_loaded: boolean;
+  model_cached: boolean;
+  will_download_on_first_use: boolean;
+  model_name: string;
+  device: string;
+  compute_type: string;
+  model_dir: string;
+  allow_download: boolean;
+  error: string | null;
 }
 
 export interface ASRSceneSettingsUpdate {

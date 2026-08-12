@@ -108,7 +108,19 @@ def _normalize_sentence_audio(result: TTSResult, *, index: int, output_dir: Path
 
 def _merge_audio(segment_paths: list[Path], target_path: Path) -> None:
     concat_file = target_path.with_suffix(".concat.txt")
-    concat_file.write_text("".join(f"file '{path.as_posix()}'\n" for path in segment_paths), encoding="utf-8")
+    # FFmpeg resolves paths in a concat list relative to the list itself.  The
+    # application data directories are intentionally configured with relative
+    # paths (for portable local installs), so writing those values verbatim
+    # would turn e.g. ``data/audio/sentences/...`` into
+    # ``data/audio/data/audio/sentences/...``.  Use absolute, concat-safe paths
+    # to make the merge independent of the process working directory.
+    def concat_path(path: Path) -> str:
+        return path.resolve().as_posix().replace("'", r"'\\''")
+
+    concat_file.write_text(
+        "".join(f"file '{concat_path(path)}'\n" for path in segment_paths),
+        encoding="utf-8",
+    )
     try:
         _ffmpeg(
             ["ffmpeg", "-y", "-f", "concat", "-safe", "0", "-i", str(concat_file), "-c:a", "libmp3lame", "-q:a", "3", str(target_path)],

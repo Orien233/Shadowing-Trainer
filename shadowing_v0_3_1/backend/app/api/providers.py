@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 import json
+import tempfile
+import wave
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import Any, Mapping
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -17,6 +20,8 @@ from app.schemas.ai_provider import (
     AIProviderUpdate,
     ASRSceneSettingRead,
     ASRSceneSettingUpdate,
+    LocalASRStatusRead,
+    LocalASRTestRequest,
     ProviderCatalogItemRead,
     ProviderTestRequest,
     ProviderTestResponse,
@@ -24,14 +29,20 @@ from app.schemas.ai_provider import (
 )
 from app.services.ai.adapter_registry import AdapterDescriptor, catalog_payload
 from app.services.ai.audio_types import ProviderCapability
+from app.services.ai.tts.base import TTSRequest
 from app.services.asr_router import (
     MATERIAL_TRANSCRIPTION,
     RECORDING_EVALUATION,
-    effective_scene_flags,
     enforce_scene_capabilities,
     get_or_create_scene_settings,
     get_scene_availability,
     get_scene_settings_for_read,
+    resolve_scene_route,
+)
+from app.services.local_whisper_runtime import (
+    get_local_whisper_status,
+    load_local_whisper_model,
+    release_local_whisper_model,
 )
 from app.services.provider_factory import (
     ProviderConfigurationError,
@@ -101,15 +112,24 @@ def _scene_read(session: Session) -> ASRSceneSettingRead:
     value = get_scene_settings_for_read(session)
     material = get_scene_availability(session, MATERIAL_TRANSCRIPTION)
     recording = get_scene_availability(session, RECORDING_EVALUATION)
-    material_local, recording_local = effective_scene_flags(session, value)
+    material_route = resolve_scene_route(session, MATERIAL_TRANSCRIPTION, value)
+    recording_route = resolve_scene_route(session, RECORDING_EVALUATION, value)
     return ASRSceneSettingRead(
-        material_transcription_use_local=material_local,
-        recording_evaluation_use_local=recording_local,
+        material_transcription_use_local=material_route == "local",
+        recording_evaluation_use_local=recording_route == "local",
         updated_at=value.updated_at,
         material_transcription_remote_available=material.remote_available,
         material_transcription_missing_capabilities=list(material.missing_capabilities),
+        material_transcription_local_available=material.local_available,
+        material_transcription_local_unavailable_reason=material.local_unavailable_reason,
+        material_transcription_effective_route=material_route,
+        material_transcription_available=material_route != "unavailable",
         recording_evaluation_remote_available=recording.remote_available,
         recording_evaluation_missing_capabilities=list(recording.missing_capabilities),
+        recording_evaluation_local_available=recording.local_available,
+        recording_evaluation_local_unavailable_reason=recording.local_unavailable_reason,
+        recording_evaluation_effective_route=recording_route,
+        recording_evaluation_available=recording_route != "unavailable",
     )
 
 
@@ -228,32 +248,114 @@ def _verification_level(descriptor: AdapterDescriptor) -> str:
     return "network" if value == "network" else "configuration"
 
 
-def _test_provider(provider: AIProvider) -> ProviderTestResponse:
-    descriptor = get_provider_descriptor(provider.capability, provider.provider_type)
+def _test_response(
+    *,
+    provider: AIProvider,
+    descriptor: AdapterDescriptor,
+    ok: bool,
+    message: str,
+    verification_level: str,
+    billable: bool = False,
+) -> ProviderTestResponse:
     capabilities = sorted(item.value for item in get_enabled_capabilities(provider))
-    verification_level = _verification_level(descriptor)
-    try:
-        message = create_provider(provider).test_connection()
-        return ProviderTestResponse(
-            ok=True,
-            message=message,
-            capabilities=capabilities,
-            available_capabilities=sorted(item.value for item in descriptor.capabilities),
-            enabled_capabilities=capabilities,
-            available_formats=list(descriptor.format_options),
-            enabled_formats=sorted(parse_string_list(provider.enabled_formats)),
-            verification_level=verification_level,
+    return ProviderTestResponse(
+        ok=ok,
+        message=message,
+        capabilities=capabilities,
+        available_capabilities=sorted(item.value for item in descriptor.capabilities),
+        enabled_capabilities=capabilities,
+        available_formats=list(descriptor.format_options),
+        enabled_formats=sorted(parse_string_list(provider.enabled_formats)),
+        verification_level=verification_level,
+        billable=billable,
+    )
+
+
+def _write_silent_wav() -> Path:
+    """Create a minimal safe ASR test input without using user recordings."""
+    handle = tempfile.NamedTemporaryFile(prefix="shadowing-asr-test-", suffix=".wav", delete=False)
+    path = Path(handle.name)
+    handle.close()
+    with wave.open(str(path), "wb") as output:
+        output.setnchannels(1)
+        output.setsampwidth(2)
+        output.setframerate(16000)
+        output.writeframes(b"\x00\x00" * 3200)  # 0.2 s of silence
+    return path
+
+
+def _run_inference_test(provider: AIProvider, instance: Any) -> str:
+    capabilities = get_enabled_capabilities(provider)
+    if provider.capability == "llm":
+        if ProviderCapability.GENERATE_TEXT not in capabilities:
+            raise ProviderConfigurationError("A live LLM test requires generate_text to be enabled.")
+        instance.generate_text(
+            system_prompt="You are a connection test. Respond with exactly OK.",
+            user_prompt="Return OK.",
+            temperature=0,
         )
+        return "A small live LLM generation request succeeded."
+    if provider.capability == "tts":
+        if ProviderCapability.SYNTHESIZE not in capabilities:
+            raise ProviderConfigurationError("A live TTS test requires synthesize to be enabled.")
+        result = instance.synthesize(
+            TTSRequest(text="Connection test.", model=provider.model_name or None)
+        )
+        if not result.audio:
+            raise ProviderConfigurationError("The provider returned empty test audio.")
+        return "A small live TTS synthesis request succeeded."
+    if provider.capability == "asr":
+        if ProviderCapability.TRANSCRIBE not in capabilities:
+            raise ProviderConfigurationError("A live ASR test requires transcribe to be enabled.")
+        path = _write_silent_wav()
+        try:
+            instance.transcribe(str(path))
+        finally:
+            path.unlink(missing_ok=True)
+        return "A small live ASR transcription request succeeded."
+    raise ProviderConfigurationError("Unsupported provider capability for a live test.")
+
+
+def _test_provider(provider: AIProvider, test_mode: str = "configuration") -> ProviderTestResponse:
+    descriptor = get_provider_descriptor(provider.capability, provider.provider_type)
+    try:
+        instance = create_provider(provider)
+        if test_mode == "configuration":
+            return _test_response(
+                provider=provider,
+                descriptor=descriptor,
+                ok=True,
+                message="Provider configuration is valid; no network or billable request was made.",
+                verification_level="configuration",
+            )
+        if test_mode == "network":
+            return _test_response(
+                provider=provider,
+                descriptor=descriptor,
+                ok=True,
+                message=instance.test_connection(),
+                verification_level=_verification_level(descriptor),
+            )
+        if test_mode == "inference":
+            return _test_response(
+                provider=provider,
+                descriptor=descriptor,
+                ok=True,
+                message=_run_inference_test(provider, instance),
+                verification_level="inference",
+                billable=True,
+            )
+        raise ProviderConfigurationError(f"Unsupported provider test mode: {test_mode}.")
     except Exception as exc:  # Expected connection/configuration failures are data, not a 500.
-        return ProviderTestResponse(
+        return _test_response(
+            provider=provider,
+            descriptor=descriptor,
             ok=False,
-            message=f"Connection test failed: {type(exc).__name__}: {redact_provider_error(exc, provider.api_key)}",
-            capabilities=capabilities,
-            available_capabilities=sorted(item.value for item in descriptor.capabilities),
-            enabled_capabilities=capabilities,
-            available_formats=list(descriptor.format_options),
-            enabled_formats=sorted(parse_string_list(provider.enabled_formats)),
-            verification_level=verification_level,
+            message=f"{test_mode.capitalize()} test failed: {type(exc).__name__}: {redact_provider_error(exc, provider.api_key)}",
+            verification_level="inference" if test_mode == "inference" else (
+                _verification_level(descriptor) if test_mode == "network" else "configuration"
+            ),
+            billable=test_mode == "inference",
         )
 
 
@@ -306,7 +408,7 @@ def test_provider_draft(payload: ProviderTestRequest):
         enabled_capabilities=payload.enabled_capabilities,
         enabled_formats=payload.enabled_formats,
     )
-    return _test_provider(provider)
+    return _test_provider(provider, payload.test_mode)
 
 
 @router.post("", response_model=AIProviderRead, status_code=201)
@@ -421,7 +523,24 @@ def test_ai_provider(
         enabled_capabilities=payload.enabled_capabilities if payload.enabled_capabilities is not None else parse_string_list(saved.enabled_capabilities),
         enabled_formats=payload.enabled_formats if payload.enabled_formats is not None else parse_string_list(saved.enabled_formats),
     )
-    return _test_provider(provider)
+    return _test_provider(provider, payload.test_mode)
+
+
+@router.get("/local-asr/status", response_model=LocalASRStatusRead)
+def get_local_asr_status():
+    return LocalASRStatusRead(**get_local_whisper_status().to_payload())
+
+
+@router.post("/local-asr/test", response_model=LocalASRStatusRead)
+def test_local_asr(payload: LocalASRTestRequest):
+    if payload.load_model:
+        load_local_whisper_model()
+    return LocalASRStatusRead(**get_local_whisper_status().to_payload())
+
+
+@router.post("/local-asr/release", response_model=LocalASRStatusRead)
+def release_local_asr():
+    return LocalASRStatusRead(**release_local_whisper_model().to_payload())
 
 
 @router.get("/asr-scenes/settings", response_model=ASRSceneSettingRead)
@@ -431,29 +550,12 @@ def get_asr_scene_settings(session: Session = Depends(get_session)):
 
 @router.patch("/asr-scenes/settings", response_model=ASRSceneSettingRead)
 def update_asr_scene_settings(payload: ASRSceneSettingUpdate, session: Session = Depends(get_session)):
-    value = enforce_scene_capabilities(session, get_or_create_scene_settings(session))
+    value = get_or_create_scene_settings(session)
     if payload.material_transcription_use_local is not None:
-        if not payload.material_transcription_use_local:
-            availability = get_scene_availability(session, MATERIAL_TRANSCRIPTION)
-            if not availability.remote_available:
-                raise HTTPException(
-                    status_code=409,
-                    detail="Remote material transcription is unavailable: "
-                    + ", ".join(availability.missing_capabilities)
-                    + ".",
-                )
         value.material_transcription_use_local = payload.material_transcription_use_local
     if payload.recording_evaluation_use_local is not None:
-        if not payload.recording_evaluation_use_local:
-            availability = get_scene_availability(session, RECORDING_EVALUATION)
-            if not availability.remote_available:
-                raise HTTPException(
-                    status_code=409,
-                    detail="Remote recording evaluation is unavailable: "
-                    + ", ".join(availability.missing_capabilities)
-                    + ".",
-                )
         value.recording_evaluation_use_local = payload.recording_evaluation_use_local
+    enforce_scene_capabilities(session, value)
     value.updated_at = datetime.now(UTC)
     session.add(value)
     session.commit()

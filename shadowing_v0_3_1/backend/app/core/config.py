@@ -27,6 +27,8 @@ class Settings(BaseSettings):
     whisper_model: str = "small"
     whisper_device: str = "cpu"
     whisper_compute_type: str = "int8"
+    whisper_model_dir: str = "./data/models/whisper"
+    whisper_allow_download: bool = True
 
     deepseek_base_url: str = "https://api.deepseek.com"
     deepseek_model: str = "deepseek-chat"
@@ -77,6 +79,7 @@ class Settings(BaseSettings):
         "enable_wavlm_score",
         "enable_prosody_score",
         "enable_trim_silence",
+        "whisper_allow_download",
         mode="before",
     )
     @classmethod
@@ -173,6 +176,10 @@ class Settings(BaseSettings):
     @property
     def data_path(self) -> Path:
         return Path(self.data_dir)
+
+    @property
+    def whisper_model_path(self) -> Path:
+        return Path(self.whisper_model_dir)
 
     @property
     def materials_dir(self) -> Path:

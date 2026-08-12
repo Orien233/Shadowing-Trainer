@@ -6,11 +6,14 @@ const api = vi.hoisted(() => ({
   deleteProvider: vi.fn(),
   generateTextPractice: vi.fn(),
   getASRSceneSettings: vi.fn(),
+  getLocalASRStatus: vi.fn(),
   getJob: vi.fn(),
   importTextPractice: vi.fn(),
   listProviderCatalog: vi.fn(),
   listProviderVoices: vi.fn(),
   listProviders: vi.fn(),
+  releaseLocalASR: vi.fn(),
+  testLocalASR: vi.fn(),
   synthesizeTextPractice: vi.fn(),
   testProvider: vi.fn(),
   testProviderDraft: vi.fn(),
@@ -39,6 +42,11 @@ beforeEach(() => {
   api.listProviderCatalog.mockResolvedValue([]);
   api.listProviderVoices.mockResolvedValue([]);
   api.getASRSceneSettings.mockResolvedValue(scenes);
+  api.getLocalASRStatus.mockResolvedValue({
+    installed: true, runtime_ready: true, model_loaded: false, model_cached: true,
+    will_download_on_first_use: false, model_name: "small", device: "cpu", compute_type: "int8",
+    model_dir: "data/models/whisper", allow_download: true, error: null,
+  });
   api.listProviders.mockResolvedValue([]);
 });
 
@@ -82,5 +90,33 @@ describe("provider capability gates", () => {
     expect(screen.getByText(/default LLM supports generate_text and generate_json/i)).toBeInTheDocument();
     expect(screen.getByText(/default TTS provider supports synthesize/i)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Create TTS practice" })).toBeDisabled();
+  });
+
+  it("shows a forced remote route when Local Whisper is unavailable", async () => {
+    api.getASRSceneSettings.mockResolvedValue({
+      ...scenes,
+      material_transcription_use_local: false,
+      material_transcription_local_available: false,
+      material_transcription_local_unavailable_reason: "Local Whisper is not installed.",
+      material_transcription_effective_route: "remote",
+      material_transcription_available: true,
+      recording_evaluation_use_local: false,
+      recording_evaluation_local_available: false,
+      recording_evaluation_local_unavailable_reason: "Local Whisper is not installed.",
+      recording_evaluation_effective_route: "remote",
+      recording_evaluation_available: true,
+      material_transcription_remote_available: true,
+    });
+    api.getLocalASRStatus.mockResolvedValue({
+      installed: false, runtime_ready: false, model_loaded: false, model_cached: false,
+      will_download_on_first_use: false, model_name: "small", device: "cpu", compute_type: "int8",
+      model_dir: "data/models/whisper", allow_download: true, error: "Local Whisper is not installed.",
+    });
+    render(<SettingsPanel />);
+
+    const material = await screen.findByLabelText("Use Local Whisper for material transcription");
+    expect(material).toBeDisabled();
+    expect(screen.getAllByText(/effective route: remote/i).length).toBeGreaterThan(0);
+    expect(screen.getByText(/install it when local ASR is needed/i)).toBeInTheDocument();
   });
 });

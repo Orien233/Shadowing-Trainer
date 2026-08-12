@@ -1,0 +1,3 @@
+# Optional local ASR.  Remote-only deployments do not need this extra.
+-r requirements-core.txt
+faster-whisper==1.1.1

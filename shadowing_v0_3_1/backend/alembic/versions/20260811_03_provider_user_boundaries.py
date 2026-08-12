@@ -19,9 +19,16 @@ _TARGETS = {
 }
 
 def upgrade():
-    op.add_column("ai_providers", sa.Column("enabled_capabilities", sa.String(), nullable=False, server_default="[]"))
-    op.add_column("ai_providers", sa.Column("enabled_formats", sa.String(), nullable=False, server_default="[]"))
     bind = op.get_bind()
+    # SQLite auto-commits ALTER TABLE.  If a previous application start is
+    # interrupted between the two columns and the data backfill, Alembic keeps
+    # the old revision marker.  Inspect first so a retry resumes safely instead
+    # of failing on a duplicate column and permanently blocking startup.
+    existing_columns = {column["name"] for column in sa.inspect(bind).get_columns("ai_providers")}
+    if "enabled_capabilities" not in existing_columns:
+        op.add_column("ai_providers", sa.Column("enabled_capabilities", sa.String(), nullable=False, server_default="[]"))
+    if "enabled_formats" not in existing_columns:
+        op.add_column("ai_providers", sa.Column("enabled_formats", sa.String(), nullable=False, server_default="[]"))
     rows = bind.execute(sa.text("SELECT id, capability, provider_type FROM ai_providers")).mappings()
     for row in rows:
         key = (row["capability"], str(row["provider_type"]).lower().replace("-", "_"))
@@ -30,8 +37,10 @@ def upgrade():
             bind.execute(sa.text("UPDATE ai_providers SET provider_type=:kind, enabled_capabilities=:caps, enabled_formats=:formats WHERE id=:id"), {"kind": target[0], "caps": target[1], "formats": target[2], "id": row["id"]})
         else:
             bind.execute(sa.text("UPDATE ai_providers SET is_enabled=0, is_default=0 WHERE id=:id"), {"id": row["id"]})
-    op.alter_column("ai_providers", "enabled_capabilities", server_default=None)
-    op.alter_column("ai_providers", "enabled_formats", server_default=None)
+    # Keep SQLite's ``[]`` server defaults.  New API writes always provide
+    # explicit declarations, while the defaults make direct legacy inserts
+    # safely disabled.  SQLite cannot DROP DEFAULT with ALTER COLUMN without
+    # a table rebuild, which would make this recovery migration fragile.
 
 def downgrade():
     op.drop_column("ai_providers", "enabled_formats")

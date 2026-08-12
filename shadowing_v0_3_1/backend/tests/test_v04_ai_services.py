@@ -21,6 +21,8 @@ from app.schemas.ai_provider import ASRSceneSettingUpdate, ProviderTestRequest
 from app.schemas.text_practice import TextGenerationRequest
 from app.services import asr_router, text_generation_service, tts_service
 from app.services.ai.asr.local_whisper import LocalWhisperASRProvider
+from app.services import local_whisper_runtime
+from app.services.local_whisper_runtime import LocalWhisperStatus
 from app.services.ai.audio_types import ProviderCapability, RawPCMFormat, TTSResult
 from app.services.ai.tts.base import TTSRequest
 from app.services.ai.tts.openai_compatible import OpenAICompatibleTTSProvider
@@ -213,7 +215,11 @@ def test_provider_test_response_reports_static_capabilities_without_leaking_key(
     with Session(engine) as session:
         provider = AIProvider(name="private", capability="asr", provider_type="mimo_asr", base_url="https://example.test", api_key="secret-value", model_name="mimo", enabled_capabilities='["transcribe"]', enabled_formats="[]")
         session.add(provider); session.commit(); session.refresh(provider)
-        response = providers_api.test_ai_provider(provider.id, ProviderTestRequest(), session)
+        response = providers_api.test_ai_provider(
+            provider.id,
+            ProviderTestRequest(test_mode="network"),
+            session,
+        )
     assert response.ok is False
     assert response.capabilities == ["transcribe"]
     assert response.verification_level == "configuration"
@@ -237,6 +243,46 @@ def test_provider_catalog_and_draft_test_require_only_no_cost_configuration(monk
     assert response.ok is True
     assert response.verification_level == "configuration"
     assert response.capabilities == ["synthesize"]
+
+
+def test_live_provider_test_is_explicitly_billable_and_uses_a_small_request(monkeypatch):
+    class Provider:
+        def generate_text(self, **kwargs):
+            assert kwargs["user_prompt"] == "Return OK."
+            return "OK"
+
+    monkeypatch.setattr(providers_api, "create_provider", lambda *_args: Provider())
+    provider = AIProvider(
+        name="live", capability="llm", provider_type="openai_chat_compatible",
+        base_url="https://example.test/v1", api_key="secret", model_name="model",
+        enabled_capabilities='["generate_text", "generate_json"]', enabled_formats='["response_format"]',
+    )
+    response = providers_api._test_provider(provider, "inference")
+    assert response.ok is True
+    assert response.verification_level == "inference"
+    assert response.billable is True
+    assert "live LLM generation" in response.message
+
+
+def test_local_whisper_status_is_safe_when_optional_package_is_missing(monkeypatch):
+    monkeypatch.setattr(local_whisper_runtime, "_is_installed", lambda: False)
+    status = local_whisper_runtime.get_local_whisper_status()
+    assert status.installed is False
+    assert status.runtime_ready is False
+    assert "requirements-local-whisper" in (status.error or "")
+
+
+def test_local_whisper_status_marks_an_uncached_offline_model_unavailable(monkeypatch, tmp_path):
+    monkeypatch.setattr(local_whisper_runtime, "_is_installed", lambda: True)
+    monkeypatch.setattr(local_whisper_runtime, "_model_directory", lambda: tmp_path)
+    old_download = local_whisper_runtime.settings.whisper_allow_download
+    local_whisper_runtime.settings.whisper_allow_download = False
+    try:
+        status = local_whisper_runtime.get_local_whisper_status()
+        assert status.runtime_ready is False
+        assert "not cached" in (status.error or "")
+    finally:
+        local_whisper_runtime.settings.whisper_allow_download = old_download
 
 
 def test_provider_create_rejects_undeclared_extra_config_and_disabled_default():
@@ -288,9 +334,55 @@ def test_mimo_asr_locks_material_scene_but_allows_remote_recording():
         assert settings.material_transcription_missing_capabilities == ["word_timestamps"]
         assert settings.recording_evaluation_use_local is False
         assert settings.recording_evaluation_remote_available is True
-        with pytest.raises(HTTPException) as exc:
-            providers_api.update_asr_scene_settings(ASRSceneSettingUpdate(material_transcription_use_local=False), session)
-        assert exc.value.status_code == 409
+        result = providers_api.update_asr_scene_settings(
+            ASRSceneSettingUpdate(material_transcription_use_local=False),
+            session,
+        )
+        # A direct API call cannot persist an impossible remote material route;
+        # it is reconciled to the viable Local Whisper route.
+        assert result.material_transcription_use_local is True
+
+
+def test_remote_only_install_uses_remote_asr_when_local_whisper_is_missing(monkeypatch):
+    engine = _engine()
+    missing_local = LocalWhisperStatus(
+        installed=False, runtime_ready=False, model_loaded=False, model_cached=False,
+        will_download_on_first_use=False, model_name="small", device="cpu", compute_type="int8",
+        model_dir="data/models/whisper", allow_download=True, error="Local Whisper is not installed.",
+    )
+    remote = object()
+    monkeypatch.setattr(asr_router, "get_local_whisper_status", lambda: missing_local)
+    monkeypatch.setattr(asr_router, "get_provider", lambda *_args, **_kwargs: remote)
+    with Session(engine) as session:
+        session.add(AIProvider(
+            name="remote", capability="asr", provider_type="openai_audio_asr",
+            base_url="https://example.test/v1", api_key="key", model_name="asr", is_default=True,
+        ))
+        session.add(ASRSceneSetting(material_transcription_use_local=True, recording_evaluation_use_local=True))
+        session.commit()
+        settings = providers_api.get_asr_scene_settings(session)
+        assert settings.material_transcription_effective_route == "remote"
+        assert settings.recording_evaluation_effective_route == "remote"
+        assert settings.material_transcription_local_available is False
+        assert asr_router.get_asr_provider(session, asr_router.MATERIAL_TRANSCRIPTION) is remote
+
+
+def test_asr_scene_is_explicitly_unavailable_without_local_or_remote(monkeypatch):
+    engine = _engine()
+    missing_local = LocalWhisperStatus(
+        installed=False, runtime_ready=False, model_loaded=False, model_cached=False,
+        will_download_on_first_use=False, model_name="small", device="cpu", compute_type="int8",
+        model_dir="data/models/whisper", allow_download=True, error="Local Whisper is not installed.",
+    )
+    monkeypatch.setattr(asr_router, "get_local_whisper_status", lambda: missing_local)
+    with Session(engine) as session:
+        session.add(ASRSceneSetting())
+        session.commit()
+        settings = providers_api.get_asr_scene_settings(session)
+        assert settings.material_transcription_available is False
+        assert settings.material_transcription_effective_route == "unavailable"
+        with pytest.raises(ProviderConfigurationError, match="No ASR route is available"):
+            asr_router.get_asr_provider(session, asr_router.MATERIAL_TRANSCRIPTION)
 
 
 def test_word_timestamp_remote_asr_unlocks_both_scenes():
@@ -397,6 +489,29 @@ def test_tts_job_creates_material_and_sentences(monkeypatch, tmp_path: Path):
     finally:
         tts_service.settings.data_dir = old_data_dir
         monkeypatch.setattr(tts_service, "engine", old_engine)
+
+
+def test_tts_merge_uses_absolute_paths_for_relative_data_directories(monkeypatch, tmp_path: Path):
+    """FFmpeg concat files resolve entries from the concat file's directory."""
+    monkeypatch.chdir(tmp_path)
+    segment = Path("data/audio/sentences/text_practice_1/0001.wav")
+    segment.parent.mkdir(parents=True)
+    segment.write_bytes(b"wav")
+    target = Path("data/audio/text_practice_1.mp3")
+    target.parent.mkdir(parents=True, exist_ok=True)
+    captured: dict[str, str] = {}
+
+    def fake_ffmpeg(command, *, operation):
+        assert operation == "merging normalized TTS sentences"
+        captured["concat"] = Path(command[7]).read_text(encoding="utf-8")
+        Path(command[-1]).write_bytes(b"mp3")
+
+    monkeypatch.setattr(tts_service, "_ffmpeg", fake_ffmpeg)
+    tts_service._merge_audio([segment], target)
+
+    assert captured["concat"] == f"file '{segment.resolve().as_posix()}'\n"
+    assert target.read_bytes() == b"mp3"
+    assert not target.with_suffix(".concat.txt").exists()
 
 
 def test_raw_pcm_is_normalized_with_explicit_ffmpeg_parameters(monkeypatch, tmp_path: Path):

@@ -22,22 +22,23 @@ provider layer.
   Training automatically prefers `wav → mp3 → flac → opus → aac → pcm` and
   normalizes sentence audio to WAV and full-material audio to MP3.
   `/audio/speech` for you.
-- **ASR adapters:** cached Local Whisper, OpenAI Whisper, OpenAI GPT
-  Transcribe, conservative generic compatible ASR, Azure Speech Fast
-  Transcription, DashScope synchronous-response ASR, MiMo, Deepgram, and
-  ElevenLabs Scribe. Batch, polling, realtime, and WebSocket ASR protocols are
-  intentionally outside this release.
+- **ASR adapters:** OpenAI Audio Transcription and MiMo are the supported
+  remote ASR profiles. Local Whisper is a separate optional local runtime,
+  rather than a mandatory dependency. Batch, polling, realtime, and WebSocket
+  ASR protocols are intentionally outside this release.
 - **Safe credentials and tests:** API keys are only stored by the backend and
-  reads return a mask. A blank API-key edit keeps the existing key. Connection
-  tests report `network` or `configuration` verification and never generate
-  text, synthesize audio, or upload test speech; a failed test does not alter
-  capabilities or ASR routing.
+  reads return a mask. A blank API-key edit keeps the existing key. Settings
+  distinguishes non-billable configuration checks, safe connection verification
+  where the adapter supports it, and an explicitly confirmed small live test.
+  A failed test does not alter capabilities or ASR routing.
 - **Capability gates:** AI Text needs a default LLM with `generate_text` and
   `generate_json`; TTS practice needs `synthesize`. Remote material
   transcription needs `transcribe` plus `word_timestamps`; remote recording
   evaluation only needs `transcribe`. If a selected remote adapter is missing
-  a scene's required capability, that scene is forced to cached Local Whisper
-  both in the UI and in the backend router.
+  a scene's required capability, the router selects Local Whisper only if it
+  is actually installed and ready. If Local Whisper is absent but a remote
+  route works, remote ASR is forced; if neither route works, the operation is
+  disabled with a clear reason.
 - **AI Text workflow:** select random/manual collected words or a topic,
   generate or paste text, edit it, set TTS speed/voice/accent/gender/model,
   then queue sentence-level synthesis. The resulting Material/Sentence data
@@ -52,6 +53,27 @@ examples, capability notes, and provider-specific setup. Copy
 `shadowing_v0_3_1/backend/.env.example` to `backend/.env` for local runtime
 settings. The legacy `DEEPSEEK_*` values remain a translation fallback; all new
 provider credentials are configured in **Settings**.
+
+## Installation profiles
+
+The default backend install supports a remote-only configuration and does not
+download or import Local Whisper:
+
+```powershell
+cd shadowing_v0_3_1/backend
+pip install -r requirements.txt
+```
+
+Install Local Whisper only when local ASR is desired:
+
+```powershell
+pip install -r requirements-local-whisper.txt
+```
+
+Optional WavLM imitation scoring is similarly isolated in
+`requirements-evaluation.txt` after installing the appropriate CPU/CUDA
+PyTorch build. The Settings page reports Local Whisper package, runtime,
+model-cache, and memory state without loading the model automatically.
 
 Shadowing Trainer 是一款本地优先（local-first）的英语口语跟读训练 Web 应用。  
 它支持从素材上传到句级练习、录音与评分的完整流程。

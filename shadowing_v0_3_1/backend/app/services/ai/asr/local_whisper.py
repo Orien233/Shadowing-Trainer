@@ -2,6 +2,7 @@ from typing import Any
 
 from app.services.ai.asr.base import ASRProvider
 from app.services.ai.audio_types import ASRResult, ASRSegment, ASRWord, AudioCapability
+from app.services.local_whisper_runtime import get_local_whisper_status, LocalWhisperUnavailableError
 from app.services.transcription_service import transcribe_audio
 
 
@@ -39,4 +40,13 @@ class LocalWhisperASRProvider(ASRProvider):
 
     def test_connection(self) -> str:
         # Loading only happens when first transcribing, preserving lazy model startup.
-        return "Local Whisper is available and will load on first transcription."
+        status = get_local_whisper_status()
+        if not status.runtime_ready:
+            raise LocalWhisperUnavailableError(status.error or "Local Whisper is unavailable.")
+        if status.model_loaded:
+            return "Local Whisper is loaded and ready."
+        if status.model_cached:
+            return "Local Whisper is installed; its cached model will load on first transcription."
+        if status.will_download_on_first_use:
+            return "Local Whisper is installed; its model will download and load on first transcription."
+        return "Local Whisper is installed and ready to load on first transcription."

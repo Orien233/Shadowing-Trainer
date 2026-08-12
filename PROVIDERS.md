@@ -1,127 +1,109 @@
-# Provider adapter guide
+# Provider guide
 
-Provider credentials are configured in the application's **Settings** panel.
-They are stored only by the backend; provider list responses contain an API-key
-mask, and submitting a blank key during an edit retains the stored key.
+Provider credentials are configured in **Settings** and stored only in the
+backend. Provider list APIs return only an API-key mask; leaving the key blank
+while editing retains the saved value.
 
-## Endpoint fields
+## Supported remote profiles
 
-`Base URL` is descriptor-specific. Read the hint shown by Settings rather than
-assuming a common URL shape.
-
-- `base_url`: the adapter appends its documented resource path.
-- `full_endpoint`: enter the whole endpoint. In particular, OpenAI-compatible
-  TTS and generic compatible ASR do not append `/audio/speech` or
-  `/audio/transcriptions`.
-- `model_name`: model, deployment, or voice/model identifier required by that
-  adapter. For Azure OpenAI it is the deployment name.
-
-## LLM profiles
-
-| Adapter | Structured JSON | Endpoint / notes |
-| --- | --- | --- |
-| `openai_chat_compatible` | Yes | OpenAI Chat Completions-compatible JSON profile. |
-| `openai_responses` | Yes | Native OpenAI Responses API. |
-| `azure_openai` | Yes | Azure OpenAI v1 Responses; choose `api-key` or bearer auth. |
-| `anthropic_messages` | Yes | Native Messages API; JSON is prompt-enforced. |
-| `gemini_generate_content` | Yes | Native Gemini Generate Content API. |
-| `deepseek_chat` | Yes | `https://api.deepseek.com/v1`. |
-| `qwen_chat` | Yes | DashScope compatible-mode endpoint. |
-| `ollama_chat` / `vllm_chat` | Yes | Local OpenAI-compatible servers; API key is optional with `none` auth. |
-| `mimo_chat` / `openai_chat_text` | No | Text-only safety profiles; they cannot enable AI Text generation. |
-
-The adapter's capability declaration, not a runtime probe, determines whether
-the AI Text button can run. This prevents an arbitrary compatible gateway from
-being treated as JSON-capable merely because it accepts a Chat request.
-
-## TTS adapters
-
-| Adapter | Live voice list | Notes |
-| --- | --- | --- |
-| `openai_audio_tts` | No | Enter the full synthesis URL yourself; static built-in presets are shown. |
-| `azure_speech_tts` | Yes | Azure REST SSML; locale, output format, and voice are configurable. |
-| `dashscope_tts` | No | DashScope/Qwen non-streaming synthesis. |
-| `mimo_tts` | No | Full MiMo Chat Completions endpoint; Base64 audio result. |
-| `deepgram_tts` | No | Deepgram Aura model selects the voice. |
-| `elevenlabs_tts` | Yes | Voice ID/default voice and ElevenLabs voice metadata. |
-
-In **AI Text**, save generated or pasted text first, choose speed, voice,
-accent/locale, gender preference, and an optional model override, then select
-**Create TTS practice**. Sentence audio is created through the durable
-`tts_synthesis` job, merged, and saved as an ordinary Material with Sentence
-records, so no ASR is used to reconstruct known text.
-
-### Sentence-audio normalization
-
-Every TTS response is first normalized to a 24 kHz mono WAV sentence clip
-before the full MP3 is merged. This makes mixed provider container formats
-safe for the trainer and keeps the saved sentence clips directly playable.
-
-For headerless PCM, the adapter must provide a decoding contract: sample rate,
-channel count, and sample format. Native OpenAI PCM defaults to 24 kHz mono
-`s16le`; for compatible endpoints, DashScope, MiMo, or Deepgram raw PCM,
-enter the matching `Raw PCM` settings shown in **Settings**. The backend
-rejects incomplete raw-PCM settings before requesting synthesis, so an invalid
-configuration does not produce a billable partial job.
-
-## ASR adapters and scene routing
-
-| Adapter | `transcribe` | `word_timestamps` | Material remote mode |
+| Capability | Profile | Protocol shape | User-selectable boundaries |
 | --- | --- | --- | --- |
-| Local Whisper | Yes | Yes | Always available locally; model stays cached. |
-| `openai_whisper_asr` | Yes | Yes | Allowed. |
-| `openai_transcribe_asr` | Yes | No | Forced local for material transcription. |
-| `openai_compatible_asr` | Yes | No | Forced local for material transcription. |
-| `azure_speech_asr` | Yes | Yes | Allowed (Azure Fast Transcription word offsets). |
-| `dashscope_asr` | Yes | No | Forced local for material transcription. |
-| `mimo_asr` | Yes | No | Forced local for material transcription. |
-| `deepgram_asr` | Yes | Yes | Allowed. |
-| `elevenlabs_asr` | Yes | Yes | Allowed. |
+| LLM | OpenAI Chat Completions | `POST /chat/completions` | `generate_text`, `generate_json`; JSON schema, response format, or prompt JSON |
+| TTS | OpenAI Audio TTS | Full `/audio/speech` endpoint | `synthesize`; WAV, MP3, FLAC, Opus, AAC, or PCM |
+| TTS | MiMo TTS | Full MiMo Chat Completions endpoint | `synthesize`; WAV, MP3, FLAC, Opus, or PCM16 |
+| ASR | OpenAI Audio Transcription | Base URL + `/audio/transcriptions` | `transcribe`, optional `word_timestamps` |
+| ASR | MiMo ASR | Full MiMo Chat Completions endpoint | `transcribe` only |
 
-The two switches are independent:
+The adapter catalog describes protocol maximums. A saved configuration profile
+must explicitly select its usable capabilities and formats; those selections
+are enforced by the backend for generation, TTS jobs, and ASR routing.
 
-- **Use Local Whisper for material transcription** controls uploaded material
-  processing and needs a remote provider with both `transcribe` and
-  `word_timestamps` when switched off.
-- **Use Local Whisper for recording evaluation** controls learner-recording
-  assessment and needs only `transcribe` when switched off.
+## Built-in templates and configuration profiles
 
-If remote capability is missing, Settings locks the relevant switch on and
-shows the missing capability. The backend repeats the same check, so a direct
-API/database bypass cannot send a timestamp-less ASR result into material
-segmentation. Connection-test failures never change this decision.
+OpenAI and MiMo entries in Settings are read-only templates. Choosing one
+pre-fills a new configuration but never stores a key automatically. Saved
+profiles can be renamed, enabled/disabled, made default, tested, or deleted
+independently. A single protocol can have multiple profiles.
 
-DashScope is included only for deployments returning an immediate file
-transcript. Its batch/polling/realtime workflows are deliberately not
-implemented in this synchronous ASR contract.
+For `full_endpoint` adapters, enter the complete documented endpoint. The app
+does not append `/audio/speech` or `/audio/transcriptions` for you. For OpenAI
+ASR, enter the API base URL; the adapter appends `/audio/transcriptions`.
 
-## Connection tests
+## Test levels
 
-Tests are intentionally non-billable:
+Settings exposes three deliberate test levels:
 
-- LLM profiles that expose a metadata endpoint make a `GET /models`-style
-  check and report `verification_level: network`.
-- Speech profiles currently validate the selected endpoint/model/credential
-  fields without synthesis or transcription and report
-  `verification_level: configuration`.
+- **Check configuration** validates required fields and selected boundaries.
+  It makes no network request and is non-billable.
+- **Verify connection** uses an adapter's safe metadata strategy when one is
+  available. A configuration-only adapter clearly reports that it did not make
+  a network request.
+- **Run paid test** sends a minimal live request after confirmation: a tiny
+  LLM prompt, a short TTS phrase, or a synthetic silent WAV for ASR. It does
+  not save content or alter provider capability gates, but it can incur cost.
 
-The response always includes the adapter's static capabilities. Errors remove
-API keys, authorization headers, and sensitive URL query values before they
-reach the UI.
-# Current support boundary
+Errors are redacted before they reach the browser; API keys and authorization
+headers are never returned.
 
-Only these remote adapters are registered: OpenAI Chat Completions (LLM),
-OpenAI Audio TTS, MiMo TTS, OpenAI Audio Transcription, and MiMo ASR. Provider
-capabilities and formats are selected by the user in Settings and are a strict
-backend execution boundary, rather than an inferred vendor promise. OpenAI ASR
-may opt into word timestamps; MiMo ASR may only opt into ordinary transcription.
-When word timestamps are absent, material transcription is forced to Local
-Whisper, while recording evaluation may still use a remote transcribe provider.
+## Local Whisper is optional
 
-## Configuration profiles and quick templates
+Remote-only deployments can install only the core runtime:
 
-The OpenAI and MiMo entries shown in Settings are built-in, read-only quick
-templates. Selecting one only pre-fills a new provider configuration and never
-saves credentials automatically. Saved configurations are independent profiles:
-they may be renamed, edited, enabled, made default, or deleted without changing
-the built-in templates.
+```powershell
+pip install -r requirements.txt
+```
+
+Install local ASR only when it is needed:
+
+```powershell
+pip install -r requirements-local-whisper.txt
+```
+
+The Local Whisper section in Settings reports whether the package is present,
+whether the configured CPU/CUDA runtime is usable, whether the model is cached,
+and whether the first use will download it. It never downloads or loads a model
+merely by opening Settings. **Load model** is explicit; **Release model memory**
+removes the in-process cache.
+
+Relevant environment options:
+
+```env
+WHISPER_MODEL=small
+WHISPER_DEVICE=cpu
+WHISPER_COMPUTE_TYPE=int8
+WHISPER_MODEL_DIR=./data/models/whisper
+WHISPER_ALLOW_DOWNLOAD=true
+```
+
+Set `WHISPER_ALLOW_DOWNLOAD=false` in offline deployments after placing the
+model in the configured cache directory.
+
+## ASR scene routing
+
+The two scenes are independent:
+
+| Scene | Remote requirement |
+| --- | --- |
+| Material transcription | `transcribe` and `word_timestamps` |
+| Recording evaluation | `transcribe` |
+
+The toggle records a preferred route. At execution time the router safely
+selects the preferred route when available, otherwise the only viable fallback:
+
+- local available + remote available: user choice;
+- local available + remote unavailable: Local Whisper is forced;
+- local unavailable + remote available: remote ASR is forced;
+- neither available: the operation is disabled with both reasons reported.
+
+MiMo ASR intentionally exposes ordinary transcription only, so it may handle
+remote recording evaluation but cannot handle remote material segmentation.
+OpenAI ASR can be configured with word timestamps for both scenes.
+
+## TTS material pipeline
+
+TTS jobs synthesize each sentence separately. Every response is normalized to
+24 kHz mono WAV for the trainer, then sentence WAV files are merged into a
+complete MP3 Material. This preserves existing SentenceTrainer playback,
+recording, scoring, and task-recovery behavior. TTS format selection is
+automatic from the profile's enabled formats, preferring WAV, MP3, FLAC, Opus,
+AAC, then PCM.

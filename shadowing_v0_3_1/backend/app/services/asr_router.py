@@ -4,8 +4,9 @@ from sqlmodel import Session
 
 from app.core.database import engine
 from app.models.asr_scene_setting import ASRSceneSetting
-from app.services.ai.asr import LocalWhisperASRProvider
+from app.services.ai.asr.local_whisper import LocalWhisperASRProvider
 from app.services.ai.audio_types import ProviderCapability
+from app.services.local_whisper_runtime import get_local_whisper_status
 from app.services.provider_factory import (
     ProviderConfigurationError,
     get_enabled_capabilities,
@@ -30,6 +31,16 @@ class ASRSceneAvailability:
     scene: str
     remote_available: bool
     missing_capabilities: tuple[str, ...]
+    local_available: bool
+    local_unavailable_reason: str | None
+
+
+def _requested_local(value: ASRSceneSetting, scene: str) -> bool:
+    if scene == MATERIAL_TRANSCRIPTION:
+        return value.material_transcription_use_local
+    if scene == RECORDING_EVALUATION:
+        return value.recording_evaluation_use_local
+    raise ValueError(f"Unknown ASR scene: {scene}")
 
 
 def get_or_create_scene_settings(session: Session) -> ASRSceneSetting:
@@ -60,26 +71,73 @@ def get_scene_availability(session: Session, scene: str) -> ASRSceneAvailability
     try:
         provider = get_provider_record(session, "asr")
     except ProviderConfigurationError:
-        return ASRSceneAvailability(scene, False, ("remote_asr_provider",))
+        local = get_local_whisper_status()
+        return ASRSceneAvailability(
+            scene,
+            False,
+            ("remote_asr_provider",),
+            local.runtime_ready,
+            local.error,
+        )
     missing = required - get_enabled_capabilities(provider)
+    local = get_local_whisper_status()
     return ASRSceneAvailability(
         scene,
         not missing,
         tuple(sorted(item.value for item in missing)),
+        local.runtime_ready,
+        local.error,
     )
 
 
+def resolve_scene_route(
+    session: Session,
+    scene: str,
+    value: ASRSceneSetting | None = None,
+) -> str:
+    """Return ``local``, ``remote``, or ``unavailable`` for a scene.
+
+    The persisted boolean is the user's preferred route.  A usable alternate
+    route is selected only when that preference cannot run, so remote-only
+    installs work without a hidden Whisper dependency and offline installs
+    still fall back safely to local ASR.
+    """
+    value = value or get_scene_settings_for_read(session)
+    availability = get_scene_availability(session, scene)
+    if _requested_local(value, scene):
+        if availability.local_available:
+            return "local"
+        if availability.remote_available:
+            return "remote"
+    else:
+        if availability.remote_available:
+            return "remote"
+        if availability.local_available:
+            return "local"
+    return "unavailable"
+
+
 def enforce_scene_capabilities(session: Session, value: ASRSceneSetting | None = None) -> ASRSceneSetting:
+    """Persist a viable route when exactly one route is available.
+
+    When both routes are usable, user preference is retained.  When neither is
+    usable, it is intentionally retained too; the read API exposes the scene
+    as unavailable rather than pretending a fallback exists.
+    """
     value = value or get_or_create_scene_settings(session)
     changed = False
-    material = get_scene_availability(session, MATERIAL_TRANSCRIPTION)
-    recording = get_scene_availability(session, RECORDING_EVALUATION)
-    if not material.remote_available and not value.material_transcription_use_local:
-        value.material_transcription_use_local = True
-        changed = True
-    if not recording.remote_available and not value.recording_evaluation_use_local:
-        value.recording_evaluation_use_local = True
-        changed = True
+    for scene, field in (
+        (MATERIAL_TRANSCRIPTION, "material_transcription_use_local"),
+        (RECORDING_EVALUATION, "recording_evaluation_use_local"),
+    ):
+        availability = get_scene_availability(session, scene)
+        desired_local = getattr(value, field)
+        if desired_local and not availability.local_available and availability.remote_available:
+            setattr(value, field, False)
+            changed = True
+        elif not desired_local and not availability.remote_available and availability.local_available:
+            setattr(value, field, True)
+            changed = True
     if changed:
         session.add(value)
         session.commit()
@@ -95,11 +153,9 @@ def effective_scene_flags(session: Session, value: ASRSceneSetting | None = None
     a GET accurately show the forced-local state without causing a write.
     """
     value = value or get_scene_settings_for_read(session)
-    material = get_scene_availability(session, MATERIAL_TRANSCRIPTION)
-    recording = get_scene_availability(session, RECORDING_EVALUATION)
     return (
-        value.material_transcription_use_local or not material.remote_available,
-        value.recording_evaluation_use_local or not recording.remote_available,
+        resolve_scene_route(session, MATERIAL_TRANSCRIPTION, value) == "local",
+        resolve_scene_route(session, RECORDING_EVALUATION, value) == "local",
     )
 
 
@@ -113,18 +169,19 @@ def require_remote_scene_available(session: Session, scene: str) -> None:
 
 
 def get_asr_provider(session: Session, scene: str):
-    material_local, recording_local = effective_scene_flags(session)
-    local = (
-        material_local if scene == MATERIAL_TRANSCRIPTION
-        else recording_local if scene == RECORDING_EVALUATION
-        else None
-    )
-    if local is None:
-        raise ValueError(f"Unknown ASR scene: {scene}")
-    if local:
+    route = resolve_scene_route(session, scene)
+    if route == "local":
         return LocalWhisperASRProvider()
-    require_remote_scene_available(session, scene)
-    return get_provider(session, "asr")
+    if route == "remote":
+        require_remote_scene_available(session, scene)
+        return get_provider(session, "asr")
+    availability = get_scene_availability(session, scene)
+    remote_reason = ", ".join(availability.missing_capabilities) or "not configured"
+    local_reason = availability.local_unavailable_reason or "not available"
+    raise ProviderConfigurationError(
+        f"No ASR route is available for {scene}. Local Whisper: {local_reason}. "
+        f"Remote ASR: {remote_reason}."
+    )
 
 
 def transcribe_for_scene(scene: str, audio_path: str, *, word_timestamps: bool = False) -> list[dict]:

@@ -1,20 +1,13 @@
 from __future__ import annotations
 
-from functools import lru_cache
 from typing import Any, Dict, Iterable, List
 
-from faster_whisper import WhisperModel
-
-from app.core.config import settings
+from app.services.local_whisper_runtime import load_local_whisper_model
 
 # transcribe the audio using the Whisper model, returning a list of segments with start time, end time, and text
-@lru_cache(maxsize=1)
-def get_model() -> WhisperModel:
-    return WhisperModel(
-        settings.whisper_model,
-        device=settings.whisper_device,
-        compute_type=settings.whisper_compute_type,
-    )
+def get_model() -> Any:
+    """Compatibility entry point backed by the optional Whisper runtime."""
+    return load_local_whisper_model()
 
 
 def _serialize_word_timestamps(words: Iterable[Any] | None) -> List[Dict[str, Any]]:

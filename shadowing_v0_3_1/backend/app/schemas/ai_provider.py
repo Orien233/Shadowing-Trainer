@@ -4,7 +4,8 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 Capability = Literal["llm", "tts", "asr"]
-VerificationLevel = Literal["network", "configuration"]
+VerificationLevel = Literal["network", "configuration", "inference"]
+ProviderTestMode = Literal["configuration", "network", "inference"]
 
 
 class ProviderConfigFieldRead(BaseModel):
@@ -119,6 +120,7 @@ class ProviderTestRequest(BaseModel):
     extra_config: dict[str, Any] | None = None
     enabled_capabilities: list[str] | None = None
     enabled_formats: list[str] | None = None
+    test_mode: ProviderTestMode = "configuration"
 
 
 class ProviderTestResponse(BaseModel):
@@ -130,6 +132,7 @@ class ProviderTestResponse(BaseModel):
     available_formats: list[str] = Field(default_factory=list)
     enabled_formats: list[str] = Field(default_factory=list)
     verification_level: VerificationLevel = "configuration"
+    billable: bool = False
 
 
 class ASRSceneSettingRead(BaseModel):
@@ -140,8 +143,34 @@ class ASRSceneSettingRead(BaseModel):
     updated_at: datetime
     material_transcription_remote_available: bool = False
     material_transcription_missing_capabilities: list[str] = Field(default_factory=list)
+    material_transcription_local_available: bool = False
+    material_transcription_local_unavailable_reason: str | None = None
+    material_transcription_effective_route: Literal["local", "remote", "unavailable"] = "unavailable"
+    material_transcription_available: bool = False
     recording_evaluation_remote_available: bool = False
     recording_evaluation_missing_capabilities: list[str] = Field(default_factory=list)
+    recording_evaluation_local_available: bool = False
+    recording_evaluation_local_unavailable_reason: str | None = None
+    recording_evaluation_effective_route: Literal["local", "remote", "unavailable"] = "unavailable"
+    recording_evaluation_available: bool = False
+
+
+class LocalASRStatusRead(BaseModel):
+    installed: bool
+    runtime_ready: bool
+    model_loaded: bool
+    model_cached: bool
+    will_download_on_first_use: bool
+    model_name: str
+    device: str
+    compute_type: str
+    model_dir: str
+    allow_download: bool
+    error: str | None = None
+
+
+class LocalASRTestRequest(BaseModel):
+    load_model: bool = False
 
 
 class ASRSceneSettingUpdate(BaseModel):

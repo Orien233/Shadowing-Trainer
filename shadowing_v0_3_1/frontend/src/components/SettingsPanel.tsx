@@ -3,9 +3,12 @@ import {
   createProvider,
   deleteProvider,
   getASRSceneSettings,
+  getLocalASRStatus,
   listProviderCatalog,
   listProviderVoices,
   listProviders,
+  releaseLocalASR,
+  testLocalASR,
   testProvider,
   testProviderDraft,
   updateASRSceneSettings,
@@ -15,6 +18,7 @@ import type {
   AIProvider,
   ASRSceneSettings,
   ASRSceneSettingsUpdate,
+  LocalASRStatus,
   ProviderCapability,
   ProviderCatalogEntry,
   ProviderConfigField,
@@ -119,16 +123,28 @@ function displayVoice(voice: ProviderVoice): string {
 function testSummary(result: ProviderTestResponse): string {
   const verification = result.verification_level ? ` Verification: ${result.verification_level}.` : "";
   const providerCapabilities = result.capabilities.length ? ` Capabilities: ${result.capabilities.join(", ")}.` : "";
-  return `${result.ok ? "Test passed." : "Test failed."} ${result.message}${verification}${providerCapabilities}`;
+  const billing = result.billable ? " This test may be billable." : "";
+  return `${result.ok ? "Test passed." : "Test failed."} ${result.message}${verification}${providerCapabilities}${billing}`;
+}
+
+function localASRSummary(status: LocalASRStatus | null): string {
+  if (!status) return "Local Whisper environment status could not be loaded.";
+  if (!status.runtime_ready) return status.error || "Local Whisper is unavailable.";
+  if (status.model_loaded) return `Ready: ${status.model_name} is loaded on ${status.device}.`;
+  if (status.model_cached) return `Ready: ${status.model_name} is cached and will load on first use.`;
+  if (status.will_download_on_first_use) return `Ready: ${status.model_name} will download on first use.`;
+  return `Ready: ${status.model_name} will load on first use.`;
 }
 
 export default function SettingsPanel() {
   const [providers, setProviders] = useState<AIProvider[]>([]);
   const [catalog, setCatalog] = useState<ProviderCatalogEntry[]>(FALLBACK_CATALOG);
   const [scenes, setScenes] = useState<ASRSceneSettings | null>(null);
+  const [localASR, setLocalASR] = useState<LocalASRStatus | null>(null);
   const [message, setMessage] = useState("");
   const [draftTest, setDraftTest] = useState<ProviderTestResponse | null>(null);
   const [testingDraft, setTestingDraft] = useState(false);
+  const [checkingLocalASR, setCheckingLocalASR] = useState(false);
   const [providerVoices, setProviderVoices] = useState<Record<number, ProviderVoice[]>>({});
   const [loadingVoices, setLoadingVoices] = useState<number | null>(null);
   const [draft, setDraft] = useState<ProviderDraft>(() => newDraft(FALLBACK_CATALOG[0]));
@@ -143,15 +159,17 @@ export default function SettingsPanel() {
 
   const load = async () => {
     try {
-      const [nextProviders, nextScenes, nextCatalog] = await Promise.all([
+      const [nextProviders, nextScenes, nextCatalog, nextLocalASR] = await Promise.all([
         listProviders(),
         getASRSceneSettings(),
         listProviderCatalog().catch(() => []),
+        getLocalASRStatus().catch(() => null),
       ]);
       const usableCatalog = nextCatalog.length ? nextCatalog : FALLBACK_CATALOG;
       setProviders(nextProviders);
       setScenes(nextScenes);
       setCatalog(usableCatalog);
+      setLocalASR(nextLocalASR);
       setDraft((current) => {
         const currentEntry = usableCatalog.find((entry) => entry.kind === current.capability && entry.key === current.provider_type);
         return currentEntry ? current : newDraft(usableCatalog[0], current.name);
@@ -244,9 +262,10 @@ export default function SettingsPanel() {
     }
   }
 
-  async function testSaved(provider: AIProvider) {
+  async function testSaved(provider: AIProvider, mode: "configuration" | "network" | "inference" = "configuration") {
+    if (mode === "inference" && !window.confirm("This sends a small live provider request and may incur charges. Continue?")) return;
     try {
-      const result = await testProvider(provider.id);
+      const result = await testProvider(provider.id, { test_mode: mode });
       setMessage(testSummary(result));
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Provider test failed.");
@@ -324,6 +343,35 @@ export default function SettingsPanel() {
     }
   }
 
+  async function checkLocalASR(loadModel = false) {
+    if (loadModel && !window.confirm("Loading Local Whisper can download the configured model and use significant memory. Continue?")) return;
+    setCheckingLocalASR(true);
+    try {
+      const status = await testLocalASR(loadModel);
+      setLocalASR(status);
+      setMessage(localASRSummary(status));
+      await load();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Local Whisper check failed.");
+    } finally {
+      setCheckingLocalASR(false);
+    }
+  }
+
+  async function releaseLocalASRModel() {
+    setCheckingLocalASR(true);
+    try {
+      const status = await releaseLocalASR();
+      setLocalASR(status);
+      setMessage("Local Whisper model was released from memory.");
+      await load();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Could not release Local Whisper.");
+    } finally {
+      setCheckingLocalASR(false);
+    }
+  }
+
   function renderConfigField(field: ProviderConfigField) {
     const value = draft.extra_config[field.key];
     const voiceOptions = field.key === "default_voice" ? selectedCatalog.voice_presets || [] : [];
@@ -354,6 +402,8 @@ export default function SettingsPanel() {
 
   const materialRemoteAvailable = scenes?.material_transcription_remote_available ?? false;
   const recordingRemoteAvailable = scenes?.recording_evaluation_remote_available ?? false;
+  const materialLocalAvailable = scenes?.material_transcription_local_available ?? true;
+  const recordingLocalAvailable = scenes?.recording_evaluation_local_available ?? true;
 
   return <div className="card settings-panel"><h2>Settings</h2><p className="muted">Credentials stay in the backend. A blank API-key edit retains the saved key.</p>
     <section className="provider-section"><h3>Quick templates</h3><p className="muted">OpenAI and MiMo templates are built in and cannot be edited or deleted. Using one only pre-fills a new configuration; it does not save credentials.</p><div className="panel-actions">{catalog.filter((entry) => entry.preset !== false).map((entry) => <button key={catalogId(entry)} onClick={() => { setDraft(newDraft(entry)); setEditingProviderId(null); setDraftTest(null); }}>{entry.label}</button>)}</div></section>
@@ -372,13 +422,14 @@ export default function SettingsPanel() {
       </div>
       <div className="catalog-summary"><span>Protocol allows: {(selectedCatalog.available_capabilities || selectedCatalog.capabilities).join(", ") || "none"}. Checked boundaries are enforced by the backend.</span>{selectedCatalog.endpoint_hint && <span> Endpoint: {selectedCatalog.endpoint_hint}</span>}{selectedCatalog.docs_url && <a href={selectedCatalog.docs_url} target="_blank" rel="noreferrer">Adapter documentation</a>}</div>
       <div className="panel-actions"><button disabled={!isDraftComplete() || testingDraft} onClick={() => void testDraft()}>{testingDraft ? "Testing…" : "Test draft"}</button><button disabled={!isDraftComplete()} onClick={() => void saveConfiguration()}>{editingProviderId === null ? "Save configuration" : "Save changes"}</button>{editingProviderId !== null && <button onClick={() => { setEditingProviderId(null); setDraft(newDraft(catalog[0] || FALLBACK_CATALOG[0])); }}>Cancel edit</button>}</div>
-      {draftTest && <p className={`provider-test ${draftTest.ok ? "success" : "error"}`}>Verification level: {draftTest.verification_level || "unspecified"}</p>}
+      {draftTest && <p className={`provider-test ${draftTest.ok ? "success" : "error"}`}>Verification level: {draftTest.verification_level || "unspecified"}{draftTest.billable ? " · may incur charges" : ""}</p>}
     </section>
     {capabilities.map((capability) => {
       const capabilityProviders = providers.filter((provider) => provider.capability === capability);
-      return <section key={capability} className="provider-section"><h3>{capability.toUpperCase()}</h3>{capabilityProviders.length ? capabilityProviders.map((provider) => <div className="provider-row" key={provider.id}><div className="provider-details"><span><strong>{provider.name}</strong> · {provider.model_name || "no model"} · {provider.base_url || "no URL"} · {provider.is_enabled ? "enabled" : "disabled"} · capabilities: {provider.capabilities.join(", ") || "none"}</span>{provider.capability === "tts" && providerVoices[provider.id] && <span className="provider-voices">Available voices: {providerVoices[provider.id].length ? providerVoices[provider.id].map(displayVoice).join(", ") : "none reported"}</span>}</div><div><button onClick={() => void setDefault(provider)} disabled={provider.is_default}>{provider.is_default ? "Default" : "Set default"}</button><button onClick={() => void edit(provider)}>Edit</button><button onClick={() => void updateProvider(provider.id, { is_enabled: !provider.is_enabled }).then(load).catch((error) => setMessage(error instanceof Error ? error.message : "Could not update provider."))}>{provider.is_enabled ? "Disable" : "Enable"}</button>{provider.capability === "tts" && <button onClick={() => void loadVoices(provider)} disabled={loadingVoices === provider.id}>{loadingVoices === provider.id ? "Loading voices…" : providerVoices[provider.id] ? "Hide voices" : "Show voices"}</button>}<button onClick={() => void testSaved(provider)}>Test</button><button onClick={() => void remove(provider.id)}>Delete</button></div></div>) : <p className="muted">No provider configured.</p>}</section>;
+      return <section key={capability} className="provider-section"><h3>{capability.toUpperCase()}</h3>{capabilityProviders.length ? capabilityProviders.map((provider) => <div className="provider-row" key={provider.id}><div className="provider-details"><span><strong>{provider.name}</strong> · {provider.model_name || "no model"} · {provider.base_url || "no URL"} · {provider.is_enabled ? "enabled" : "disabled"} · capabilities: {provider.capabilities.join(", ") || "none"}</span>{provider.capability === "tts" && providerVoices[provider.id] && <span className="provider-voices">Available voices: {providerVoices[provider.id].length ? providerVoices[provider.id].map(displayVoice).join(", ") : "none reported"}</span>}</div><div><button onClick={() => void setDefault(provider)} disabled={provider.is_default}>{provider.is_default ? "Default" : "Set default"}</button><button onClick={() => void edit(provider)}>Edit</button><button onClick={() => void updateProvider(provider.id, { is_enabled: !provider.is_enabled }).then(load).catch((error) => setMessage(error instanceof Error ? error.message : "Could not update provider."))}>{provider.is_enabled ? "Disable" : "Enable"}</button>{provider.capability === "tts" && <button onClick={() => void loadVoices(provider)} disabled={loadingVoices === provider.id}>{loadingVoices === provider.id ? "Loading voices…" : providerVoices[provider.id] ? "Hide voices" : "Show voices"}</button>}<button onClick={() => void testSaved(provider)}>Check configuration</button><button onClick={() => void testSaved(provider, "network")}>{provider.capability === "llm" ? "Verify connection" : "Verify adapter"}</button><button className="provider-live-test" onClick={() => void testSaved(provider, "inference")}>Run paid test</button><button onClick={() => void remove(provider.id)}>Delete</button></div></div>) : <p className="muted">No provider configured.</p>}</section>;
     })}
-    <section className="provider-section"><h3>ASR scene routing</h3><label><input type="checkbox" checked={scenes?.material_transcription_use_local ?? true} disabled={!materialRemoteAvailable} onChange={(event) => void updateScene("material_transcription_use_local", event.target.checked)} /> Use Local Whisper for material transcription</label>{!materialRemoteAvailable && <p className="muted">{missingReason(scenes?.material_transcription_missing_capabilities ?? [])}</p>}<label><input type="checkbox" checked={scenes?.recording_evaluation_use_local ?? true} disabled={!recordingRemoteAvailable} onChange={(event) => void updateScene("recording_evaluation_use_local", event.target.checked)} /> Use Local Whisper for recording evaluation</label>{!recordingRemoteAvailable && <p className="muted">{missingReason(scenes?.recording_evaluation_missing_capabilities ?? [])}</p>}</section>
+    <section className="provider-section"><h3>Local Whisper runtime</h3><p className={localASR?.runtime_ready ? "muted" : "provider-test error"}>{localASRSummary(localASR)}</p>{localASR && <p className="muted">Model: {localASR.model_name} · {localASR.device} · {localASR.compute_type} · {localASR.model_cached ? "cached" : "not cached"}</p>}<div className="panel-actions"><button disabled={checkingLocalASR} onClick={() => void checkLocalASR()}>{checkingLocalASR ? "Checking…" : "Check environment"}</button>{localASR?.runtime_ready && !localASR.model_loaded && <button disabled={checkingLocalASR} onClick={() => void checkLocalASR(true)}>Load model</button>}{localASR?.model_loaded && <button disabled={checkingLocalASR} onClick={() => void releaseLocalASRModel()}>Release model memory</button>}</div>{!localASR?.installed && <p className="muted">Install it when local ASR is needed: <code>pip install -r requirements-local-whisper.txt</code></p>}</section>
+    <section className="provider-section"><h3>ASR scene routing</h3><label><input type="checkbox" checked={scenes?.material_transcription_use_local ?? true} disabled={!materialRemoteAvailable || !materialLocalAvailable} onChange={(event) => void updateScene("material_transcription_use_local", event.target.checked)} /> Use Local Whisper for material transcription</label><p className="muted">Effective route: {scenes?.material_transcription_effective_route || (scenes?.material_transcription_use_local ? "local" : "remote")}.{!materialLocalAvailable ? ` Local Whisper unavailable: ${scenes?.material_transcription_local_unavailable_reason || "not installed"}.` : ""}{!materialRemoteAvailable ? ` ${missingReason(scenes?.material_transcription_missing_capabilities ?? [])}` : ""}</p><label><input type="checkbox" checked={scenes?.recording_evaluation_use_local ?? true} disabled={!recordingRemoteAvailable || !recordingLocalAvailable} onChange={(event) => void updateScene("recording_evaluation_use_local", event.target.checked)} /> Use Local Whisper for recording evaluation</label><p className="muted">Effective route: {scenes?.recording_evaluation_effective_route || (scenes?.recording_evaluation_use_local ? "local" : "remote")}.{!recordingLocalAvailable ? ` Local Whisper unavailable: ${scenes?.recording_evaluation_local_unavailable_reason || "not installed"}.` : ""}{!recordingRemoteAvailable ? ` ${missingReason(scenes?.recording_evaluation_missing_capabilities ?? [])}` : ""}</p></section>
     {message && <p className="muted">{message}</p>}
   </div>;
 }
