@@ -12,11 +12,11 @@ function displayVoice(voice: ProviderVoice): string {
   return `${voice.name || voice.id}${languages}`;
 }
 
-export default function TextGeneratorPanel({ collections, onMaterialReady }: { collections: WordCollection[]; onMaterialReady: (materialId: number) => void }) {
+export default function TextGeneratorPanel({ collections, defaultLanguage = "en", onMaterialReady }: { collections: WordCollection[]; defaultLanguage?: string; onMaterialReady: (materialId: number) => void }) {
   const [mode, setMode] = useState<"random" | "manual" | "none">("random");
   const [count, setCount] = useState(5); const [selected, setSelected] = useState<number[]>([]);
   const [topic, setTopic] = useState("daily_life"); const [customTopic, setCustomTopic] = useState("");
-  const [language, setLanguage] = useState("en"); const [difficulty, setDifficulty] = useState("intermediate"); const [length, setLength] = useState(180);
+  const [language, setLanguage] = useState(defaultLanguage); const [difficulty, setDifficulty] = useState("intermediate"); const [length, setLength] = useState(180);
   const [practice, setPractice] = useState<TextPractice | null>(null); const [title, setTitle] = useState("My practice text"); const [body, setBody] = useState("");
   const [busy, setBusy] = useState(false); const [message, setMessage] = useState(""); const [speed, setSpeed] = useState<"slow" | "normal" | "fast">("normal"); const [voice, setVoice] = useState(""); const [accent, setAccent] = useState(""); const [gender, setGender] = useState(""); const [ttsModel, setTtsModel] = useState("");
   const [providers, setProviders] = useState<AIProvider[]>([]); const [providersLoaded, setProvidersLoaded] = useState(false);
@@ -26,6 +26,7 @@ export default function TextGeneratorPanel({ collections, onMaterialReady }: { c
   const canSynthesize = hasCapabilities(providers, "tts", ["synthesize"]);
 
   useEffect(() => { if (practice) { setTitle(practice.title); setBody(practice.body); } }, [practice]);
+  useEffect(() => { if (!practice) setLanguage(defaultLanguage); }, [defaultLanguage, practice]);
   useEffect(() => {
     // Collections load asynchronously.  Keep the initial random setting valid
     // instead of sending an impossible request for five words when a new

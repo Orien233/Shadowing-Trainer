@@ -1,12 +1,14 @@
 import { useState, type FormEvent } from "react";
 import { processMaterial, uploadMaterial } from "../lib/api";
 import type { Material } from "../types";
+import { useLanguage } from "../i18n/LanguageContext";
 
 interface Props {
   onUploaded: (material: Material) => void;
 }
 
 export default function MaterialUploader({ onUploaded }: Props) {
+  const { t } = useLanguage();
   const [title, setTitle] = useState("");
   const [file, setFile] = useState<File | null>(null);
   const [loading, setLoading] = useState(false);
@@ -38,11 +40,11 @@ export default function MaterialUploader({ onUploaded }: Props) {
 
   return (
     <form className="card upload-form" onSubmit={handleSubmit}>
-      <h2>上传素材</h2>
+      <h2>{t("material.uploadTitle")}</h2>
       <input
         value={title}
         onChange={(e) => setTitle(e.target.value)}
-        placeholder="素材标题"
+        placeholder={t("material.titlePlaceholder")}
       />
       <input
         type="file"
@@ -50,7 +52,7 @@ export default function MaterialUploader({ onUploaded }: Props) {
         onChange={(e) => setFile(e.target.files?.[0] ?? null)}
       />
       <button type="submit" disabled={loading || !title || !file}>
-        {loading ? "上传中..." : "上传"}
+        {loading ? t("material.uploading") : t("material.upload")}
       </button>
     </form>
   );

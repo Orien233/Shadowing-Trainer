@@ -5,6 +5,7 @@ import SentenceTrainer from "./components/SentenceTrainer";
 import WordCollectionPanel from "./components/WordCollectionPanel.jsx";
 import TextGeneratorPanel from "./components/TextGeneratorPanel";
 import SettingsPanel from "./components/SettingsPanel";
+import LanguageSelector from "./components/LanguageSelector";
 import {
   cleanupRecordingFiles,
   getLatestMaterialEvaluations,
@@ -16,6 +17,7 @@ import {
 import type { WordCollectionSortMode } from "./lib/api";
 import type { Material, Sentence, SentenceLatestEvaluation, WordCollection } from "./types";
 import { buildCollectedWordKey, normalizeWordText } from "./utils/sentenceTokenText.js";
+import { useLanguage } from "./i18n/LanguageContext";
 
 function indexLatestEvaluations(
   evaluations: SentenceLatestEvaluation[]
@@ -33,6 +35,7 @@ function getWordCollectionKey(collection: WordCollection): string {
 }
 
 export default function App() {
+  const { learningLanguage, t } = useLanguage();
   const [materials, setMaterials] = useState<Material[]>([]);
   const [activeMaterialId, setActiveMaterialId] = useState<number | null>(null);
   const [activePanel, setActivePanel] = useState<"practice" | "wordLibrary" | "textGenerator" | "settings">("practice");
@@ -88,11 +91,11 @@ export default function App() {
       const data = await listWordCollections({ sort });
       setWordCollections(data);
     } catch (error) {
-      setLoadError(error instanceof Error ? error.message : "无法加载素材列表。");
+      setLoadError(error instanceof Error ? error.message : t("app.libraryLoadFailed"));
     } finally {
       setLoadingWordCollections(false);
     }
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     void loadWordCollections();
@@ -129,7 +132,7 @@ export default function App() {
       setLatestEvaluations(indexLatestEvaluations(evaluationData));
     } catch (error) {
       if (requestId !== sentenceRequestIdRef.current) return;
-      setLoadError(error instanceof Error ? error.message : "无法加载词库。");
+      setLoadError(error instanceof Error ? error.message : t("app.practiceLoadFailed"));
       setSentences([]);
       setLatestEvaluations({});
     } finally {
@@ -137,7 +140,7 @@ export default function App() {
         setLoadingSentences(false);
       }
     }
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     if (!activeMaterialId) {
@@ -218,20 +221,20 @@ export default function App() {
   async function handleShutdown() {
     if (shuttingDown) return;
 
-    const confirmed = window.confirm("This will delete all recording files and close the app. Continue?");
+    const confirmed = window.confirm(t("app.closeConfirm"));
     if (!confirmed) return;
 
     setShuttingDown(true);
     try {
       const cleanupResult = await cleanupRecordingFiles();
       if (cleanupResult.failed_files.length > 0) {
-        throw new Error("Failed to delete one or more recording files.");
+        throw new Error(t("app.closeCleanupFailed"));
       }
       await shutdownBackend();
       closeFrontendWindow();
     } catch (error) {
-      setLoadError(error instanceof Error ? error.message : "无法加载练习内容。");
-      alert(error instanceof Error ? error.message : "Shutdown failed.");
+      setLoadError(error instanceof Error ? error.message : t("app.closeFailed"));
+      alert(error instanceof Error ? error.message : t("app.closeFailed"));
       setShuttingDown(false);
     }
   }
@@ -240,18 +243,21 @@ export default function App() {
     <div className="app-shell">
       <header className="app-header">
         <div className="app-header-main">
-          <h1>Shadowing Trainer v0.4</h1>
-          <p>上传素材 → 转写切句 → 翻译 → 逐句播放 → 跟读录音 → 基础评估</p>
-          <p className="muted">本地运维令牌仅用于兼容请求头，不构成访问控制；请勿将后端暴露到不可信网络。</p>
+          <h1>{t("app.title")}</h1>
+          <p>{t("app.workflow")}</p>
+          <p className="muted">{t("app.securityNote")}</p>
         </div>
-        <div className="top-panel-actions"><button type="button" onClick={() => setActivePanel("textGenerator")}>AI Text</button><button type="button" onClick={() => setActivePanel("settings")}>Settings</button></div>
+        <div className="app-header-controls">
+          <LanguageSelector />
+          <div className="top-panel-actions"><button type="button" onClick={() => setActivePanel("textGenerator")}>{t("app.aiText")}</button><button type="button" onClick={() => setActivePanel("settings")}>{t("app.settings")}</button></div>
+        </div>
         <button type="button" className="shutdown-button" disabled={shuttingDown} onClick={handleShutdown}>
-          {shuttingDown ? "Closing..." : "Close App"}
+          {shuttingDown ? t("app.closing") : t("app.close")}
         </button>
       </header>
 
       <main className="layout">
-        {loadError && <div className="card error-message" role="alert">{loadError} <button type="button" onClick={() => void loadMaterials()}>重试</button></div>}
+        {loadError && <div className="card error-message" role="alert">{loadError} <button type="button" onClick={() => void loadMaterials()}>{t("app.retry")}</button></div>}
         <section className="sidebar">
           <MaterialUploader onUploaded={handleUploaded} />
           <MaterialList
@@ -274,11 +280,11 @@ export default function App() {
               onDeleted={handleWordDeleted}
             />
           ) : activePanel === "textGenerator" ? (
-            <TextGeneratorPanel collections={wordCollections} onMaterialReady={handleTextMaterialReady} />
+            <TextGeneratorPanel collections={wordCollections} defaultLanguage={learningLanguage} onMaterialReady={handleTextMaterialReady} />
           ) : activePanel === "settings" ? (
             <SettingsPanel />
           ) : loadingSentences ? (
-            <div className="card"><p>句子加载中...</p></div>
+            <div className="card"><p>{t("app.sentencesLoading")}</p></div>
           ) : (
             <SentenceTrainer
               material={activeMaterial}

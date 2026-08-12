@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { deleteMaterial, processMaterial } from "../lib/api";
 import type { Material } from "../types";
+import { useLanguage } from "../i18n/LanguageContext";
 
 interface Props {
   materials: Material[];
@@ -21,6 +22,7 @@ export default function MaterialList({
   onProcessed,
   onDeleted,
 }: Props) {
+  const { t } = useLanguage();
   const [processingIds, setProcessingIds] = useState<number[]>([]);
   const [deletingIds, setDeletingIds] = useState<number[]>([]);
   const [openMenuId, setOpenMenuId] = useState<number | null>(null);
@@ -41,7 +43,7 @@ export default function MaterialList({
       onProcessed(updated);
     } catch (error) {
       onProcessed(material);
-      alert(error instanceof Error ? error.message : "Processing failed.");
+      alert(error instanceof Error ? error.message : t("material.processingFailed"));
     } finally {
       setProcessingIds((prev) => prev.filter((id) => id !== material.id));
     }
@@ -49,7 +51,7 @@ export default function MaterialList({
 
   async function handleDelete(material: Material) {
     if (processingIds.includes(material.id) || deletingIds.includes(material.id)) return;
-    const confirmed = window.confirm(`Delete "${material.title}" and all generated files?`);
+    const confirmed = window.confirm(t("material.deleteConfirm", { title: material.title }));
     if (!confirmed) return;
 
     setOpenMenuId(null);
@@ -58,7 +60,7 @@ export default function MaterialList({
       await deleteMaterial(material.id);
       onDeleted(material.id);
     } catch (error) {
-      alert(error instanceof Error ? error.message : "Delete failed.");
+      alert(error instanceof Error ? error.message : t("material.deleteFailed"));
     } finally {
       setDeletingIds((prev) => prev.filter((id) => id !== material.id));
     }
@@ -66,7 +68,7 @@ export default function MaterialList({
 
   return (
     <div className="card">
-      <h2>素材列表</h2>
+      <h2>{t("material.listTitle")}</h2>
       <button
         type="button"
         className={`word-library-button ${isWordLibraryActive ? "active" : ""}`}
@@ -75,10 +77,10 @@ export default function MaterialList({
           onOpenWordLibrary();
         }}
       >
-        收藏单词
+        {t("material.wordLibrary")}
       </button>
       <div className="material-list">
-        {materials.length === 0 && <p className="muted">No materials yet. Upload one first.</p>}
+        {materials.length === 0 && <p className="muted">{t("material.empty")}</p>}
         {materials.map((material) => {
           const isProcessing = material.status === "processing" || material.status === "queued" || processingIds.includes(material.id);
           const isDeleting = deletingIds.includes(material.id);
@@ -96,9 +98,9 @@ export default function MaterialList({
                   <span>{material.status}</span>
                 </div>
                 {isProcessing && (
-                  <div className="material-progress" aria-label="Processing progress">
-                    <span>Processing</span>
-                    <span>{material.processing_stage || "queued"}</span>
+                  <div className="material-progress" aria-label={t("material.processingProgress")}>
+                    <span>{t("material.processing")}</span>
+                    <span>{material.processing_stage || t("material.queued")}</span>
                     <strong>{material.processing_progress ?? 0}%</strong>
                   </div>
                 )}
@@ -108,13 +110,13 @@ export default function MaterialList({
               </button>
 
               <div className="material-actions">
-                {isDeleting && <span className="material-state">Deleting...</span>}
+                {isDeleting && <span className="material-state">{t("material.deleting")}</span>}
                 <div className="material-menu-anchor">
                   <button
                     type="button"
                     className="material-more-button"
                     disabled={!canOpenMenu}
-                    aria-label="More actions"
+                    aria-label={t("material.moreActions")}
                     onClick={() => setOpenMenuId((prev) => (prev === material.id ? null : material.id))}
                   >
                     ...
@@ -130,12 +132,12 @@ export default function MaterialList({
                         }}
                       >
                         {isProcessing
-                          ? "Processing..."
+                          ? t("material.processing")
                           : material.status === "ready"
-                            ? "Reprocess"
+                            ? t("material.reprocess")
                             : material.status === "failed"
-                              ? "Retry Processing"
-                            : "Start Processing"}
+                              ? t("material.retryProcessing")
+                            : t("material.startProcessing")}
                       </button>
                       <button
                         type="button"
@@ -145,7 +147,7 @@ export default function MaterialList({
                           void handleDelete(material);
                         }}
                       >
-                        Delete Material
+                        {t("material.delete")}
                       </button>
                     </div>
                   )}
