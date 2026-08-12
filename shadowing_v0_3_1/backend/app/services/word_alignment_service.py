@@ -3,6 +3,7 @@ from __future__ import annotations
 import difflib
 import re
 import string
+import unicodedata
 
 from dataclasses import dataclass, field
 from typing import Any, Literal
@@ -105,6 +106,63 @@ _SINGLE_FILLERS = {
 _FILLER_PHRASES = {("you", "know")}
 
 
+@dataclass(frozen=True)
+class AlignmentProfile:
+    """The documented precision level of a language's token alignment.
+
+    ``word`` is the established English alignment, including its limited
+    contraction and filler handling.  CJK scripts are aligned by Unicode
+    character because this service intentionally does not depend on a lexical
+    segmenter.  Other languages receive conservative Unicode-word alignment:
+    exact tokens only, without English morphology or filler heuristics.
+    """
+
+    language: str
+    alignment_mode: Literal["word", "unicode_character", "unicode_word"]
+    support_level: Literal["full", "limited", "basic"]
+    token_unit: Literal["word", "character", "unicode_word"]
+
+    def to_dict(self) -> dict[str, str]:
+        return {
+            "language": self.language,
+            "alignment_mode": self.alignment_mode,
+            "support_level": self.support_level,
+            "token_unit": self.token_unit,
+        }
+
+
+def resolve_alignment_profile(content_language: str | None = None) -> AlignmentProfile:
+    """Select a stable, conservative alignment profile for content language.
+
+    Missing language preserves the legacy English behavior for existing callers
+    and historical recordings.  This is deliberately separate from ASR
+    language validation so an unknown-but-valid BCP-47 tag still receives the
+    safe generic Unicode tokenizer.
+    """
+    candidate = str(content_language or "en").strip().replace("_", "-") or "en"
+    folded = candidate.casefold()
+    if folded == "en" or folded.startswith("en-"):
+        return AlignmentProfile("en", "word", "full", "word")
+
+    cjk_languages = {
+        "zh": "zh-CN",
+        "zh-cn": "zh-CN",
+        "zh-tw": "zh-TW",
+        "ja": "ja",
+        "ko": "ko",
+    }
+    canonical_cjk = cjk_languages.get(folded)
+    if canonical_cjk:
+        return AlignmentProfile(
+            canonical_cjk,
+            "unicode_character",
+            "limited",
+            "character",
+        )
+
+    return AlignmentProfile(candidate, "unicode_word", "basic", "unicode_word")
+
+
 @dataclass
 class _Token:
     index: int
@@ -197,8 +255,59 @@ def _expand_contraction(token: str) -> str:
     return token
 
 
-def normalize_token_text(text: str) -> str:
-    """Normalize one display token while keeping contraction expansions simple."""
+def _is_unicode_word_character(character: str) -> bool:
+    """Return whether a character belongs to a Unicode lexical token."""
+    category = unicodedata.category(character)
+    return category[0] in {"L", "N", "M"} or category == "Pc"
+
+
+def _is_cjk_character(character: str) -> bool:
+    codepoint = ord(character)
+    return (
+        0x3400 <= codepoint <= 0x4DBF  # CJK Extension A
+        or 0x4E00 <= codepoint <= 0x9FFF  # CJK Unified Ideographs
+        or 0xF900 <= codepoint <= 0xFAFF  # CJK Compatibility Ideographs
+        or 0x3040 <= codepoint <= 0x309F  # Hiragana
+        or 0x30A0 <= codepoint <= 0x30FF  # Katakana
+        or 0xAC00 <= codepoint <= 0xD7AF  # Hangul syllables
+    )
+
+
+def _unicode_word_tokens(text: str, *, split_cjk_characters: bool) -> list[str]:
+    """Split text on Unicode boundaries without applying English rules."""
+    tokens: list[str] = []
+    current: list[str] = []
+
+    def flush() -> None:
+        if current:
+            tokens.append("".join(current))
+            current.clear()
+
+    for character in unicodedata.normalize("NFKC", text or ""):
+        if split_cjk_characters and _is_cjk_character(character):
+            flush()
+            tokens.append(character)
+        elif _is_unicode_word_character(character):
+            current.append(character)
+        elif character in {"'", "\u2018", "\u2019", "\u201b", "\u2032"} and current:
+            # Keep an internal apostrophe in generic lexical tokens, but do not
+            # expand it as an English contraction.
+            current.append("'")
+        else:
+            flush()
+    flush()
+    return [token.strip("'") for token in tokens if token.strip("'")]
+
+
+def normalize_token_text(
+    text: str,
+    content_language: str | None = None,
+) -> str:
+    """Normalize a display token using only its language profile's rules."""
+    profile = resolve_alignment_profile(content_language)
+    if profile.alignment_mode != "word":
+        return unicodedata.normalize("NFKC", text).casefold().strip()
+
     lowered = _replace_apostrophes(text).lower().strip()
     lowered = lowered.strip(string.punctuation.replace("'", ""))
     if not lowered:
@@ -210,12 +319,23 @@ def normalize_token_text(text: str) -> str:
     return " ".join(part for part in expanded.split() if part)
 
 
-def tokenize_for_alignment(text: str) -> list[dict[str, Any]]:
-    """Return frontend-facing tokens without losing the original display text."""
+def tokenize_for_alignment(
+    text: str,
+    content_language: str | None = None,
+) -> list[dict[str, Any]]:
+    """Return display tokens using the conservative profile for this language."""
+    profile = resolve_alignment_profile(content_language)
     tokens: list[_Token] = []
-    for raw_match in _TOKEN_PATTERN.finditer(text or ""):
-        raw_text = raw_match.group(0)
-        normalized = normalize_token_text(raw_text)
+    if profile.alignment_mode == "word":
+        raw_tokens = [match.group(0) for match in _TOKEN_PATTERN.finditer(text or "")]
+    else:
+        raw_tokens = _unicode_word_tokens(
+            text,
+            split_cjk_characters=profile.alignment_mode == "unicode_character",
+        )
+
+    for raw_text in raw_tokens:
+        normalized = normalize_token_text(raw_text, profile.language)
         if not normalized:
             continue
         tokens.append(
@@ -228,12 +348,19 @@ def tokenize_for_alignment(text: str) -> list[dict[str, Any]]:
     return [_token_to_dict(token) for token in tokens]
 
 
-def align_word_tokens(source_text: str, asr_text: str) -> dict[str, Any]:
-    """Align reference and learner ASR text at word level for UI highlighting."""
+def align_word_tokens(
+    source_text: str,
+    asr_text: str,
+    content_language: str | None = None,
+) -> dict[str, Any]:
+    """Align reference and learner text with an explicit language profile."""
+    profile = resolve_alignment_profile(content_language)
     reference_tokens = [
-        _Token(**token) for token in tokenize_for_alignment(source_text)
+        _Token(**token) for token in tokenize_for_alignment(source_text, profile.language)
     ]
-    user_tokens = [_Token(**token) for token in tokenize_for_alignment(asr_text)]
+    user_tokens = [
+        _Token(**token) for token in tokenize_for_alignment(asr_text, profile.language)
+    ]
 
     reference_results = [_result_from_token(token) for token in reference_tokens]
     user_results = [_result_from_token(token) for token in user_tokens]
@@ -244,8 +371,13 @@ def align_word_tokens(source_text: str, asr_text: str) -> dict[str, Any]:
             user_result.severity = "minor"
             user_result.insertion_type = "extra"
             user_result.note = "Extra learner word without a reference sentence."
-        summary = _build_summary(reference_results, user_results, reference_count=0)
-        return _build_payload(reference_results, user_results, summary)
+        summary = _build_summary(
+            reference_results,
+            user_results,
+            reference_count=0,
+            profile=profile,
+        )
+        return _build_payload(reference_results, user_results, summary, profile)
 
     if not user_tokens:
         for reference_result in reference_results:
@@ -256,10 +388,11 @@ def align_word_tokens(source_text: str, asr_text: str) -> dict[str, Any]:
             reference_results,
             user_results,
             reference_count=len(reference_tokens),
+            profile=profile,
         )
-        return _build_payload(reference_results, user_results, summary)
+        return _build_payload(reference_results, user_results, summary, profile)
 
-    edits = _align_tokens(reference_tokens, user_tokens)
+    edits = _align_tokens(reference_tokens, user_tokens, profile)
     insertion_indices: set[int] = set()
 
     for edit in edits:
@@ -297,7 +430,7 @@ def align_word_tokens(source_text: str, asr_text: str) -> dict[str, Any]:
         elif edit.operation == "insertion":
             insertion_indices.add(edit.user_index)
 
-    _mark_user_insertions(user_results, user_tokens, insertion_indices)
+    _mark_user_insertions(user_results, user_tokens, insertion_indices, profile)
     _mark_unknown_reference_tokens(reference_results)
     _mark_unknown_user_tokens(user_results)
 
@@ -305,8 +438,9 @@ def align_word_tokens(source_text: str, asr_text: str) -> dict[str, Any]:
         reference_results,
         user_results,
         reference_count=len(reference_tokens),
+        profile=profile,
     )
-    return _build_payload(reference_results, user_results, summary)
+    return _build_payload(reference_results, user_results, summary, profile)
 
 
 def _token_to_dict(token: _Token) -> dict[str, Any]:
@@ -344,10 +478,16 @@ def _mark_user_insertions(
     user_results: list[_TokenResult],
     user_tokens: list[_Token],
     insertion_indices: set[int],
+    profile: AlignmentProfile,
 ) -> None:
     for user_index in sorted(insertion_indices):
         user_result = user_results[user_index]
-        insertion_type, note = _classify_insertion(user_tokens, user_index, insertion_indices)
+        insertion_type, note = _classify_insertion(
+            user_tokens,
+            user_index,
+            insertion_indices,
+            profile,
+        )
         user_result.status = "filler" if insertion_type == "filler" else "insertion"
         user_result.severity = "default" if insertion_type == "filler" else "minor"
         user_result.insertion_type = insertion_type
@@ -358,6 +498,7 @@ def _classify_insertion(
     user_tokens: list[_Token],
     user_index: int,
     insertion_indices: set[int],
+    profile: AlignmentProfile,
 ) -> tuple[str, str]:
     normalized = user_tokens[user_index].normalized
     previous_token = user_tokens[user_index - 1] if user_index > 0 else None
@@ -374,7 +515,7 @@ def _classify_insertion(
     ):
         return "repetition", "Repeated learner word."
 
-    if _is_filler_token(user_tokens, user_index, insertion_indices):
+    if profile.language == "en" and _is_filler_token(user_tokens, user_index, insertion_indices):
         return "filler", "Filler word not present in the reference."
 
     return "extra", "Extra learner word not present in the reference."
@@ -423,7 +564,11 @@ def _mark_unknown_user_tokens(user_results: list[_TokenResult]) -> None:
             result.note = "Extra learner word not present in the reference."
 
 
-def _align_tokens(reference_tokens: list[_Token], user_tokens: list[_Token]) -> list[_Edit]:
+def _align_tokens(
+    reference_tokens: list[_Token],
+    user_tokens: list[_Token],
+    profile: AlignmentProfile,
+) -> list[_Edit]:
     reference_norms = [token.normalized for token in reference_tokens]
     user_norms = [token.normalized for token in user_tokens]
     matcher = difflib.SequenceMatcher(None, reference_norms, user_norms, autojunk=False)
@@ -448,6 +593,7 @@ def _align_tokens(reference_tokens: list[_Token], user_tokens: list[_Token]) -> 
                     ref_end,
                     user_start,
                     user_end,
+                    profile,
                 )
             )
 
@@ -461,6 +607,7 @@ def _align_replace_block(
     ref_end: int,
     user_start: int,
     user_end: int,
+    profile: AlignmentProfile,
 ) -> list[_Edit]:
     ref_block = reference_tokens[ref_start:ref_end]
     user_block = user_tokens[user_start:user_end]
@@ -482,7 +629,11 @@ def _align_replace_block(
         for col in range(1, cols):
             ref_token = ref_block[row - 1]
             user_token = user_block[col - 1]
-            substitution_operation, substitution_cost = _replacement_cost(ref_token, user_token)
+            substitution_operation, substitution_cost = _replacement_cost(
+                ref_token,
+                user_token,
+                profile,
+            )
 
             candidates = (
                 (scores[row - 1][col - 1] + substitution_cost, substitution_operation),
@@ -519,10 +670,17 @@ def _align_replace_block(
     return edits
 
 
-def _replacement_cost(reference_token: _Token, user_token: _Token) -> tuple[AlignmentOperation, float]:
+def _replacement_cost(
+    reference_token: _Token,
+    user_token: _Token,
+    profile: AlignmentProfile,
+) -> tuple[AlignmentOperation, float]:
     if reference_token.normalized == user_token.normalized:
         return "equal", 0.0
-    if _is_minor_mismatch(reference_token.normalized, user_token.normalized):
+    if profile.language == "en" and _is_minor_mismatch(
+        reference_token.normalized,
+        user_token.normalized,
+    ):
         return "minor", 0.5
     return "substitution", 1.0
 
@@ -577,6 +735,7 @@ def _build_summary(
     user_results: list[_TokenResult],
     *,
     reference_count: int,
+    profile: AlignmentProfile,
 ) -> _Summary:
     summary = _Summary(
         correct_count=sum(1 for token in reference_results if token.status == "correct"),
@@ -607,9 +766,13 @@ def _build_payload(
     reference_results: list[_TokenResult],
     user_results: list[_TokenResult],
     summary: _Summary,
+    profile: AlignmentProfile,
 ) -> dict[str, Any]:
-    return {
+    payload = {
         "reference_tokens": [token.to_dict() for token in reference_results],
         "user_tokens": [token.to_dict() for token in user_results],
         "summary": summary.to_dict(),
     }
+    payload.update(profile.to_dict())
+    payload["summary"]["accuracy_unit"] = profile.token_unit
+    return payload

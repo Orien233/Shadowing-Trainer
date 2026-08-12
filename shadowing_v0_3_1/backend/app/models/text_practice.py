@@ -12,6 +12,7 @@ class TextPractice(SQLModel, table=True):
     body: str
     source_type: str = Field(index=True)  # llm or import
     target_language: str = "en"
+    translation_language: str = "zh-CN"
     difficulty: str | None = None
     desired_length: int | None = None
     topic: str | None = None

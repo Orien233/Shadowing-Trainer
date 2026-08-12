@@ -1,5 +1,6 @@
 import { useLanguage } from "../i18n/LanguageContext";
 import type { Evaluation } from "../types";
+import { getLocalizedEvaluationCopy } from "../utils/evaluationCopy";
 import WordAlignmentView from "./WordAlignmentView.jsx";
 
 interface Props { evaluation: Evaluation | null; }
@@ -9,6 +10,7 @@ export default function EvaluationPanel({ evaluation }: Props) {
   if (!evaluation) {
     return <div className="card"><h3>{t("evaluation.title")}</h3><p className="muted">{t("evaluation.empty")}</p></div>;
   }
+  const localizedCopy = getLocalizedEvaluationCopy(evaluation, t);
 
   return (
     <div className="card">
@@ -20,8 +22,8 @@ export default function EvaluationPanel({ evaluation }: Props) {
         <div><strong>{t("evaluation.sync")}</strong><span>{evaluation.sync_score}</span></div>
         <div><strong>{t("evaluation.pronunciation")}</strong><span>{evaluation.pronunciation_score}</span></div>
       </div>
-      <p><strong>{t("evaluation.feedback")}</strong>{evaluation.feedback}</p>
-      <p><strong>{t("evaluation.suggestion")}</strong>{evaluation.suggestion}</p>
+      <p><strong>{t("evaluation.feedback")}</strong>{localizedCopy.feedback}</p>
+      <p><strong>{t("evaluation.suggestion")}</strong>{localizedCopy.suggestion}</p>
       {evaluation.word_alignment && <WordAlignmentView alignment={evaluation.word_alignment} />}
     </div>
   );

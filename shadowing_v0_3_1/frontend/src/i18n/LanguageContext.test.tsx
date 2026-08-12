@@ -110,4 +110,76 @@ describe("language preferences", () => {
       expect(document.documentElement.lang).toBe("zh-CN");
     });
   });
+
+  it("does not let delayed hydration overwrite a language selected during startup", async () => {
+    window.localStorage.clear();
+    let resolvePreferences: (value: {
+      id: number;
+      ui_locale: "en-US";
+      learning_language: string;
+      translation_language: string;
+      updated_at: string;
+    }) => void = () => undefined;
+    api.getLanguagePreferences.mockImplementationOnce(() => new Promise((resolve) => {
+      resolvePreferences = resolve;
+    }));
+
+    render(
+      <LanguageProvider>
+        <LanguageSelector />
+        <CurrentLanguage />
+      </LanguageProvider>
+    );
+
+    fireEvent.change(screen.getByRole("combobox", { name: /Learning language/i }), {
+      target: { value: "ja" },
+    });
+    resolvePreferences({
+      id: 1,
+      ui_locale: "en-US",
+      learning_language: "en",
+      translation_language: "en",
+      updated_at: "2026-08-12T00:00:00Z",
+    });
+
+    await waitFor(() => {
+      expect(screen.getByLabelText("current-learning-language")).toHaveTextContent("ja");
+    });
+  });
+
+  it("serializes preference writes and sends the most recent value after an in-flight write", async () => {
+    let resolveFirstWrite: () => void = () => undefined;
+    api.updateLanguagePreferences
+      .mockImplementationOnce(() => new Promise<void>((resolve) => { resolveFirstWrite = resolve; }))
+      .mockResolvedValueOnce({
+        id: 1,
+        ui_locale: "en-US",
+        learning_language: "fr",
+        translation_language: "en",
+        updated_at: "2026-08-12T00:00:00Z",
+      });
+
+    render(
+      <LanguageProvider>
+        <LanguageSelector />
+      </LanguageProvider>
+    );
+
+    fireEvent.change(screen.getByRole("combobox", { name: /Learning language/i }), {
+      target: { value: "ja" },
+    });
+    await waitFor(() => expect(api.updateLanguagePreferences).toHaveBeenCalledTimes(1), { timeout: 1_000 });
+
+    fireEvent.change(screen.getByRole("combobox", { name: /Learning language/i }), {
+      target: { value: "fr" },
+    });
+    await new Promise((resolve) => window.setTimeout(resolve, 300));
+    expect(api.updateLanguagePreferences).toHaveBeenCalledTimes(1);
+
+    resolveFirstWrite();
+    await waitFor(() => expect(api.updateLanguagePreferences).toHaveBeenCalledTimes(2));
+    expect(api.updateLanguagePreferences).toHaveBeenLastCalledWith(expect.objectContaining({
+      learning_language: "fr",
+    }));
+  });
 });

@@ -4,6 +4,7 @@ from sqlmodel import Session
 
 from app.core.database import engine
 from app.models.asr_scene_setting import ASRSceneSetting
+from app.services.ai.asr.base import UnsupportedASRLanguageError
 from app.services.ai.asr.local_whisper import LocalWhisperASRProvider
 from app.services.ai.audio_types import ProviderCapability
 from app.services.local_whisper_runtime import get_local_whisper_status
@@ -31,6 +32,7 @@ class ASRSceneAvailability:
     scene: str
     remote_available: bool
     missing_capabilities: tuple[str, ...]
+    remote_unavailable_reason: str | None
     local_available: bool
     local_unavailable_reason: str | None
 
@@ -64,7 +66,12 @@ def get_scene_settings_for_read(session: Session) -> ASRSceneSetting:
     return session.get(ASRSceneSetting, 1) or ASRSceneSetting(id=1)
 
 
-def get_scene_availability(session: Session, scene: str) -> ASRSceneAvailability:
+def get_scene_availability(
+    session: Session,
+    scene: str,
+    *,
+    language: str | None = None,
+) -> ASRSceneAvailability:
     required = _SCENE_REQUIREMENTS.get(scene)
     if required is None:
         raise ValueError(f"Unknown ASR scene: {scene}")
@@ -76,15 +83,24 @@ def get_scene_availability(session: Session, scene: str) -> ASRSceneAvailability
             scene,
             False,
             ("remote_asr_provider",),
+            None,
             local.runtime_ready,
             local.error,
         )
     missing = required - get_enabled_capabilities(provider)
+    remote_unavailable_reason: str | None = None
+    if not missing and language is not None and str(language).strip():
+        remote_provider = get_provider(session, "asr", provider.id)
+        try:
+            remote_provider.provider_language(language)
+        except UnsupportedASRLanguageError as exc:
+            remote_unavailable_reason = str(exc)
     local = get_local_whisper_status()
     return ASRSceneAvailability(
         scene,
-        not missing,
+        not missing and remote_unavailable_reason is None,
         tuple(sorted(item.value for item in missing)),
+        remote_unavailable_reason,
         local.runtime_ready,
         local.error,
     )
@@ -94,6 +110,8 @@ def resolve_scene_route(
     session: Session,
     scene: str,
     value: ASRSceneSetting | None = None,
+    *,
+    language: str | None = None,
 ) -> str:
     """Return ``local``, ``remote``, or ``unavailable`` for a scene.
 
@@ -103,7 +121,7 @@ def resolve_scene_route(
     still fall back safely to local ASR.
     """
     value = value or get_scene_settings_for_read(session)
-    availability = get_scene_availability(session, scene)
+    availability = get_scene_availability(session, scene, language=language)
     if _requested_local(value, scene):
         if availability.local_available:
             return "local"
@@ -159,24 +177,34 @@ def effective_scene_flags(session: Session, value: ASRSceneSetting | None = None
     )
 
 
-def require_remote_scene_available(session: Session, scene: str) -> None:
-    availability = get_scene_availability(session, scene)
+def require_remote_scene_available(
+    session: Session,
+    scene: str,
+    *,
+    language: str | None = None,
+) -> None:
+    availability = get_scene_availability(session, scene, language=language)
     if not availability.remote_available:
+        if availability.remote_unavailable_reason:
+            raise ProviderConfigurationError(
+                f"Remote ASR cannot be used for {scene}: "
+                f"{availability.remote_unavailable_reason}"
+            )
         missing = ", ".join(availability.missing_capabilities)
         raise ProviderConfigurationError(
             f"Remote ASR cannot be used for {scene}; missing: {missing}."
         )
 
 
-def get_asr_provider(session: Session, scene: str):
-    route = resolve_scene_route(session, scene)
+def get_asr_provider(session: Session, scene: str, *, language: str | None = None):
+    route = resolve_scene_route(session, scene, language=language)
     if route == "local":
         return LocalWhisperASRProvider()
     if route == "remote":
-        require_remote_scene_available(session, scene)
+        require_remote_scene_available(session, scene, language=language)
         return get_provider(session, "asr")
-    availability = get_scene_availability(session, scene)
-    remote_reason = ", ".join(availability.missing_capabilities) or "not configured"
+    availability = get_scene_availability(session, scene, language=language)
+    remote_reason = availability.remote_unavailable_reason or ", ".join(availability.missing_capabilities) or "not configured"
     local_reason = availability.local_unavailable_reason or "not available"
     raise ProviderConfigurationError(
         f"No ASR route is available for {scene}. Local Whisper: {local_reason}. "
@@ -184,12 +212,27 @@ def get_asr_provider(session: Session, scene: str):
     )
 
 
-def transcribe_for_scene(scene: str, audio_path: str, *, word_timestamps: bool = False) -> list[dict]:
+def transcribe_for_scene(
+    scene: str,
+    audio_path: str,
+    *,
+    word_timestamps: bool = False,
+    language: str | None = None,
+) -> list[dict]:
     with Session(engine) as session:
-        result = get_asr_provider(session, scene).transcribe(audio_path, word_timestamps=word_timestamps)
+        result = get_asr_provider(session, scene, language=language).transcribe(
+            audio_path,
+            word_timestamps=word_timestamps,
+            language=language,
+        )
         return result.as_legacy_segments()
 
 
-def transcribe_text_for_scene(scene: str, audio_path: str) -> str:
+def transcribe_text_for_scene(
+    scene: str,
+    audio_path: str,
+    *,
+    language: str | None = None,
+) -> str:
     with Session(engine) as session:
-        return get_asr_provider(session, scene).transcribe_text(audio_path)
+        return get_asr_provider(session, scene, language=language).transcribe_text(audio_path, language=language)

@@ -6,7 +6,11 @@ from pathlib import Path
 from typing import Any
 
 from app.services.ai.http_transport import provider_http
-from app.services.ai.asr.base import ASRProvider
+from app.services.ai.asr.base import (
+    ASRProvider,
+    UnsupportedASRLanguageError,
+    resolve_asr_language,
+)
 from app.services.ai.audio_types import ASRResult, ASRSegment, AudioCapability
 from app.services.ai.audio_utils import configuration_message
 
@@ -29,18 +33,41 @@ class MiMoASRProvider(ASRProvider):
             return {"api-key": self.api_key, "Content-Type": "application/json"}
         return {"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"}
 
-    def transcribe(self, audio_path: str, *, word_timestamps: bool = False) -> ASRResult:
+    def provider_language(self, language: str | None) -> str:
+        """Map BCP-47 task metadata to MiMo's ``auto|zh|en`` boundary."""
+        requested = resolve_asr_language(language, self.extra_config) or "auto"
+        normalized = requested.strip().replace("_", "-").casefold()
+        if normalized in {"auto", "und"}:
+            return "auto"
+        primary = normalized.split("-", 1)[0]
+        if primary in {"en", "zh"}:
+            return primary
+        raise UnsupportedASRLanguageError(
+            f"MiMo ASR supports only English (en), Chinese (zh), or automatic "
+            f"detection; task language '{requested}' is not supported."
+        )
+
+    def transcribe(
+        self,
+        audio_path: str,
+        *,
+        word_timestamps: bool = False,
+        language: str | None = None,
+    ) -> ASRResult:
         if not self.api_key:
             raise ValueError("Provider API key is not configured.")
         if word_timestamps:
             self.require(AudioCapability.WORD_TIMESTAMPS)
+        # Validate before reading/encoding the whole file or issuing a billable
+        # request.  This repeats the Router check for direct Adapter callers.
+        requested_language = self.provider_language(language)
         path = Path(audio_path)
         mime_type = mimetypes.guess_type(path.name)[0] or "audio/wav"
         encoded_audio = base64.b64encode(path.read_bytes()).decode("ascii")
         payload = {
             "model": self.model_name,
             "messages": [{"role": "user", "content": [{"type": "input_audio", "input_audio": {"data": f"data:{mime_type};base64,{encoded_audio}"}}]}],
-            "asr_options": {"language": self.extra_config.get("language", "auto")},
+            "asr_options": {"language": requested_language},
         }
         response = provider_http.post(self.base_url, json=payload, headers=self._headers(), timeout=120)
         response.raise_for_status()

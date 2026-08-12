@@ -18,6 +18,7 @@ from app.models.evaluation import Evaluation
 from app.models.job import Job
 from app.models.recording import Recording
 from app.models.sentence import Sentence
+from app.models.material import Material
 from app.services.evaluation_service import evaluate_recording
 from app.services.material_score_service import record_material_sentence_score
 from app.services.media_service import extract_audio
@@ -110,6 +111,8 @@ async def _run_evaluation(job_id: str, payload: dict[str, Any]) -> dict[str, Any
         reference_text = sentence.source_text
         reference_duration = max(sentence.clip_duration or sentence.end_time - sentence.start_time, 0.1)
         reference_audio_path = sentence.clip_audio_path
+        material = session.get(Material, sentence.material_id)
+        content_language = material.content_language if material else None
 
     update_job(job_id, stage="normalizing_audio", progress=15)
     normalized_path = await asyncio.to_thread(extract_audio, source_path)
@@ -122,6 +125,7 @@ async def _run_evaluation(job_id: str, payload: dict[str, Any]) -> dict[str, Any
         reference_duration=reference_duration,
         recording_path=str(normalized_path),
         reference_audio_path=reference_audio_path,
+        content_language=content_language,
     )
 
     update_job(job_id, stage="saving_result", progress=90)
@@ -225,7 +229,9 @@ async def _run_job(job_id: str) -> None:
             with Session(engine) as session:
                 from app.models.text_practice import TextPractice
                 practice = session.get(TextPractice, payload.get("text_practice_id"))
-                if practice:
+                # Do not let an obsolete job overwrite a newer queue request
+                # or an edited practice that deliberately cleared ownership.
+                if practice and practice.tts_job_id == job_id:
                     practice.tts_status = "failed"
                     session.add(practice)
                     session.commit()
@@ -277,6 +283,59 @@ def retry_job(session: Session, job_id: str) -> Job:
         raise KeyError(job_id)
     if job.status not in {"failed", "cancelled"}:
         raise ValueError("Only failed or cancelled jobs can be retried.")
+    if job.kind == "tts_synthesis":
+        from app.models.text_practice import TextPractice
+        from app.services.tts_service import (
+            TTSJobObsoleteError,
+            require_retryable_tts_snapshot,
+        )
+
+        try:
+            payload = json.loads(job.payload)
+            practice_id = int(payload["text_practice_id"])
+        except (KeyError, TypeError, ValueError, json.JSONDecodeError) as exc:
+            raise ValueError(
+                "This TTS job has an invalid payload and cannot be retried."
+            ) from exc
+        practice = session.get(TextPractice, practice_id)
+        if not practice:
+            raise ValueError(
+                "This TTS job cannot be retried because its text practice no longer exists."
+            )
+        expected_owner_id = practice.tts_job_id
+        if expected_owner_id and expected_owner_id != job.id:
+            current_owner = session.get(Job, expected_owner_id)
+            if current_owner and current_owner.status in {"queued", "running"}:
+                raise ValueError(
+                    "A newer TTS job is already queued or running for this text practice."
+                )
+        try:
+            require_retryable_tts_snapshot(practice, payload)
+        except TTSJobObsoleteError as exc:
+            raise ValueError(str(exc)) from exc
+        # Reclaim ownership in the same transaction that requeues the durable
+        # job, so the worker cannot observe a queued TTS job with stale owner
+        # metadata on its practice.
+        ownership_filter = (
+            TextPractice.tts_job_id.is_(None)
+            if expected_owner_id is None
+            else TextPractice.tts_job_id == expected_owner_id
+        )
+        ownership_result = session.exec(
+            update(TextPractice)
+            .where(TextPractice.id == practice.id)
+            .where(ownership_filter)
+            .values(
+                tts_job_id=job.id,
+                tts_status="queued",
+                updated_at=utcnow(),
+            )
+        )
+        if not getattr(ownership_result, "rowcount", 0):
+            session.rollback()
+            raise ValueError(
+                "A newer TTS job claimed this text practice while the retry was being validated."
+            )
     job.status = "queued"
     job.stage = "queued"
     job.progress = 0

@@ -63,12 +63,17 @@ export interface WordAlignmentSummary {
   minor_error_count: number;
   filler_count?: number;
   word_accuracy: number;
+  accuracy_unit?: "word" | "character" | "unicode_word";
 }
 
 export interface WordAlignment {
   reference_tokens: WordAlignmentToken[];
   user_tokens: WordAlignmentToken[];
   summary: WordAlignmentSummary;
+  language?: string;
+  alignment_mode?: "word" | "unicode_character" | "unicode_word";
+  support_level?: "full" | "limited" | "basic";
+  token_unit?: "word" | "character" | "unicode_word";
 }
 
 export interface Evaluation {
@@ -245,6 +250,7 @@ export interface ASRSceneSettingsUpdate {
 }
 export interface TextPractice {
   id: number; title: string; body: string; source_type: string; target_language: string;
+  translation_language: string;
   difficulty: string | null; desired_length: number | null; topic: string | null;
   explanation: string | null; requested_words: string[]; used_words: string[]; unused_words: string[];
   llm_provider_id: number | null; tts_provider_id: number | null; tts_status: string;

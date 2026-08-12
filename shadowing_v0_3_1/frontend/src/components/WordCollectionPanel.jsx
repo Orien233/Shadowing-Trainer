@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { languageLabel } from "../i18n/catalog";
 import { useLanguage } from "../i18n/LanguageContext";
 import { deleteWordCollection } from "../lib/api";
 import { normalizeWordText } from "../utils/sentenceTokenText.js";
@@ -15,7 +16,7 @@ export default function WordCollectionPanel({
   onRefresh,
   onDeleted,
 }) {
-  const { t } = useLanguage();
+  const { uiLocale, t } = useLanguage();
   const [deletingIds, setDeletingIds] = useState(() => new Set());
   const [sortMode, setSortMode] = useState("collected_time_asc");
   const visibleCollections = collections ?? [];
@@ -72,9 +73,8 @@ export default function WordCollectionPanel({
         <div className="word-collection-list">
           {visibleCollections.map((collection) => {
             const isDeleting = deletingIds.has(collection.id);
-            const displayWord =
-              normalizeWordText(collection.normalized_word || collection.word_text) ||
-              String(collection.word_text ?? "").toLowerCase();
+            const displayWord = String(collection.word_text ?? "").trim() ||
+              normalizeWordText(collection.normalized_word || "");
             return (
               <button
                 key={collection.id}
@@ -84,9 +84,9 @@ export default function WordCollectionPanel({
                 onClick={() => void handleDelete(collection)}
                 title={t("wordCollection.remove")}
               >
-                <span className="word-collection-text">{displayWord}</span>
+                <span className="word-collection-text" dir="auto">{displayWord}</span>
                 <span className="word-collection-meta">
-                  {collection.language || "en"}
+                  {languageLabel(collection.language || "en", uiLocale)}
                   {isDeleting ? ` · ${t("wordCollection.removing")}` : ""}
                 </span>
               </button>

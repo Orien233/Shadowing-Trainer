@@ -39,7 +39,7 @@ def edit_text_practice(practice_id: int, payload: TextPracticeUpdate, session: S
     practice = session.get(TextPractice, practice_id)
     if not practice:
         raise HTTPException(status_code=404, detail="Text practice not found.")
-    return _read(update_practice(session, practice, title=payload.title, body=payload.body))
+    return _read(update_practice(session, practice, title=payload.title, body=payload.body, target_language=payload.target_language, translation_language=payload.translation_language))
 
 
 @router.post("/{practice_id}/tts", response_model=TTSJobResponse, status_code=202)

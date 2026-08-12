@@ -73,7 +73,18 @@ class OpenAIAudioTTSProvider(TTSProvider):
         }
         instructions = self.extra_config.get("instructions") or self.extra_config.get("style_instruction")
         if instructions:
+            # This setting was explicitly chosen by the user for an endpoint
+            # which accepts OpenAI's optional instructions field.
             payload["instructions"] = str(instructions)
+        # ``language`` is deliberately internal metadata by default.  Many
+        # OpenAI-compatible speech endpoints implement only the base request
+        # shape and reject unfamiliar optional fields.  Users can opt in only
+        # after confirming their endpoint implements ``instructions``.
+        if request.language and self.extra_config.get("send_language_instruction") is True:
+            language_instruction = f"Speak the input in {request.language}."
+            payload["instructions"] = " ".join(
+                part for part in (str(payload.get("instructions", "")).strip(), language_instruction) if part
+            )
         response = provider_http.post(
             self.base_url,
             json=payload,
@@ -93,7 +104,7 @@ class OpenAIAudioTTSProvider(TTSProvider):
             media_type=media_type,
             extension=extension,
             raw_pcm=raw_pcm,
-            provider_metadata={"adapter": "openai_audio_tts", "model": payload["model"], "voice": payload["voice"]},
+            provider_metadata={"adapter": "openai_audio_tts", "model": payload["model"], "voice": payload["voice"], "language": request.language},
         )
 
     def list_voices(self) -> list[dict[str, Any]]:

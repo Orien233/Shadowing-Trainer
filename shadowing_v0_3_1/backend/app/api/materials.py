@@ -338,12 +338,9 @@ def _normalize_translations_for_sentences(
     if len(normalized) == expected_count:
         return normalized
 
-    for item in sentence_candidates[len(normalized) :]:
-        source_text = str(item.get("source_text") or "").strip()
-        if source_text:
-            normalized.append(f"[Translation unavailable] {source_text}")
-        else:
-            normalized.append("[Translation unavailable]")
+    # Keep diagnostics out of learner content.  A blank translation is
+    # rendered as a localized "not available" state by the frontend.
+    normalized.extend("" for _ in sentence_candidates[len(normalized) :])
     return normalized
 
 
@@ -427,6 +424,8 @@ async def _process_material_in_background(material_id: int, owner: str) -> None:
                 return
             source_path = Path(material.original_path)
             is_video = material.file_type == "video"
+            content_language = material.content_language
+            translation_language = material.translation_language
             audio_source_path = source_path
             if is_video:
                 audio_source_path = await asyncio.to_thread(transcode_video_for_storage, source_path)
@@ -445,8 +444,13 @@ async def _process_material_in_background(material_id: int, owner: str) -> None:
             MATERIAL_TRANSCRIPTION,
             str(audio_path),
             word_timestamps=True,
+            language=content_language,
         )
-        sentence_candidates = await asyncio.to_thread(segment_to_sentences, segments)
+        sentence_candidates = await asyncio.to_thread(
+            segment_to_sentences,
+            segments,
+            language=content_language,
+        )
         enriched_candidates, translations = await asyncio.gather(
             asyncio.to_thread(
                 build_sentence_audio_metadata,
@@ -455,7 +459,11 @@ async def _process_material_in_background(material_id: int, owner: str) -> None:
                 sentence_candidates,
                 duration,
             ),
-            translate_sentences(item["source_text"] for item in sentence_candidates),
+            translate_sentences(
+                (item["source_text"] for item in sentence_candidates),
+                source_language=content_language,
+                target_language=translation_language,
+            ),
         )
         if len(enriched_candidates) != len(sentence_candidates):
             raise RuntimeError(
@@ -465,7 +473,7 @@ async def _process_material_in_background(material_id: int, owner: str) -> None:
         if len(translations) != len(enriched_candidates):
             logger.warning(
                 "Translation count mismatch for material %s: expected=%s got=%s. "
-                "Missing translations will be filled with fallback text.",
+                "Missing translations will remain blank for localized UI handling.",
                 material_id,
                 len(enriched_candidates),
                 len(translations),

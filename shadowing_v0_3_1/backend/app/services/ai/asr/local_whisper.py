@@ -1,6 +1,6 @@
 from typing import Any
 
-from app.services.ai.asr.base import ASRProvider
+from app.services.ai.asr.base import ASRProvider, openai_language_code, resolve_asr_language
 from app.services.ai.audio_types import ASRResult, ASRSegment, ASRWord, AudioCapability
 from app.services.local_whisper_runtime import get_local_whisper_status, LocalWhisperUnavailableError
 from app.services.transcription_service import transcribe_audio
@@ -25,10 +25,20 @@ class LocalWhisperASRProvider(ASRProvider):
         self.model_name = model_name
         self.extra_config = dict(extra_config or {})
 
-    def transcribe(self, audio_path: str, *, word_timestamps: bool = False) -> ASRResult:
+    def transcribe(
+        self,
+        audio_path: str,
+        *,
+        word_timestamps: bool = False,
+        language: str | None = None,
+    ) -> ASRResult:
         if word_timestamps:
             self.require(AudioCapability.WORD_TIMESTAMPS)
-        raw_segments = transcribe_audio(audio_path, word_timestamps=word_timestamps)
+        raw_segments = transcribe_audio(
+            audio_path,
+            word_timestamps=word_timestamps,
+            language=openai_language_code(resolve_asr_language(language, self.extra_config)),
+        )
         segments = [
             ASRSegment(
                 text=str(item.get("text", "")).strip(),

@@ -1,4 +1,5 @@
 import string
+import unicodedata
 from datetime import UTC, datetime
 from typing import Literal
 
@@ -7,6 +8,7 @@ from sqlmodel import Session, asc, desc, func, select
 
 from app.models.word_collection import WordCollection
 from app.schemas.word_collection import WordCollectionCreate
+from app.services.language_catalog import normalize_language_tag
 
 
 _EDGE_PUNCTUATION = string.punctuation + "\u2018\u2019\u201c\u201d"
@@ -37,10 +39,14 @@ def _is_word_apostrophe(chars: list[str], index: int) -> bool:
 
 
 def clean_collected_word_text(word_text: str) -> str:
-    chars = list(str(word_text or "").strip())
+    chars = list(unicodedata.normalize("NFC", str(word_text or "").strip()))
     cleaned: list[str] = []
     for index, char in enumerate(chars):
-        if char.isalnum() or _is_word_apostrophe(chars, index):
+        # Combining marks carry meaning in many supported writing systems
+        # (for example Arabic tashkeel). Keep a mark only after word content,
+        # so surrounding punctuation remains excluded.
+        is_combining_mark = unicodedata.category(char).startswith("M") and bool(cleaned)
+        if char.isalnum() or is_combining_mark or _is_word_apostrophe(chars, index):
             cleaned.append(char)
     return "".join(cleaned).strip(_EDGE_PUNCTUATION)
 
@@ -53,12 +59,12 @@ def _replace_apostrophes(text: str) -> str:
 
 
 def normalize_word_text(word_text: str) -> str:
-    return _replace_apostrophes(clean_collected_word_text(word_text)).lower()
+    cleaned = _replace_apostrophes(clean_collected_word_text(word_text))
+    return unicodedata.normalize("NFKC", cleaned).casefold()
 
 
 def normalize_language(language: str | None) -> str:
-    normalized = str(language or "en").strip().lower()
-    return normalized or "en"
+    return normalize_language_tag(language or "en")
 
 
 def collect_word(
@@ -71,20 +77,22 @@ def collect_word(
         raise EmptyWordCollectionError("Word text is empty after normalization.")
 
     language = normalize_language(payload.language)
-    existing = session.exec(
+    # SQLite's ``lower`` only handles ASCII.  Use it to narrow by language,
+    # then apply the same Unicode-aware canonicalization to legacy keys before
+    # deciding whether this is a duplicate (for example Straße/STRASSE).
+    language_matches = session.exec(
         select(WordCollection).where(
-            func.lower(WordCollection.normalized_word) == normalized_word,
-            func.lower(WordCollection.language) == language,
+            func.lower(WordCollection.language) == language.casefold(),
         )
-    ).first()
-    if existing:
+    ).all()
+    if any(normalize_word_text(item.normalized_word) == normalized_word for item in language_matches):
         raise WordAlreadyCollectedError
 
     now = datetime.now(UTC)
     collection = WordCollection(
         material_id=payload.material_id,
         sentence_id=payload.sentence_id,
-        word_text=normalized_word,
+        word_text=clean_word_text,
         normalized_word=normalized_word,
         language=language,
         translation=payload.translation,
@@ -108,12 +116,19 @@ def collect_word(
 def list_word_collections(
     session: Session,
     sort: WordCollectionSortMode = "collected_time_asc",
+    language: str | None = None,
 ) -> list[WordCollection]:
     statement = select(WordCollection)
+    if language:
+        normalized_language = normalize_language(language)
+        statement = statement.where(func.lower(WordCollection.language) == normalized_language.casefold())
     if sort == "alphabetical":
+        # SQLite's lower()/collation is ASCII-only. Fetch newest-first for a
+        # deterministic tie-break, then apply the same Unicode normalization
+        # used by collection writes in Python.
         statement = statement.order_by(
-            asc(func.lower(WordCollection.normalized_word)),
             desc(WordCollection.created_at),
+            desc(WordCollection.id),
         )
     elif sort == "collected_time_desc":
         statement = statement.order_by(
@@ -125,7 +140,13 @@ def list_word_collections(
             desc(WordCollection.created_at),
             desc(WordCollection.id),
         )
-    return list(session.exec(statement).all())
+    items = list(session.exec(statement).all())
+    if sort == "alphabetical":
+        return sorted(
+            items,
+            key=lambda item: unicodedata.normalize("NFKC", item.normalized_word).casefold(),
+        )
+    return items
 
 
 def delete_word_collection(session: Session, collection_id: int) -> bool:

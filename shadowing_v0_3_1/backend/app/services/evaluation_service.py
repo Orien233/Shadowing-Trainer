@@ -127,6 +127,7 @@ def evaluate_recording(
     reference_duration: float,
     recording_path: str,
     reference_audio_path: str | None = None,
+    content_language: str | None = None,
 ) -> dict[str, Any]:
     """Run the local multi-branch evaluator and return legacy-compatible fields."""
     trim_result = create_trimmed_audio(
@@ -143,13 +144,25 @@ def evaluate_recording(
     evaluation_audio_path = trim_result.audio_path
 
     try:
-        asr_text = transcribe_text_for_scene(RECORDING_EVALUATION, evaluation_audio_path)
+        asr_text = transcribe_text_for_scene(
+            RECORDING_EVALUATION,
+            evaluation_audio_path,
+            language=content_language,
+        )
         duration = _safe_get_duration(evaluation_audio_path)
         safe_reference_duration = max(float(reference_duration), 0.1)
         resolved_reference_audio_path = _resolve_reference_audio_path(reference_audio_path)
 
-        content_metrics = extract_content_metrics(reference_text, asr_text)
-        word_alignment = align_word_tokens(reference_text, asr_text)
+        content_metrics = extract_content_metrics(
+            reference_text,
+            asr_text,
+            content_language=content_language,
+        )
+        word_alignment = align_word_tokens(
+            reference_text,
+            asr_text,
+            content_language=content_language,
+        )
         content_score = score_content_branch(content_metrics)
 
         imitation_metrics = compute_imitation_metrics(
@@ -215,6 +228,12 @@ def evaluate_recording(
 
         raw_metrics_payload = {
             "version": EVALUATION_PIPELINE_VERSION,
+            # These fields are top-level by design: stored raw metrics can be
+            # interpreted without assuming every alignment is English word
+            # accuracy. The nested copy remains useful to alignment consumers.
+            "language": word_alignment["language"],
+            "alignment_mode": word_alignment["alignment_mode"],
+            "support_level": word_alignment["support_level"],
             "content": content_metrics.to_dict(),
             "imitation": imitation_metrics.to_dict(),
             "prosody": prosody_metrics.to_dict(),

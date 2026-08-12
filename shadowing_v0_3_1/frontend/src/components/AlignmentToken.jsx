@@ -1,4 +1,6 @@
 import { getAlignmentTokenClass, getInsertionLabel } from "../utils/alignmentColors.js";
+import { useLanguage } from "../i18n/LanguageContext";
+import { getAlignmentTokenTitle } from "../utils/alignmentText.js";
 import { splitDisplayText } from "../utils/sentenceTokenText.js";
 
 function joinClasses(...classes) {
@@ -25,11 +27,13 @@ export default function AlignmentToken({
   coreProps = {},
   children,
 }) {
-  const label = getInsertionLabel(token);
+  const { uiLocale, t } = useLanguage();
+  const label = getInsertionLabel(token, uiLocale);
   const parts = splitDisplayText(token?.text);
+  const title = getAlignmentTokenTitle(token, t);
 
   return (
-    <span className={wrapClassName} title={token?.note ?? ""}>
+    <span className={wrapClassName} title={title}>
       {parts.leading && <span className="alignment-token-punctuation">{parts.leading}</span>}
       <AlignmentTokenCore token={token} className={coreClassName} coreProps={coreProps}>
         {children ? (

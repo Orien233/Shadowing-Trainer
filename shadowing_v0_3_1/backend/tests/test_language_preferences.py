@@ -17,6 +17,7 @@ from app.core.database import get_session
 from app.models.learning_language_preference import LearningLanguagePreference
 from app.models.material import Material
 from app.models.job import Job
+from app.models.text_practice import TextPractice
 from app.services.language_catalog import (
     ASR_AUTO_LANGUAGE,
     UNDETERMINED_LANGUAGE,
@@ -211,3 +212,32 @@ def test_language_migration_upgrades_and_backfills_legacy_material_table():
         ).mappings().one()
         assert row == {"content_language": "en", "translation_language": "zh-CN"}
         assert "learning_language_preferences" in inspect(connection).get_table_names()
+
+
+def test_text_practice_translation_language_migration_backfills_legacy_rows():
+    engine = create_engine("sqlite://")
+    metadata = MetaData()
+    legacy_practice = Table(
+        "text_practices",
+        metadata,
+        Column("id", Integer, primary_key=True),
+        Column("title", String, nullable=False),
+        Column("body", String, nullable=False),
+        Column("source_type", String, nullable=False),
+        Column("target_language", String, nullable=False),
+    )
+    metadata.create_all(engine)
+    with engine.begin() as connection:
+        connection.execute(legacy_practice.insert().values(id=1, title="legacy", body="hello", source_type="import", target_language="en"))
+        migration_path = Path(__file__).parents[1] / "alembic" / "versions" / "20260812_05_text_practice_translation_language.py"
+        spec = importlib.util.spec_from_file_location("text_practice_translation_migration", migration_path)
+        assert spec and spec.loader
+        migration = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(migration)
+        migration.op = Operations(MigrationContext.configure(connection))
+        migration.upgrade()
+        row = connection.execute(text("SELECT translation_language FROM text_practices WHERE id = 1")).mappings().one()
+        assert row["translation_language"] == "zh-CN"
+
+    practice = TextPractice(title="new", body="bonjour", source_type="import", target_language="fr", translation_language="en")
+    assert practice.translation_language == "en"

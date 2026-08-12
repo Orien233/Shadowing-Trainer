@@ -52,7 +52,7 @@ def test_collect_new_word_success(client: TestClient):
     assert response.status_code == 200
     payload = response.json()
     assert payload["id"] > 0
-    assert payload["word_text"] == "wanted"
+    assert payload["word_text"] == "Wanted"
     assert payload["normalized_word"] == "wanted"
     assert payload["language"] == "en"
 
@@ -69,11 +69,11 @@ def test_collect_word_strips_non_word_punctuation_before_storage(client: TestCli
 
     assert response.status_code == 200
     payload = response.json()
-    assert payload["word_text"] == "hello"
+    assert payload["word_text"] == "Hello"
     assert payload["normalized_word"] == "hello"
 
 
-def test_collect_word_stores_lowercase_word_text(client: TestClient):
+def test_collect_word_preserves_display_text_and_normalizes_key(client: TestClient):
     response = client.post(
         "/api/words/collect",
         json={
@@ -85,8 +85,34 @@ def test_collect_word_stores_lowercase_word_text(client: TestClient):
 
     assert response.status_code == 200
     payload = response.json()
-    assert payload["word_text"] == "can't"
+    assert payload["word_text"] == "CAN’T"
     assert payload["normalized_word"] == "can't"
+
+
+def test_collect_and_filter_words_by_canonical_language(client: TestClient):
+    japanese = client.post(
+        "/api/words/collect",
+        json={"material_id": 1, "sentence_id": 10, "word_text": "旅行", "language": "JA"},
+    )
+    english = client.post(
+        "/api/words/collect",
+        json={"material_id": 1, "sentence_id": 11, "word_text": "Travel", "language": "en"},
+    )
+    assert japanese.status_code == 200
+    assert japanese.json()["language"] == "ja"
+    assert english.status_code == 200
+
+    response = client.get("/api/words/collections?language=ja")
+    assert response.status_code == 200
+    assert [item["word_text"] for item in response.json()] == ["旅行"]
+
+
+def test_collect_word_rejects_unsupported_language(client: TestClient):
+    response = client.post(
+        "/api/words/collect",
+        json={"material_id": 1, "sentence_id": 10, "word_text": "Hallo", "language": "nl"},
+    )
+    assert response.status_code == 422
 
 
 def test_collect_duplicate_word_returns_409(client: TestClient):
@@ -140,6 +166,71 @@ def test_collect_word_matches_existing_normalized_word_case_insensitively():
             )
 
 
+def test_collect_word_matches_legacy_unicode_casefolded_keys():
+    engine = create_engine(
+        "sqlite://",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    SQLModel.metadata.create_all(engine, tables=[WordCollection.__table__])
+
+    with Session(engine) as session:
+        # Simulates a record written before normalized_word adopted NFKC+casefold.
+        session.add(
+            WordCollection(
+                material_id=1,
+                sentence_id=10,
+                word_text="Straße",
+                normalized_word="Straße",
+                language="DE",
+            )
+        )
+        session.commit()
+
+        with pytest.raises(WordAlreadyCollectedError):
+            collect_word(
+                session,
+                WordCollectionCreate(
+                    material_id=1,
+                    sentence_id=11,
+                    word_text="STRASSE",
+                    language="de",
+                ),
+            )
+
+
+def test_collect_word_detects_duplicate_for_mixed_case_bcp47_language():
+    engine = create_engine(
+        "sqlite://",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    SQLModel.metadata.create_all(engine, tables=[WordCollection.__table__])
+
+    with Session(engine) as session:
+        session.add(
+            WordCollection(
+                material_id=1,
+                sentence_id=10,
+                word_text="旅行",
+                normalized_word="旅行",
+                language="zh-CN",
+            )
+        )
+        session.commit()
+
+        with pytest.raises(WordAlreadyCollectedError):
+            collect_word(
+                session,
+                WordCollectionCreate(
+                    material_id=1,
+                    sentence_id=11,
+                    word_text="旅行",
+                    language="zh_cn",
+                ),
+            )
+
+
 def test_get_word_collections_default_returns_newest_first(client: TestClient):
     client.post(
         "/api/words/collect",
@@ -189,6 +280,19 @@ def test_get_word_collections_can_sort_alphabetically(client: TestClient):
     assert [item["word_text"] for item in response.json()] == ["apple", "banana", "cat"]
 
 
+def test_get_word_collections_unicode_sort_uses_canonical_keys(client: TestClient):
+    for word in ["éclair", "Straße", "Apple"]:
+        client.post(
+            "/api/words/collect",
+            json={"material_id": 1, "sentence_id": 10, "word_text": word, "language": "de"},
+        )
+
+    response = client.get("/api/words/collections?sort=alphabetical&language=de")
+
+    assert response.status_code == 200
+    assert [item["word_text"] for item in response.json()] == ["Apple", "Straße", "éclair"]
+
+
 def test_delete_word_collection_success(client: TestClient):
     created = client.post(
         "/api/words/collect",
@@ -223,3 +327,11 @@ def test_clean_collected_word_text_removes_commas_and_periods():
     assert clean_collected_word_text("hello,") == "hello"
     assert clean_collected_word_text("U.S.") == "US"
     assert clean_collected_word_text("can't") == "can't"
+
+
+def test_collect_word_preserves_meaningful_combining_marks_for_arabic():
+    # Fatha and sukun are combining marks; removing them silently changes the
+    # learner-visible form of an Arabic word.
+    word = "\u0642\u064e\u0644\u0652\u0628"
+    assert clean_collected_word_text(word) == word
+    assert normalize_word_text(word) == word

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useLanguage } from "../i18n/LanguageContext";
+import { stageLabel } from "../i18n/statusLabels";
 import { getJob, retryJob, uploadRecording } from "../lib/api";
 import type { Evaluation, Sentence } from "../types";
 
@@ -113,7 +114,7 @@ export default function RecorderPanel({ sentence, onEvaluated }: Props) {
     </div>
     {recording && <p className="muted">{t("recorder.recordingTime", { elapsed, maxSeconds: MAX_SECONDS })}</p>}
     {previewUrl && <audio controls src={previewUrl} />}
-    {jobId && <p className="muted">{t("recorder.scoringProgress", { stage: stage || "queued", progress })}</p>}
+    {jobId && <p className="muted">{t("recorder.scoringProgress", { stage: stageLabel(t, stage), progress })}</p>}
     {error && <p role="alert" className="error-message">{error}</p>}
     {!recording && !blob && !jobId && !error && <p className="muted">{t("recorder.maxDuration", { maxSeconds: MAX_SECONDS })}</p>}
   </div>;

@@ -1,47 +1,90 @@
-# 多语言 UI 与学习链路设计
+# Multilingual behaviour (v0.4.1)
 
-## 语言概念
+## Independent language settings
 
-系统必须区分三类语言，避免一个 `language` 字段同时承担多种含义：
+The application keeps three distinct settings:
 
-- `ui_locale`：界面按钮、提示、状态说明所使用的语言。它不改变历史素材内容。
-- `learning_language`：用户当前练习内容的语言，也是新建素材和文本练习的默认内容语言。
-- `translation_language`：句子译文、词义和解释所使用的语言。它与学习语言独立。
-
-语言代码统一使用 BCP 47。旧数据的 `en` 保留为兼容值；新增数据应通过语言目录选择，不再由业务组件写死默认英语。
-
-## 受影响模块
-
-| 模块 | 当前问题 | 目标状态 |
+| Setting | Allowed values | Purpose |
 | --- | --- | --- |
-| 应用外壳与导航 | 中英文文案散落在组件内 | 通过稳定 message key 渲染；界面语言本地持久化 |
-| 素材上传与列表 | 上传时没有内容语言；状态直接展示机器码 | 上传时冻结内容语言和译文语言；状态码由 UI 翻译 |
-| Material / Sentence | 没有内容语言和译文语言字段 | Material 保存语言快照；Sentence API 明确继承的语言语义 |
-| ASR Router / Adapter | 仅能使用 Provider 全局语言，无法按素材传入 | 任务语言优先于 Provider 默认值；本地与远程 Adapter 接收统一语言提示 |
-| 翻译 | Prompt 固定翻译成简体中文 | 按素材 `translation_language` 翻译；语言切换不改变历史译文语义 |
-| 分句 | 标点与空格规则偏向英语 | 按语言脚本处理句末标点和片段连接；覆盖无空格 CJK 文本 |
-| 收藏词库 | 前端默认 `en`；不同语言可能混选 | 收藏项沿用素材语言；列表和 AI 选词按语言筛选 |
-| AI 文本 | 目标语言是自由输入；收藏词可能跨语言 | 使用语言目录；后端验证并只选择相同语言收藏词 |
-| TTS | 任务未携带内容语言；音色与语言不校验 | 从 TextPractice 读取语言并传入请求；提示音色语言兼容性 |
-| 录音评分 | 分词、纠错和 filler 规则主要面向英语 | 引入语言策略；不支持的词级能力明确降级为句级/内容相似度 |
-| Provider 设置 | Catalog 文案来自后端英文；语言只是静态扩展字段 | 保留诊断原文，UI 对固定字段和状态使用本地化标签 |
-| Job 恢复 | Job 仅存实体 ID，依赖实体数据完整 | 语言先持久化到 Material/TextPractice，重试从实体读取相同快照 |
+| `ui_locale` | `zh-CN`, `en-US` | Interface labels and status text only. |
+| `learning_language` | controlled learning-language catalog | Default content language for new uploads and text practices. |
+| `translation_language` | controlled learning-language catalog | Default language for new sentence translations and AI explanations. |
 
-## UI 结构
+Changing UI locale does not translate stored content. Changing either global
+learning preference affects defaults only: uploaded materials and text
+practices persist their language snapshots.
 
-顶部语言偏好块提供两个独立入口：
+## Controlled content-language catalog
 
-1. 界面语言：当前支持简体中文与英语，字典结构允许继续添加 locale。
-2. 学习目标语言：提供英语、简繁中文、日语、韩语、西班牙语、法语、德语、意大利语、葡萄牙语、俄语和阿拉伯语。
+The backend accepts these canonical BCP-47 tags for learning and translation
+content: `en` (English), `zh-CN` (Chinese, Simplified), `zh-TW` (Chinese,
+Traditional), `ja` (Japanese), `ko` (Korean), `es` (Spanish), `fr` (French),
+`de` (German), `it` (Italian), `pt` (Portuguese), `ru` (Russian), and `ar`
+(Arabic). Unknown content-language values are rejected. Input casing and `_` in
+`zh_cn` / `zh_tw` are normalized to canonical tags.
 
-后续在上传素材和 AI 文本页面显示当前学习语言，并允许单次覆盖；设置页增加默认译文语言。每条已创建素材保存自己的语言快照，不随全局默认值变化。
+`auto` is reserved for ASR detection where specifically allowed; it is not a
+content-language preference. `und` is only permitted where the backend
+explicitly represents an unknown content language.
 
-## 分批落地与验收
+## Flow hand-offs
 
-1. 建立前端 i18n Context、语言目录、界面/学习语言选择块，替换应用外壳和素材入口文案。
-2. 新增后端语言目录、语言偏好、Material 语言字段和 Alembic 迁移；贯通上传与 API 类型。
-3. 贯通 ASR、翻译、AI 文本、TTS、收藏词和持久化 Job；消除业务路径中的固定 `en` 与简体中文 Prompt。
-4. 完成训练、录音、评分、词库、AI 文本和设置页文案国际化；新增状态码映射。
-5. 增加语言感知分句/分词与能力降级，并用英语、中文、日语和至少一种拉丁语系语言做回归验收。
+| Flow | Language behaviour |
+| --- | --- |
+| Preferences | UI, learning, and translation choices are stored independently. |
+| Upload | Request supplies `content_language` and `translation_language`; the Material saves both. |
+| Material processing | Uses the Material's content language for ASR and segmentation; translates sentences from content language to the Material's translation language. |
+| Collected words | A word is saved with a canonical language. Collection listing and generated-text word selection are scoped to the target language. |
+| LLM text | Generated/imported practice persists `target_language` and `translation_language`; generation rejects selected words from another target language. |
+| TTS | A queued job snapshots target/translation languages. TTS must use the practice target language; sentence translations use the snapshot translation language. |
+| Recording evaluation | Passes the parent Material's content language to the ASR scene. |
 
-每一批均需通过对应后端测试、前端测试和生产构建后独立提交，并推送到 `v0_4_1` 远程分支。
+Provider language ranges remain part of routing. MiMo ASR accepts only
+automatic detection, Chinese, and English hints; canonical `en*` and `zh*`
+values are mapped to its protocol values. A MiMo recording-evaluation route
+for any other content language falls back to Local Whisper when available and
+otherwise returns an explicit unsupported-language error.
+
+Translation short-circuits when source and target language are identical, so it
+does not send a provider request in that case. Translation is enrichment: if no
+eligible LLM exists, or an individual translation fails, the source material or
+TTS practice still becomes usable with a blank translation that the UI labels
+in the selected interface language.
+
+## Segmentation and scoring scope
+
+Sentence assembly uses no inserted spaces for Chinese and Japanese segment
+text, and inserts spaces for other language values. It uses conservative
+punctuation, duration, and segment-count limits; it is not advertised as a
+language-specific linguistic tokenizer.
+
+Scoring publishes an explicit alignment profile instead of calling every result
+"word accuracy": English uses the established full word alignment; Chinese,
+Japanese, and Korean use limited Unicode-character alignment; other catalog
+languages use basic Unicode-word alignment. English contraction, filler, and
+minor morphology heuristics are never applied to non-English content. Stored
+`raw_metrics` includes `language`, `alignment_mode`, and `support_level`, and
+the UI labels word/character/token accuracy accordingly.
+
+Where an ASR/provider cannot satisfy a requested scene (especially timestamp
+data for material transcription), routing falls back only to an available local
+or remote option as described in [PROVIDERS.md](PROVIDERS.md); otherwise the
+operation is unavailable. This capability/degradation matrix is intentionally
+conservative and defers to the running adapter catalog.
+
+MiMo ASR accepts only English/Chinese recognition hints (`en`, `zh`, or
+`auto`). Other catalog languages are rejected before a remote request and use
+Local Whisper only when that runtime is available. Whisper-style ASR uses one
+`zh` hint for both `zh-CN` and `zh-TW`; its returned script can vary by model,
+so Traditional-Chinese character scores require a transcript/script sanity
+check.
+
+## API references
+
+- `GET /api/languages` returns the controlled content-language catalog.
+- `GET` / `PUT /api/languages/preferences` reads or updates all three language
+  preference fields.
+- Upload accepts `content_language` and `translation_language` form fields.
+- Word collection accepts and filters by `language`.
+- Text-practice generation/import/update accepts target and translation
+  language values.

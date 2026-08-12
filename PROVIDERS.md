@@ -1,109 +1,111 @@
-# Provider guide
+# Provider guide (v0.4.1)
 
-Provider credentials are configured in **Settings** and stored only in the
-backend. Provider list APIs return only an API-key mask; leaving the key blank
-while editing retains the saved value.
+Provider settings are saved by the backend. API reads expose only a masked API
+key; leaving an API-key field blank during an edit retains its previous value.
+The static Settings catalog is authoritative. It contains only the profiles
+below; legacy adapter files and migrated disabled records do not make a profile
+available.
 
-## Supported remote profiles
+## Registered profiles
 
-| Capability | Profile | Protocol shape | User-selectable boundaries |
-| --- | --- | --- | --- |
-| LLM | OpenAI Chat Completions | `POST /chat/completions` | `generate_text`, `generate_json`; JSON schema, response format, or prompt JSON |
-| TTS | OpenAI Audio TTS | Full `/audio/speech` endpoint | `synthesize`; WAV, MP3, FLAC, Opus, AAC, or PCM |
-| TTS | MiMo TTS | Full MiMo Chat Completions endpoint | `synthesize`; WAV, MP3, FLAC, Opus, or PCM16 |
-| ASR | OpenAI Audio Transcription | Base URL + `/audio/transcriptions` | `transcribe`, optional `word_timestamps` |
-| ASR | MiMo ASR | Full MiMo Chat Completions endpoint | `transcribe` only |
+| Kind | Profile | Endpoint mode | Declared capability | Notes |
+| --- | --- | --- | --- | --- |
+| LLM | OpenAI Chat Completions | Base URL | `generate_text`, `generate_json` | Appends `/chat/completions` and uses `/models` for metadata verification. |
+| TTS | OpenAI Audio TTS | Full endpoint | `synthesize` | Accepts WAV, MP3, FLAC, Opus, AAC, or PCM. |
+| TTS | MiMo TTS | Full endpoint | `synthesize` | Uses the MiMo Chat Completions TTS request shape; accepts WAV, MP3, FLAC, Opus, or PCM16. |
+| ASR | OpenAI Audio Transcription | Base URL | `transcribe`, `word_timestamps` | Appends `/audio/transcriptions`; word timestamps must be enabled for material transcription. |
+| ASR | MiMo ASR | Full endpoint | `transcribe` | Uses MiMo Chat Completions ASR; it is text-only for routing purposes. |
 
-The adapter catalog describes protocol maximums. A saved configuration profile
-must explicitly select its usable capabilities and formats; those selections
-are enforced by the backend for generation, TTS jobs, and ASR routing.
+Local Whisper is separately optional and is not a remote profile. Azure,
+Deepgram, ElevenLabs, DashScope, and other historical integrations are not
+registered supported providers in this release.
 
-## Built-in templates and configuration profiles
+## Endpoint rules
 
-OpenAI and MiMo entries in Settings are read-only templates. Choosing one
-pre-fills a new configuration but never stores a key automatically. Saved
-profiles can be renamed, enabled/disabled, made default, tested, or deleted
-independently. A single protocol can have multiple profiles.
+- **OpenAI Chat Completions:** enter a base URL, for example
+  `https://api.openai.com/v1`; the app adds `/chat/completions`.
+- **OpenAI Audio Transcription:** enter a base URL, for example
+  `https://api.openai.com/v1`; the app adds `/audio/transcriptions`.
+- **OpenAI Audio TTS:** enter the complete speech endpoint, for example
+  `https://api.openai.com/v1/audio/speech`.
+- **MiMo TTS and MiMo ASR:** enter the complete MiMo Chat Completions endpoint,
+  commonly `https://api.xiaomimimo.com/v1/chat/completions`.
 
-For `full_endpoint` adapters, enter the complete documented endpoint. The app
-does not append `/audio/speech` or `/audio/transcriptions` for you. For OpenAI
-ASR, enter the API base URL; the adapter appends `/audio/transcriptions`.
+For every `full_endpoint` profile, the supplied URL is used as-is: the app does
+not add a path. This is important for compatible gateways with nonstandard
+paths.
 
-## Test levels
+## Boundaries and tests
 
-Settings exposes three deliberate test levels:
+The catalog advertises protocol maxima, while each saved profile declares the
+capabilities and output formats it is allowed to use. The backend enforces
+those boundaries:
 
-- **Check configuration** validates required fields and selected boundaries.
-  It makes no network request and is non-billable.
-- **Verify connection** uses an adapter's safe metadata strategy when one is
-  available. A configuration-only adapter clearly reports that it did not make
-  a network request.
-- **Run paid test** sends a minimal live request after confirmation: a tiny
-  LLM prompt, a short TTS phrase, or a synthetic silent WAV for ASR. It does
-  not save content or alter provider capability gates, but it can incur cost.
+- LLM JSON generation requires an enabled JSON method.
+- TTS synthesis requires an enabled output format.
+- ASR profiles do not accept output-format selections.
 
-Errors are redacted before they reach the browser; API keys and authorization
-headers are never returned.
+**Check configuration** is local and non-billable. **Verify connection** uses
+the descriptor's safe strategy when available (OpenAI Chat lists models); audio
+profiles currently perform configuration-only checks. **Run paid test** requires
+confirmation and may send a small live request.
 
-## Local Whisper is optional
+## Language propagation
 
-Remote-only deployments can install only the core runtime:
+All new content languages use the controlled catalog in
+[MULTILINGUAL.md](MULTILINGUAL.md). A material/text-practice task language
+overrides a provider's configured language default.
 
-```powershell
-pip install -r requirements.txt
-```
+- OpenAI ASR receives the task language reduced to its primary code where
+  required (for example, `zh-CN` becomes `zh`).
+- MiMo ASR accepts only `auto`, `zh`, and `en`. Canonical English tags map to
+  `en`, Chinese tags map to `zh`, and an absent hint maps to `auto`. Other task
+  languages make the MiMo route unusable; the router selects Local Whisper
+  when available or returns an explicit unsupported-language error.
+- Local Whisper receives the task language when its route is selected.
+- OpenAI Audio TTS keeps the language as internal request metadata by default.
+  It does **not** send a natural-language TTS `instructions` field merely
+  because a task language is present. Enable the explicit
+  `send_language_instruction` compatibility option only for an endpoint known
+  to support OpenAI's optional `instructions` field.
 
-Install local ASR only when it is needed:
+## ASR routing and conservative fallback matrix
 
-```powershell
-pip install -r requirements-local-whisper.txt
-```
+The routes are decided independently for two scenes:
 
-The Local Whisper section in Settings reports whether the package is present,
-whether the configured CPU/CUDA runtime is usable, whether the model is cached,
-and whether the first use will download it. It never downloads or loads a model
-merely by opening Settings. **Load model** is explicit; **Release model memory**
-removes the in-process cache.
+| Scene | Remote requirement | Consequence |
+| --- | --- | --- |
+| Material transcription | `transcribe` + `word_timestamps` | MiMo ASR alone is insufficient. |
+| Recording evaluation | `transcribe` plus task-language support | OpenAI ASR may use any catalog language; MiMo ASR is limited to English/Chinese/auto. |
 
-Relevant environment options:
+The saved switch is a preference, not a guarantee. At runtime the router uses
+the preferred usable route, otherwise the only usable alternative; it reports
+unavailable when neither route works. Therefore:
 
-```env
-WHISPER_MODEL=small
-WHISPER_DEVICE=cpu
-WHISPER_COMPUTE_TYPE=int8
-WHISPER_MODEL_DIR=./data/models/whisper
-WHISPER_ALLOW_DOWNLOAD=true
-```
+| Local Whisper | Remote requirement met | Effective route |
+| --- | --- | --- |
+| available | yes | user preference |
+| available | no | local |
+| unavailable | yes | remote |
+| unavailable | no | unavailable |
 
-Set `WHISPER_ALLOW_DOWNLOAD=false` in offline deployments after placing the
-model in the configured cache directory.
+Remote material transcription depends on timestamp support from the selected
+and enabled profile. The code's registered descriptors and route checks take
+precedence over this document if they change.
 
-## ASR scene routing
+OpenAI/Whisper exposes one `zh` recognition hint rather than separate
+simplified/traditional script locales. A `zh-TW` material retains its `zh-TW`
+metadata and alignment label, but the returned script is model-dependent;
+verify the transcript before relying on character-level Traditional-Chinese
+recording scores.
 
-The two scenes are independent:
+## TTS output pipeline
 
-| Scene | Remote requirement |
-| --- | --- |
-| Material transcription | `transcribe` and `word_timestamps` |
-| Recording evaluation | `transcribe` |
+TTS jobs synthesize one sentence at a time. The backend chooses the first
+enabled acceptable format in this order: WAV, MP3, FLAC, Opus, AAC, then PCM.
+It normalizes sentence clips to 24 kHz mono WAV and merges material audio to
+MP3. Raw PCM requires explicit sample rate, channel count, and sample format.
 
-The toggle records a preferred route. At execution time the router safely
-selects the preferred route when available, otherwise the only viable fallback:
-
-- local available + remote available: user choice;
-- local available + remote unavailable: Local Whisper is forced;
-- local unavailable + remote available: remote ASR is forced;
-- neither available: the operation is disabled with both reasons reported.
-
-MiMo ASR intentionally exposes ordinary transcription only, so it may handle
-remote recording evaluation but cannot handle remote material segmentation.
-OpenAI ASR can be configured with word timestamps for both scenes.
-
-## TTS material pipeline
-
-TTS jobs synthesize each sentence separately. Every response is normalized to
-24 kHz mono WAV for the trainer, then sentence WAV files are merged into a
-complete MP3 Material. This preserves existing SentenceTrainer playback,
-recording, scoring, and task-recovery behavior. TTS format selection is
-automatic from the profile's enabled formats, preferring WAV, MP3, FLAC, Opus,
-AAC, then PCM.
+TTS jobs retain an immutable snapshot of text, target/translation languages,
+provider id, and options. Editing or re-queuing a practice supersedes the old
+job rather than allowing it to overwrite newer content.

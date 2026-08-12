@@ -17,6 +17,13 @@ export class ApiError extends Error {
   constructor(public status: number, message: string) { super(message); }
 }
 
+function timeoutMessage(): string {
+  const locale = document.documentElement.lang || window.navigator.language;
+  return locale.toLowerCase().startsWith("zh")
+    ? "请求超时，请重试。"
+    : "Request timed out. Please retry.";
+}
+
 async function request<T>(path: string, init: RequestInit = {}, timeoutMs = 20_000): Promise<T> {
   const controller = new AbortController();
   const timer = window.setTimeout(() => controller.abort(), timeoutMs);
@@ -36,7 +43,7 @@ async function request<T>(path: string, init: RequestInit = {}, timeoutMs = 20_0
     return response.json() as Promise<T>;
   } catch (error) {
     if (error instanceof DOMException && error.name === "AbortError") {
-      throw new ApiError(408, "Request timed out. Please retry.");
+      throw new ApiError(408, timeoutMessage());
     }
     throw error;
   } finally {
@@ -47,7 +54,7 @@ async function request<T>(path: string, init: RequestInit = {}, timeoutMs = 20_0
 export interface RecordingCleanupResult { target_dir: string; total_files: number; deleted_files: number; failed_files: Array<{ path: string; reason: string }>; }
 export interface WordCollectInput { material_id: number; sentence_id: number; word_text: string; language?: string; }
 export type WordCollectionSortMode = "collected_time_asc" | "collected_time_desc" | "alphabetical";
-export interface WordCollectionListOptions { sort?: WordCollectionSortMode; }
+export interface WordCollectionListOptions { sort?: WordCollectionSortMode; language?: string; }
 export class WordCollectionApiError extends ApiError {}
 
 export const listMaterials = () => request<Material[]>("/api/materials");
@@ -83,7 +90,10 @@ export async function collectWord(payload: WordCollectInput): Promise<WordCollec
   }
 }
 export async function listWordCollections(options: WordCollectionListOptions = {}): Promise<WordCollection[]> {
-  const suffix = options.sort ? `?sort=${options.sort}` : "";
+  const params = new URLSearchParams();
+  if (options.sort) params.set("sort", options.sort);
+  if (options.language) params.set("language", options.language);
+  const suffix = params.size ? `?${params.toString()}` : "";
   return request<WordCollection[]>(`/api/words/collections${suffix}`);
 }
 export const deleteWordCollection = (id: number) => request<void>(`/api/words/collections/${id}`, { method: "DELETE" });
@@ -104,8 +114,8 @@ export const updateASRSceneSettings = (payload: ASRSceneSettingsUpdate) => reque
 export const getLocalASRStatus = () => request<LocalASRStatus>("/api/providers/local-asr/status");
 export const testLocalASR = (loadModel = false) => request<LocalASRStatus>("/api/providers/local-asr/test", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ load_model: loadModel }) }, 130_000);
 export const releaseLocalASR = () => request<LocalASRStatus>("/api/providers/local-asr/release", { method: "POST" });
-export type TextGenerationInput = { word_selection: "random" | "manual" | "none"; random_word_count: number; word_collection_ids: number[]; preset_topic?: string; custom_topic?: string; target_language: string; difficulty: string; desired_length: number; };
+export type TextGenerationInput = { word_selection: "random" | "manual" | "none"; random_word_count: number; word_collection_ids: number[]; preset_topic?: string; custom_topic?: string; target_language: string; translation_language: string; difficulty: string; desired_length: number; };
 export const generateTextPractice = (payload: TextGenerationInput) => request<TextPractice>("/api/text-practices/generate", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) }, 90_000);
-export const importTextPractice = (payload: { title: string; body: string; target_language?: string; difficulty?: string; topic?: string }) => request<TextPractice>("/api/text-practices/import", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
-export const updateTextPractice = (id: number, payload: { title?: string; body?: string }) => request<TextPractice>(`/api/text-practices/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
-export const synthesizeTextPractice = (id: number, payload: { speed_preset: "slow" | "normal" | "fast"; accent?: string; gender?: string; voice?: string; model?: string; provider_id?: number }) => request<{ text_practice_id: number; job_id: string; status: string }>(`/api/text-practices/${id}/tts`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+export const importTextPractice = (payload: { title: string; body: string; target_language?: string; translation_language?: string; difficulty?: string; topic?: string }) => request<TextPractice>("/api/text-practices/import", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+export const updateTextPractice = (id: number, payload: { title?: string; body?: string; target_language?: string; translation_language?: string }) => request<TextPractice>(`/api/text-practices/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+export const synthesizeTextPractice = (id: number, payload: { speed_preset: "slow" | "normal" | "fast"; accent?: string; gender?: string; voice?: string; model?: string; provider_id?: number; language?: string }) => request<{ text_practice_id: number; job_id: string; status: string }>(`/api/text-practices/${id}/tts`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });

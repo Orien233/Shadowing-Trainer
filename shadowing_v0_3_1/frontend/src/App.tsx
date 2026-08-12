@@ -34,8 +34,13 @@ function getWordCollectionKey(collection: WordCollection): string {
   return buildCollectedWordKey(normalizedWord, collection.language);
 }
 
+function collectionUsesLanguage(collection: WordCollection, language: string): boolean {
+  const normalize = (value: string) => String(value || "en").trim().replace(/_/g, "-").toLowerCase();
+  return normalize(collection.language) === normalize(language);
+}
+
 export default function App() {
-  const { learningLanguage, t } = useLanguage();
+  const { learningLanguage, translationLanguage, t } = useLanguage();
   const [materials, setMaterials] = useState<Material[]>([]);
   const [activeMaterialId, setActiveMaterialId] = useState<number | null>(null);
   const [activePanel, setActivePanel] = useState<"practice" | "wordLibrary" | "textGenerator" | "settings">("practice");
@@ -46,7 +51,9 @@ export default function App() {
   const [loadingWordCollections, setLoadingWordCollections] = useState(false);
   const [shuttingDown, setShuttingDown] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [providerRevision, setProviderRevision] = useState(0);
   const sentenceRequestIdRef = useRef(0);
+  const wordCollectionRequestIdRef = useRef(0);
 
   const activeMaterial = useMemo(
     () => materials.find((item) => item.id === activeMaterialId) ?? null,
@@ -62,6 +69,10 @@ export default function App() {
         wordCollections.map((item) => getWordCollectionKey(item)).filter(Boolean)
       ),
     [wordCollections]
+  );
+  const learningWordCollections = useMemo(
+    () => wordCollections.filter((item) => collectionUsesLanguage(item, learningLanguage)),
+    [learningLanguage, wordCollections]
   );
 
   const loadMaterials = useCallback(async () => {
@@ -86,14 +97,23 @@ export default function App() {
   const loadWordCollections = useCallback(async (
     sort: WordCollectionSortMode = "collected_time_asc"
   ) => {
+    const requestId = wordCollectionRequestIdRef.current + 1;
+    wordCollectionRequestIdRef.current = requestId;
     setLoadingWordCollections(true);
     try {
+      // Keep a complete in-memory index: the active material may retain a
+      // language different from today's global preference. UI consumers below
+      // still receive only the current learning-language slice.
       const data = await listWordCollections({ sort });
+      if (requestId !== wordCollectionRequestIdRef.current) return;
       setWordCollections(data);
     } catch (error) {
+      if (requestId !== wordCollectionRequestIdRef.current) return;
       setLoadError(error instanceof Error ? error.message : t("app.libraryLoadFailed"));
     } finally {
-      setLoadingWordCollections(false);
+      if (requestId === wordCollectionRequestIdRef.current) {
+        setLoadingWordCollections(false);
+      }
     }
   }, [t]);
 
@@ -200,6 +220,10 @@ export default function App() {
     setActivePanel("practice");
   }
 
+  const handleProvidersChanged = useCallback(() => {
+    setProviderRevision((current) => current + 1);
+  }, []);
+
   function handleWordCollected(collection: WordCollection) {
     const collectionKey = getWordCollectionKey(collection);
     setWordCollections((prev) => [
@@ -272,17 +296,18 @@ export default function App() {
         </section>
 
         <section className="content">
-          {activePanel === "wordLibrary" ? (
+          <div hidden={activePanel !== "textGenerator"}>
+            <TextGeneratorPanel collections={wordCollections} defaultLanguage={learningLanguage} defaultTranslationLanguage={translationLanguage} providerRefreshToken={providerRevision} onMaterialReady={handleTextMaterialReady} />
+          </div>
+          {activePanel === "textGenerator" ? null : activePanel === "wordLibrary" ? (
             <WordCollectionPanel
-              collections={wordCollections}
+              collections={learningWordCollections}
               loading={loadingWordCollections}
               onRefresh={loadWordCollections}
               onDeleted={handleWordDeleted}
             />
-          ) : activePanel === "textGenerator" ? (
-            <TextGeneratorPanel collections={wordCollections} defaultLanguage={learningLanguage} onMaterialReady={handleTextMaterialReady} />
           ) : activePanel === "settings" ? (
-            <SettingsPanel />
+            <SettingsPanel onProvidersChanged={handleProvidersChanged} />
           ) : loadingSentences ? (
             <div className="card"><p>{t("app.sentencesLoading")}</p></div>
           ) : (

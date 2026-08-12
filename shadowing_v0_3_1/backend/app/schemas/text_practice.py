@@ -1,7 +1,9 @@
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
+
+from app.services.language_catalog import normalize_language_tag
 
 
 class TextGenerationRequest(BaseModel):
@@ -11,21 +13,40 @@ class TextGenerationRequest(BaseModel):
     preset_topic: str | None = None
     custom_topic: str | None = None
     target_language: str = "en"
+    translation_language: str = "zh-CN"
     difficulty: str = "intermediate"
     desired_length: int = Field(default=180, ge=20, le=5000)
+
+    @field_validator("target_language", "translation_language")
+    @classmethod
+    def normalize_practice_language(cls, value: str) -> str:
+        return normalize_language_tag(value)
 
 
 class TextPracticeCreate(BaseModel):
     title: str = Field(default="My practice text", min_length=1, max_length=200)
     body: str = Field(min_length=1, max_length=20000)
     target_language: str = "en"
+    translation_language: str = "zh-CN"
     difficulty: str | None = None
     topic: str | None = None
+
+    @field_validator("target_language", "translation_language")
+    @classmethod
+    def normalize_practice_language(cls, value: str) -> str:
+        return normalize_language_tag(value)
 
 
 class TextPracticeUpdate(BaseModel):
     title: str | None = Field(default=None, min_length=1, max_length=200)
     body: str | None = Field(default=None, min_length=1, max_length=20000)
+    target_language: str | None = None
+    translation_language: str | None = None
+
+    @field_validator("target_language", "translation_language")
+    @classmethod
+    def normalize_optional_practice_language(cls, value: str | None) -> str | None:
+        return normalize_language_tag(value) if value is not None else None
 
 
 class TTSOptions(BaseModel):
@@ -35,6 +56,17 @@ class TTSOptions(BaseModel):
     voice: str | None = None
     model: str | None = None
     provider_id: int | None = None
+    # Normally inherited from TextPractice.target_language when a job is
+    # queued. If specified, the service requires the same language so audio
+    # and its Material metadata cannot disagree.
+    language: str | None = None
+
+    @field_validator("language")
+    @classmethod
+    def normalize_tts_language(cls, value: str | None) -> str | None:
+        if value is None or not value.strip():
+            return None
+        return normalize_language_tag(value)
 
 
 class TTSJobResponse(BaseModel):
@@ -51,6 +83,7 @@ class TextPracticeRead(BaseModel):
     body: str
     source_type: str
     target_language: str
+    translation_language: str
     difficulty: str | None
     desired_length: int | None
     topic: str | None

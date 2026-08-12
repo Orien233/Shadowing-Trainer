@@ -1,6 +1,8 @@
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, field_validator
+
+from app.services.language_catalog import normalize_language_tag
 
 
 class WordCollectionCreate(BaseModel):
@@ -11,6 +13,11 @@ class WordCollectionCreate(BaseModel):
     translation: str | None = None
     source_type: str = "manual"
     note: str | None = None
+
+    @field_validator("language")
+    @classmethod
+    def validate_language(cls, value: str) -> str:
+        return normalize_language_tag(value)
 
 
 class WordCollectionRead(BaseModel):

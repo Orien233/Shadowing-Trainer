@@ -12,6 +12,7 @@ import librosa
 import numpy as np
 
 from app.utils.text_utils import normalize_text, similarity
+from app.services.word_alignment_service import tokenize_for_alignment
 
 
 logger = logging.getLogger(__name__)
@@ -69,12 +70,25 @@ def _contains_cjk_chars(text: str) -> bool:
     return bool(_CJK_CHAR_PATTERN.search(text))
 
 
-def tokenize_for_content_metrics(text: str) -> list[str]:
+def tokenize_for_content_metrics(
+    text: str,
+    content_language: str | None = None,
+) -> list[str]:
     """Tokenize text for rough content scoring.
 
-    The tokenizer is intentionally lightweight. It uses whitespace tokens first,
-    and falls back to character tokens for CJK text with no spaces.
+    The tokens deliberately use the same language-aware boundary strategy as
+    alignment.  This keeps sentence-level metrics from applying whitespace-only
+    or English-oriented assumptions to CJK and other Unicode scripts.
     """
+    if content_language is not None:
+        return [
+            str(token["normalized"])
+            for token in tokenize_for_alignment(text, content_language)
+        ]
+
+    # Preserve the legacy default for callers that have not yet supplied a
+    # content language. Evaluation always passes one (or its legacy ``None``
+    # value through to the alignment profile).
     normalized = normalize_text(text)
     if not normalized:
         return []
@@ -135,10 +149,14 @@ def _approximate_wer(reference_tokens: Sequence[str], hypothesis_tokens: Sequenc
     return _clamp_unit(distance[-1][-1] / max(len(reference_tokens), 1))
 
 
-def extract_content_metrics(reference_text: str, hypothesis_text: str) -> ContentMetrics:
+def extract_content_metrics(
+    reference_text: str,
+    hypothesis_text: str,
+    content_language: str | None = None,
+) -> ContentMetrics:
     """Extract sentence-level content metrics without forced alignment."""
-    reference_tokens = tokenize_for_content_metrics(reference_text)
-    hypothesis_tokens = tokenize_for_content_metrics(hypothesis_text)
+    reference_tokens = tokenize_for_content_metrics(reference_text, content_language)
+    hypothesis_tokens = tokenize_for_content_metrics(hypothesis_text, content_language)
     overlap = _token_overlap_count(reference_tokens, hypothesis_tokens)
 
     recall = _safe_ratio(overlap, float(len(reference_tokens)))

@@ -1,7 +1,7 @@
-const TOKEN_PATTERN = /\S+/g;
+const DISPLAY_TOKEN_PATTERN = /\S+|\s+/g;
 const EDGE_PUNCTUATION_PATTERN = /^([\p{P}]*)(.*?)([\p{P}]*)$/u;
 const EDGE_PUNCTUATION = /^[\s!"#$%&()*+,\-./:;<=>?@[\\\]^_`{|}~'“”‘’]+|[\s!"#$%&()*+,\-./:;<=>?@[\\\]^_`{|}~'“”‘’]+$/g;
-const WORD_CHAR_PATTERN = /[\p{L}\p{N}]/u;
+const WORD_CHAR_PATTERN = /[\p{L}\p{N}\p{M}]/u;
 const APOSTROPHES = new Set(["'", "’", "‘", "‛", "′"]);
 
 function isWordChar(char) {
@@ -34,16 +34,52 @@ export function splitDisplayText(text) {
 }
 
 export function normalizeWordText(wordText) {
-  return cleanCollectableWordText(wordText).replace(/[’‘‛′]/g, "'").toLowerCase();
+  return cleanCollectableWordText(wordText)
+    .normalize("NFKC")
+    .replace(/[’‘‛′]/g, "'")
+    .toLocaleLowerCase("und")
+    .replace(/ß/g, "ss")
+    .replace(/ς/g, "σ");
 }
 
 export function buildCollectedWordKey(normalizedWord, language) {
   return `${String(language || "en").trim().toLowerCase() || "en"}:${normalizedWord}`;
 }
 
-export function tokenizeSentenceText(sourceText) {
+export function tokenizeSentenceText(sourceText, language = "en") {
+  const value = String(sourceText ?? "");
+  const primaryLanguage = String(language || "en").replace("_", "-").toLowerCase().split("-", 1)[0];
+  if (["zh", "ja", "ko"].includes(primaryLanguage) && typeof Intl?.Segmenter === "function") {
+    const tokens = [];
+    const segmenter = new Intl.Segmenter(language, { granularity: "word" });
+    for (const segment of segmenter.segment(value)) {
+      if (segment.isWordLike) {
+        tokens.push({
+          index: tokens.length,
+          text: segment.segment,
+          status: "default",
+          severity: "default",
+        });
+      } else if (tokens.length) {
+        // Preserve punctuation and intentional spacing with the preceding
+        // lexical segment while keeping the collectable core separate.
+        tokens[tokens.length - 1].text += segment.segment;
+      } else if (segment.segment.trim()) {
+        tokens.push({
+          index: tokens.length,
+          text: segment.segment,
+          status: "default",
+          severity: "default",
+        });
+      }
+    }
+    return tokens;
+  }
+
   const tokens = [];
-  for (const match of String(sourceText ?? "").matchAll(TOKEN_PATTERN)) {
+  // Keep whitespace as display tokens.  Sentence text is the authoritative
+  // transcript, so rendering must not depend on ASR alignment tokenization.
+  for (const match of value.matchAll(DISPLAY_TOKEN_PATTERN)) {
     tokens.push({
       index: tokens.length,
       text: match[0],

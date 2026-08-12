@@ -23,7 +23,17 @@ TTS_ADAPTER_DESCRIPTORS = (
         format_options=("wav", "mp3", "flac", "opus", "aac", "pcm"), label="OpenAI Audio TTS",
         preset_defaults={"base_url": "https://api.openai.com/v1/audio/speech", "enabled_capabilities": ["synthesize"], "enabled_formats": ["wav"]},
         endpoint_mode="full_endpoint", endpoint_hint="Full endpoint, e.g. https://api.openai.com/v1/audio/speech",
-        config_fields=(AdapterConfigField("default_voice", "Default voice", default="alloy"), AdapterConfigField("instructions", "Voice instructions", placeholder="Optional speaking style instruction")) + _PCM,
+        config_fields=(
+            AdapterConfigField("default_voice", "Default voice", default="alloy"),
+            AdapterConfigField("instructions", "Voice instructions", placeholder="Optional speaking style instruction"),
+            AdapterConfigField(
+                "send_language_instruction",
+                "Send language context as instructions",
+                "boolean",
+                default=False,
+                help_text="Enable only when this endpoint supports the optional OpenAI instructions field.",
+            ),
+        ) + _PCM,
         docs_url="https://developers.openai.com/api/reference/resources/audio/subresources/speech/methods/create", test_strategy=_CONFIG_ONLY),
     AdapterDescriptor(canonical_key="mimo_tts", kind="tts", adapter_class=MiMoTTSProvider, aliases=("mimo-tts",),
         capabilities=frozenset({ProviderCapability.SYNTHESIZE}), format_options=("wav", "mp3", "flac", "opus", "pcm16"), label="MiMo TTS",

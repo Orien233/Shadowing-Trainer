@@ -481,10 +481,10 @@ input:not([type]) {
 }
 
 .collectable-sentence {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
+  display: block;
   line-height: 1.8;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
 }
 
 .alignment-empty {
@@ -603,16 +603,16 @@ input:not([type]) {
   align-items: center;
   gap: 4px;
   min-height: 1.35em;
-  border: 1px solid transparent;
-  border-radius: 6px;
-  padding-left: 4px;
-  padding-right: 4px;
+  border-width: 0;
+  border-radius: 3px;
+  padding-left: 0;
+  padding-right: 0;
   cursor: pointer;
   transition: border-color 120ms ease, box-shadow 120ms ease, opacity 120ms ease;
 }
 
 .collectable-word-core:hover {
-  border-color: #cbd5e1;
+  outline: 1px solid #cbd5e1;
   box-shadow: 0 0 0 2px rgba(148, 163, 184, 0.12);
 }
 

@@ -95,15 +95,9 @@ def _migrate_recording_table() -> None:
 
 def _migrate_word_collection_table() -> None:
     with engine.begin() as connection:
-        connection.exec_driver_sql(
-            """
-            UPDATE word_collections
-            SET
-                word_text = lower(normalized_word),
-                normalized_word = lower(normalized_word),
-                language = lower(language)
-            """
-        )
+        # Do not rewrite display text or canonical BCP-47 tags at startup.
+        # Normalized keys are created by the write service; legacy rows remain
+        # queryable through case-insensitive comparisons.
         connection.exec_driver_sql(
             """
             CREATE INDEX IF NOT EXISTS ix_word_collections_created_at

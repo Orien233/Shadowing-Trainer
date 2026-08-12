@@ -40,6 +40,8 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
   const hadStoredUILocale = useRef(window.localStorage.getItem(UI_LOCALE_STORAGE_KEY) !== null);
   const hadStoredLearningLanguage = useRef(window.localStorage.getItem(LEARNING_LANGUAGE_STORAGE_KEY) !== null);
   const hadStoredTranslationLanguage = useRef(window.localStorage.getItem(TRANSLATION_LANGUAGE_STORAGE_KEY) !== null);
+  const userChangedPreference = useRef({ uiLocale: false, learningLanguage: false, translationLanguage: false });
+  const preferenceWriteChain = useRef<Promise<void>>(Promise.resolve());
   const [uiLocale, setUILocaleState] = useState<UILocale>(detectUILocale);
   const [learningLanguage, setLearningLanguageState] = useState(() =>
     normalizeLearningLanguage(window.localStorage.getItem(LEARNING_LANGUAGE_STORAGE_KEY))
@@ -70,13 +72,13 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
     void getLanguagePreferences()
       .then((preference) => {
         if (cancelled) return;
-        if (!hadStoredUILocale.current && isUILocale(preference.ui_locale)) {
+        if (!hadStoredUILocale.current && !userChangedPreference.current.uiLocale && isUILocale(preference.ui_locale)) {
           setUILocaleState(preference.ui_locale);
         }
-        if (!hadStoredLearningLanguage.current) {
+        if (!hadStoredLearningLanguage.current && !userChangedPreference.current.learningLanguage) {
           setLearningLanguageState(normalizeLearningLanguage(preference.learning_language));
         }
-        if (!hadStoredTranslationLanguage.current) {
+        if (!hadStoredTranslationLanguage.current && !userChangedPreference.current.translationLanguage) {
           setTranslationLanguageState(normalizeLearningLanguage(preference.translation_language));
         }
       })
@@ -92,22 +94,29 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!preferencesHydrated) return;
     const timer = window.setTimeout(() => {
-      void updateLanguagePreferences({
+      const payload = {
         ui_locale: uiLocale,
         learning_language: learningLanguage,
         translation_language: translationLanguage,
-      }).catch(() => {
-        // The local selection remains usable while the backend is unavailable.
-      });
+      };
+      preferenceWriteChain.current = preferenceWriteChain.current
+        .catch(() => undefined)
+        .then(() => updateLanguagePreferences(payload).then(() => undefined))
+        .catch(() => undefined);
     }, 250);
     return () => window.clearTimeout(timer);
   }, [learningLanguage, preferencesHydrated, translationLanguage, uiLocale]);
 
-  const setUILocale = useCallback((locale: UILocale) => setUILocaleState(locale), []);
+  const setUILocale = useCallback((locale: UILocale) => {
+    userChangedPreference.current.uiLocale = true;
+    setUILocaleState(locale);
+  }, []);
   const setLearningLanguage = useCallback((language: string) => {
+    userChangedPreference.current.learningLanguage = true;
     setLearningLanguageState(normalizeLearningLanguage(language));
   }, []);
   const setTranslationLanguage = useCallback((language: string) => {
+    userChangedPreference.current.translationLanguage = true;
     setTranslationLanguageState(normalizeLearningLanguage(language));
   }, []);
   const t = useCallback(

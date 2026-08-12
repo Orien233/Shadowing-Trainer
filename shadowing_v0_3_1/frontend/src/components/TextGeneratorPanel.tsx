@@ -1,6 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
 import { generateTextPractice, getJob, importTextPractice, listProviderVoices, listProviders, synthesizeTextPractice, updateTextPractice } from "../lib/api";
 import type { AIProvider, ProviderVoice, TextPractice, WordCollection } from "../types";
+import { languageLabel, LEARNING_LANGUAGES } from "../i18n/catalog";
+import { useLanguage } from "../i18n/LanguageContext";
+import { stageLabel } from "../i18n/statusLabels";
 
 function hasCapabilities(providers: AIProvider[], capability: "llm" | "tts", required: string[]): boolean {
   const provider = providers.find((item) => item.capability === capability && item.is_enabled && item.is_default);
@@ -12,27 +15,32 @@ function displayVoice(voice: ProviderVoice): string {
   return `${voice.name || voice.id}${languages}`;
 }
 
-export default function TextGeneratorPanel({ collections, defaultLanguage = "en", onMaterialReady }: { collections: WordCollection[]; defaultLanguage?: string; onMaterialReady: (materialId: number) => void }) {
+export default function TextGeneratorPanel({ collections, defaultLanguage = "en", defaultTranslationLanguage = "zh-CN", providerRefreshToken = 0, onMaterialReady }: { collections: WordCollection[]; defaultLanguage?: string; defaultTranslationLanguage?: string; providerRefreshToken?: number; onMaterialReady: (materialId: number) => void }) {
+  const { uiLocale, setLearningLanguage, setTranslationLanguage: setGlobalTranslationLanguage, t } = useLanguage();
   const [mode, setMode] = useState<"random" | "manual" | "none">("random");
   const [count, setCount] = useState(5); const [selected, setSelected] = useState<number[]>([]);
   const [topic, setTopic] = useState("daily_life"); const [customTopic, setCustomTopic] = useState("");
-  const [language, setLanguage] = useState(defaultLanguage); const [difficulty, setDifficulty] = useState("intermediate"); const [length, setLength] = useState(180);
-  const [practice, setPractice] = useState<TextPractice | null>(null); const [title, setTitle] = useState("My practice text"); const [body, setBody] = useState("");
+  const [language, setLanguage] = useState(defaultLanguage); const [translationLanguage, setTranslationLanguage] = useState(defaultTranslationLanguage); const [difficulty, setDifficulty] = useState("intermediate"); const [length, setLength] = useState(180);
+  const [practice, setPractice] = useState<TextPractice | null>(null); const [title, setTitle] = useState(() => t("textGenerator.defaultTitle")); const [body, setBody] = useState("");
   const [busy, setBusy] = useState(false); const [message, setMessage] = useState(""); const [speed, setSpeed] = useState<"slow" | "normal" | "fast">("normal"); const [voice, setVoice] = useState(""); const [accent, setAccent] = useState(""); const [gender, setGender] = useState(""); const [ttsModel, setTtsModel] = useState("");
   const [providers, setProviders] = useState<AIProvider[]>([]); const [providersLoaded, setProvidersLoaded] = useState(false);
   const [voices, setVoices] = useState<ProviderVoice[]>([]); const [voicesLoaded, setVoicesLoaded] = useState(false);
+  const matchingCollections = useMemo(
+    () => collections.filter((item) => String(item.language || "en").replace("_", "-").toLowerCase() === language.replace("_", "-").toLowerCase()),
+    [collections, language],
+  );
+  const effectiveRandomCount = Math.min(count, matchingCollections.length);
   const selectedSet = useMemo(() => new Set(selected), [selected]);
   const canGenerate = hasCapabilities(providers, "llm", ["generate_text", "generate_json"]);
   const canSynthesize = hasCapabilities(providers, "tts", ["synthesize"]);
 
-  useEffect(() => { if (practice) { setTitle(practice.title); setBody(practice.body); } }, [practice]);
+  useEffect(() => { if (practice) { setTitle(practice.title); setBody(practice.body); setLanguage(practice.target_language); setTranslationLanguage(practice.translation_language); } }, [practice]);
   useEffect(() => { if (!practice) setLanguage(defaultLanguage); }, [defaultLanguage, practice]);
+  useEffect(() => { if (!practice) setTranslationLanguage(defaultTranslationLanguage); }, [defaultTranslationLanguage, practice]);
   useEffect(() => {
-    // Collections load asynchronously.  Keep the initial random setting valid
-    // instead of sending an impossible request for five words when a new
-    // library is empty or has fewer entries.
-    setCount((current) => Math.min(current, collections.length));
-  }, [collections.length]);
+    const availableIds = new Set(matchingCollections.map((item) => item.id));
+    setSelected((current) => current.filter((id) => availableIds.has(id)));
+  }, [matchingCollections]);
   useEffect(() => {
     let cancelled = false;
     async function loadProviderOptions() {
@@ -40,38 +48,31 @@ export default function TextGeneratorPanel({ collections, defaultLanguage = "en"
         const nextProviders = await listProviders();
         if (cancelled) return;
         setProviders(nextProviders);
+        setVoices([]);
         const ttsProvider = nextProviders.find((provider) => provider.capability === "tts" && provider.is_enabled && provider.is_default);
         if (!ttsProvider) return;
-        try {
-          const nextVoices = await listProviderVoices(ttsProvider.id);
-          if (!cancelled) setVoices(nextVoices);
-        } catch {
-          // A provider may support synthesis without exposing a voice list. Keep the manual input available.
-          if (!cancelled) setVoices([]);
-        }
+        try { const nextVoices = await listProviderVoices(ttsProvider.id); if (!cancelled) setVoices(nextVoices); } catch { if (!cancelled) setVoices([]); }
       } catch (error) {
-        if (!cancelled) setMessage(error instanceof Error ? error.message : "Could not load provider capabilities.");
-      } finally {
-        if (!cancelled) {
-          setProvidersLoaded(true);
-          setVoicesLoaded(true);
-        }
-      }
+        if (!cancelled) setMessage(error instanceof Error ? error.message : t("textGenerator.providerLoadFailed"));
+      } finally { if (!cancelled) { setProvidersLoaded(true); setVoicesLoaded(true); } }
     }
     void loadProviderOptions();
     return () => { cancelled = true; };
-  }, []);
-  async function generate() { setBusy(true); setMessage(""); try { setPractice(await generateTextPractice({ word_selection: mode, random_word_count: count, word_collection_ids: selected, preset_topic: topic || undefined, custom_topic: customTopic || undefined, target_language: language, difficulty, desired_length: length })); } catch (error) { setMessage(error instanceof Error ? error.message : "Generation failed."); } finally { setBusy(false); } }
-  async function saveOrImport() { setBusy(true); setMessage(""); try { const next = practice ? await updateTextPractice(practice.id, { title, body }) : await importTextPractice({ title, body, target_language: language, difficulty, topic: customTopic || topic }); setPractice(next); setMessage("Text saved. You can now create speech."); } catch (error) { setMessage(error instanceof Error ? error.message : "Save failed."); } finally { setBusy(false); } }
-  async function createSpeech() { if (!practice) return; setBusy(true); setMessage("TTS job queued."); try { const latest = await updateTextPractice(practice.id, { title, body }); setPractice(latest); const job = await synthesizeTextPractice(latest.id, { speed_preset: speed, voice: voice || undefined, accent: accent || undefined, gender: gender || undefined, model: ttsModel || undefined }); for (let i = 0; i < 180; i += 1) { await new Promise((resolve) => window.setTimeout(resolve, 1000)); const current = await getJob(job.job_id); setMessage(`TTS: ${current.stage} (${current.progress}%)`); if (current.status === "succeeded") { const materialId = current.result?.material_id; if (typeof materialId === "number") onMaterialReady(materialId); return; } if (current.status === "failed") throw new Error(current.error_message || "TTS failed."); } throw new Error("TTS job timed out in the browser; it will continue on the server."); } catch (error) { setMessage(error instanceof Error ? error.message : "TTS failed."); } finally { setBusy(false); } }
-  return <div className="card text-generator"><h2>AI Text</h2><p className="muted">Generate a connected practice passage from your collected words, or paste your own text.</p>
-    {providersLoaded && !canGenerate && <p className="muted">Text generation is disabled until the default LLM supports generate_text and generate_json.</p>}
-    <div className="form-grid"><label>Word selection<select value={mode} onChange={(event) => setMode(event.target.value as typeof mode)}><option value="random">Random collection</option><option value="manual">Choose words</option><option value="none">No collected words</option></select></label>{mode === "random" && <label>Random count<input type="number" min="0" max={collections.length} value={count} onChange={(event) => setCount(Math.max(0, Math.min(Number(event.target.value) || 0, collections.length)))} /></label>}<label>Theme<select value={topic} onChange={(event) => setTopic(event.target.value)}><option value="daily_life">Daily life</option><option value="travel">Travel</option><option value="workplace">Workplace</option><option value="campus">Campus</option><option value="news">News</option><option value="story">Story</option></select></label><label>Custom theme<input value={customTopic} onChange={(event) => setCustomTopic(event.target.value)} /></label><label>Language<input value={language} onChange={(event) => setLanguage(event.target.value)} /></label><label>Difficulty<select value={difficulty} onChange={(event) => setDifficulty(event.target.value)}><option>beginner</option><option>intermediate</option><option>advanced</option></select></label><label>Approx. length<input type="number" min="20" value={length} onChange={(event) => setLength(Number(event.target.value))} /></label></div>
-    {mode === "random" && collections.length === 0 && <p className="muted">No collected words yet. Generation will use the selected theme only.</p>}
-    {mode === "manual" && <div className="word-picker">{collections.map((word) => <label key={word.id}><input type="checkbox" checked={selectedSet.has(word.id)} onChange={() => setSelected((previous) => previous.includes(word.id) ? previous.filter((id) => id !== word.id) : [...previous, word.id])} /> {word.word_text}</label>)}</div>}
-    <div className="panel-actions"><button disabled={busy || !canGenerate} onClick={() => void generate()}>Generate text</button></div>
-    <label>Title<input value={title} onChange={(event) => setTitle(event.target.value)} /></label><label>Practice text<textarea rows={10} value={body} onChange={(event) => setBody(event.target.value)} placeholder="Paste text here, then save it and create speech." /></label>
-    {practice?.used_words.length ? <p className="muted">Used words: {practice.used_words.join(", ")}{practice.unused_words.length ? ` · Not used: ${practice.unused_words.join(", ")}` : ""}</p> : null}
-    {providersLoaded && !canSynthesize && <p className="muted">TTS creation is disabled until the default TTS provider supports synthesize.</p>}
-    <div className="form-grid"><label>Speech speed<select value={speed} onChange={(event) => setSpeed(event.target.value as typeof speed)}><option value="slow">Slow</option><option value="normal">Normal</option><option value="fast">Fast</option></select></label><label>Voice ID / name<input list="tts-voice-options" value={voice} onChange={(event) => setVoice(event.target.value)} placeholder={voices.length ? "Choose a listed voice or enter an ID" : "Provider default"} />{voices.length > 0 && <datalist id="tts-voice-options">{voices.map((item) => <option key={item.id} value={item.id}>{displayVoice(item)}</option>)}</datalist>}{voicesLoaded && <small>{voices.length ? `${voices.length} voice${voices.length === 1 ? "" : "s"} available from the default TTS provider.` : "Enter a voice ID, or leave blank to use the provider default."}</small>}</label><label>Accent / locale<input value={accent} onChange={(event) => setAccent(event.target.value)} placeholder="Optional, e.g. en-GB" /></label><label>Gender preference<select value={gender} onChange={(event) => setGender(event.target.value)}><option value="">Provider default</option><option value="female">Female</option><option value="male">Male</option></select></label><label>Model override<input value={ttsModel} onChange={(event) => setTtsModel(event.target.value)} placeholder="Optional provider model" /></label></div><div className="panel-actions"><button disabled={busy || !body.trim()} onClick={() => void saveOrImport()}>{practice ? "Save edits" : "Save imported text"}</button><button disabled={busy || !practice || !canSynthesize} onClick={() => void createSpeech()}>Create TTS practice</button></div>{message && <p className="muted">{message}</p>}</div>;
+  }, [providerRefreshToken, t]);
+
+  async function generate() { setBusy(true); setMessage(""); try { setPractice(await generateTextPractice({ word_selection: mode, random_word_count: effectiveRandomCount, word_collection_ids: selected, preset_topic: topic || undefined, custom_topic: customTopic || undefined, target_language: language, translation_language: translationLanguage, difficulty, desired_length: length })); } catch (error) { setMessage(error instanceof Error ? error.message : t("textGenerator.generationFailed")); } finally { setBusy(false); } }
+  async function saveOrImport() { setBusy(true); setMessage(""); try { const next = practice ? await updateTextPractice(practice.id, { title, body, target_language: language, translation_language: translationLanguage }) : await importTextPractice({ title, body, target_language: language, translation_language: translationLanguage, difficulty, topic: customTopic || topic }); setPractice(next); setMessage(t("textGenerator.saved")); } catch (error) { setMessage(error instanceof Error ? error.message : t("textGenerator.saveFailed")); } finally { setBusy(false); } }
+  async function createSpeech() { if (!practice) return; setBusy(true); setMessage(t("textGenerator.ttsQueued")); try { const latest = await updateTextPractice(practice.id, { title, body, target_language: language, translation_language: translationLanguage }); setPractice(latest); const job = await synthesizeTextPractice(latest.id, { speed_preset: speed, voice: voice || undefined, accent: accent || undefined, gender: gender || undefined, model: ttsModel || undefined }); for (let i = 0; i < 180; i += 1) { await new Promise((resolve) => window.setTimeout(resolve, 1000)); const current = await getJob(job.job_id); setMessage(t("textGenerator.ttsProgress", { stage: stageLabel(t, current.stage), progress: current.progress })); if (current.status === "succeeded") { const materialId = current.result?.material_id; if (typeof materialId === "number") onMaterialReady(materialId); return; } if (current.status === "failed") throw new Error(current.error_message || t("textGenerator.ttsFailed")); } throw new Error(t("textGenerator.ttsTimedOut")); } catch (error) { setMessage(error instanceof Error ? error.message : t("textGenerator.ttsFailed")); } finally { setBusy(false); } }
+  const selectTranslationLanguage = (value: string) => { setTranslationLanguage(value); setGlobalTranslationLanguage(value); };
+
+  return <div className="card text-generator"><h2>{t("textGenerator.title")}</h2><p className="muted">{t("textGenerator.description")}</p>
+    {providersLoaded && !canGenerate && <p className="muted">{t("textGenerator.generationUnavailable")}</p>}
+    <div className="form-grid"><label>{t("textGenerator.wordSelection")}<select value={mode} onChange={(event) => setMode(event.target.value as typeof mode)}><option value="random">{t("textGenerator.randomCollection")}</option><option value="manual">{t("textGenerator.chooseWords")}</option><option value="none">{t("textGenerator.noCollectedWords")}</option></select></label>{mode === "random" && <label>{t("textGenerator.randomCount")}<input type="number" min="0" max={matchingCollections.length} value={effectiveRandomCount} onChange={(event) => setCount(Math.max(0, Math.min(Number(event.target.value) || 0, matchingCollections.length)))} /></label>}<label>{t("textGenerator.theme")}<select value={topic} onChange={(event) => setTopic(event.target.value)}>{["daily_life", "travel", "workplace", "campus", "news", "story"].map((item) => <option key={item} value={item}>{t(`textGenerator.theme.${item}`)}</option>)}</select></label><label>{t("textGenerator.customTheme")}<input value={customTopic} onChange={(event) => setCustomTopic(event.target.value)} /></label><label>{t("textGenerator.language")}<select value={language} onChange={(event) => { setLanguage(event.target.value); setLearningLanguage(event.target.value); }}>{LEARNING_LANGUAGES.map((item) => <option key={item.code} value={item.code}>{languageLabel(item.code, uiLocale)}</option>)}</select></label><label>{t("textGenerator.translationLanguage")}<select value={translationLanguage} onChange={(event) => selectTranslationLanguage(event.target.value)}>{LEARNING_LANGUAGES.map((item) => <option key={item.code} value={item.code}>{languageLabel(item.code, uiLocale)}</option>)}</select></label><label>{t("textGenerator.difficulty")}<select value={difficulty} onChange={(event) => setDifficulty(event.target.value)}>{["beginner", "intermediate", "advanced"].map((item) => <option key={item} value={item}>{t(`textGenerator.difficulty.${item}`)}</option>)}</select></label><label>{t("textGenerator.length")}<input type="number" min="20" value={length} onChange={(event) => setLength(Number(event.target.value))} /></label></div>
+    {mode === "random" && matchingCollections.length === 0 && <p className="muted">{t("textGenerator.noWordsHint")}</p>}
+    {mode === "manual" && <div className="word-picker">{matchingCollections.map((word) => <label key={word.id}><input type="checkbox" checked={selectedSet.has(word.id)} onChange={() => setSelected((previous) => previous.includes(word.id) ? previous.filter((id) => id !== word.id) : [...previous, word.id])} /> {word.word_text}</label>)}</div>}
+    <div className="panel-actions"><button disabled={busy || !canGenerate} onClick={() => void generate()}>{t("textGenerator.generate")}</button></div>
+    <label>{t("textGenerator.titleLabel")}<input dir="auto" value={title} onChange={(event) => setTitle(event.target.value)} /></label><label>{t("textGenerator.textLabel")}<textarea dir="auto" rows={10} value={body} onChange={(event) => setBody(event.target.value)} placeholder={t("textGenerator.textPlaceholder")} /></label>
+    {practice?.used_words.length ? <p className="muted" dir="auto">{t("textGenerator.usedWords", { words: practice.used_words.join(", ") })}{practice.unused_words.length ? ` · ${t("textGenerator.unusedWords", { words: practice.unused_words.join(", ") })}` : ""}</p> : null}
+    {providersLoaded && !canSynthesize && <p className="muted">{t("textGenerator.ttsUnavailable")}</p>}
+    <div className="form-grid"><label>{t("textGenerator.speechSpeed")}<select value={speed} onChange={(event) => setSpeed(event.target.value as typeof speed)}>{["slow", "normal", "fast"].map((item) => <option key={item} value={item}>{t(`textGenerator.speed.${item}`)}</option>)}</select></label><label>{t("textGenerator.voice")}<input list="tts-voice-options" value={voice} onChange={(event) => setVoice(event.target.value)} placeholder={voices.length ? t("textGenerator.voiceChoose") : t("textGenerator.voiceDefault")} />{voices.length > 0 && <datalist id="tts-voice-options">{voices.map((item) => <option key={item.id} value={item.id}>{displayVoice(item)}</option>)}</datalist>}{voicesLoaded && <small>{voices.length ? t("textGenerator.voiceCount", { count: voices.length }) : t("textGenerator.voiceHint")}</small>}</label><label>{t("textGenerator.accent")}<input value={accent} onChange={(event) => setAccent(event.target.value)} placeholder={t("textGenerator.accentPlaceholder")} /></label><label>{t("textGenerator.gender")}<select value={gender} onChange={(event) => setGender(event.target.value)}><option value="">{t("textGenerator.genderDefault")}</option><option value="female">{t("textGenerator.genderFemale")}</option><option value="male">{t("textGenerator.genderMale")}</option></select></label><label>{t("textGenerator.model")}<input value={ttsModel} onChange={(event) => setTtsModel(event.target.value)} placeholder={t("textGenerator.modelPlaceholder")} /></label></div><div className="panel-actions"><button disabled={busy || !body.trim()} onClick={() => void saveOrImport()}>{practice ? t("textGenerator.saveEdits") : t("textGenerator.saveImported")}</button><button disabled={busy || !practice || !canSynthesize} onClick={() => void createSpeech()}>{t("textGenerator.createSpeech")}</button></div>{message && <p className="muted">{message}</p>}</div>;
 }

@@ -30,11 +30,14 @@ class Settings(BaseSettings):
     whisper_model_dir: str = "./data/models/whisper"
     whisper_allow_download: bool = True
 
+    # Legacy environment fallback for databases that predate provider profiles.
+    # New installations should configure an OpenAI-compatible LLM profile in
+    # Settings; these names remain only so existing .env files keep working.
     deepseek_base_url: str = "https://api.deepseek.com"
     deepseek_model: str = "deepseek-chat"
     deepseek_api_key: str = ""
 
-    # Max total concurrent DeepSeek requests allowed in this backend process.
+    # Max total concurrent translation requests allowed in this backend process.
     translation_concurrency: int = 5
     translation_request_timeout_seconds: float = 60.0
     translation_max_retries: int = 2

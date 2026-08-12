@@ -107,3 +107,8 @@ def language_catalog_payload() -> list[dict[str, str]]:
         }
         for item in LANGUAGE_CATALOG
     ]
+
+
+def get_language_descriptor(value: str) -> LanguageDescriptor:
+    normalized = normalize_language_tag(value)
+    return next(item for item in LANGUAGE_CATALOG if item.code == normalized)

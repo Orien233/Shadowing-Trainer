@@ -35,9 +35,9 @@ export function getAlignmentTokenClass(token) {
   return `${BASE_TOKEN_CLASS} ${statusClass}`;
 }
 
-export function getInsertionLabel(token) {
+export function getInsertionLabel(token, uiLocale = getUILocale()) {
   if (!token) return null;
-  const labels = INSERTION_LABELS[getUILocale()];
+  const labels = INSERTION_LABELS[uiLocale] ?? INSERTION_LABELS["en-US"];
   if (token.status === "filler") return labels.filler;
   if (token.status !== "insertion") return null;
   if (token.insertion_type === "repetition") return labels.repetition;

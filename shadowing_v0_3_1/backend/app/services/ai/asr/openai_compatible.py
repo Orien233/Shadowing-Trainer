@@ -14,7 +14,7 @@ from typing import Any
 
 from app.services.ai.http_transport import provider_http
 from app.services.ai.asr._helpers import openai_verbose_result
-from app.services.ai.asr.base import ASRProvider
+from app.services.ai.asr.base import ASRProvider, openai_language_code, resolve_asr_language
 from app.services.ai.audio_types import ASRResult, ASRSegment, AudioCapability
 from app.services.ai.audio_utils import as_mapping, configuration_message, require_configured
 
@@ -40,9 +40,17 @@ def _bearer_headers(api_key: str, extra_config: dict[str, Any]) -> dict[str, str
     return headers
 
 
-def _transcription_fields(model_name: str, extra_config: dict[str, Any]) -> dict[str, str]:
+def _transcription_fields(
+    model_name: str,
+    extra_config: dict[str, Any],
+    *,
+    language: str | None = None,
+) -> dict[str, str | list[str]]:
     fields = {"model": model_name}
-    for key in ("language", "prompt", "temperature"):
+    resolved_language = openai_language_code(resolve_asr_language(language, extra_config))
+    if resolved_language:
+        fields["language"] = resolved_language
+    for key in ("prompt", "temperature"):
         value = extra_config.get(key)
         if value is not None and str(value).strip():
             fields[key] = str(value)
@@ -77,7 +85,13 @@ class OpenAIWhisperASRProvider(ASRProvider):
         self.model_name = model_name
         self.extra_config = dict(extra_config or {})
 
-    def transcribe(self, audio_path: str, *, word_timestamps: bool = False) -> ASRResult:
+    def transcribe(
+        self,
+        audio_path: str,
+        *,
+        word_timestamps: bool = False,
+        language: str | None = None,
+    ) -> ASRResult:
         require_configured(
             base_url=self.base_url,
             api_key=self.api_key,
@@ -87,11 +101,17 @@ class OpenAIWhisperASRProvider(ASRProvider):
         if word_timestamps:
             self.require(AudioCapability.WORD_TIMESTAMPS)
         path = Path(audio_path)
-        fields = _transcription_fields(self.model_name, self.extra_config)
+        fields = _transcription_fields(self.model_name, self.extra_config, language=language)
         # Verbose JSON is required by OpenAI when asking for timing metadata.
         fields["response_format"] = "verbose_json"
         if word_timestamps:
-            fields["timestamp_granularities[]"] = "word"
+            # Material processing needs both lexical boundaries (for clip
+            # trimming) and segment boundaries (for sentence timing).  OpenAI
+            # treats this field as an array of the granularities to populate;
+            # requesting only ``word`` allows a valid verbose response with no
+            # ``segments`` collection at all.  httpx expands list values into
+            # repeated multipart fields with the same name.
+            fields["timestamp_granularities[]"] = ["word", "segment"]
         elif self.extra_config.get("segment_timestamps", True):
             fields["timestamp_granularities[]"] = "segment"
         media_type = mimetypes.guess_type(path.name)[0] or "application/octet-stream"
@@ -138,7 +158,13 @@ class OpenAITranscribeASRProvider(ASRProvider):
         self.model_name = model_name
         self.extra_config = dict(extra_config or {})
 
-    def transcribe(self, audio_path: str, *, word_timestamps: bool = False) -> ASRResult:
+    def transcribe(
+        self,
+        audio_path: str,
+        *,
+        word_timestamps: bool = False,
+        language: str | None = None,
+    ) -> ASRResult:
         if word_timestamps:
             self.require(AudioCapability.WORD_TIMESTAMPS)
         require_configured(
@@ -148,7 +174,7 @@ class OpenAITranscribeASRProvider(ASRProvider):
             provider_name="OpenAI transcription ASR",
         )
         path = Path(audio_path)
-        fields = _transcription_fields(self.model_name, self.extra_config)
+        fields = _transcription_fields(self.model_name, self.extra_config, language=language)
         fields["response_format"] = str(self.extra_config.get("response_format", "json"))
         media_type = mimetypes.guess_type(path.name)[0] or "application/octet-stream"
         with path.open("rb") as audio_file:
@@ -199,7 +225,13 @@ class OpenAICompatibleRemoteASRProvider(ASRProvider):
         self.model_name = model_name
         self.extra_config = dict(extra_config or {})
 
-    def transcribe(self, audio_path: str, *, word_timestamps: bool = False) -> ASRResult:
+    def transcribe(
+        self,
+        audio_path: str,
+        *,
+        word_timestamps: bool = False,
+        language: str | None = None,
+    ) -> ASRResult:
         if word_timestamps:
             self.require(AudioCapability.WORD_TIMESTAMPS)
         require_configured(
@@ -209,7 +241,7 @@ class OpenAICompatibleRemoteASRProvider(ASRProvider):
             provider_name="OpenAI-compatible ASR",
         )
         path = Path(audio_path)
-        fields = _transcription_fields(self.model_name, self.extra_config)
+        fields = _transcription_fields(self.model_name, self.extra_config, language=language)
         response_format = self.extra_config.get("response_format")
         if response_format:
             fields["response_format"] = str(response_format)

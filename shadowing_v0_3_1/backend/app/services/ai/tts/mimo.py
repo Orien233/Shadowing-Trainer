@@ -42,6 +42,8 @@ class MiMoTTSProvider(TTSProvider):
 
     def _instruction(self, request: TTSRequest) -> str | None:
         parts = [str(self.extra_config.get("style_instruction", "")).strip()]
+        if request.language:
+            parts.append(f"Speak the input in {request.language}.")
         if request.accent:
             parts.append(f"Accent: {request.accent}.")
         if request.gender:
@@ -80,7 +82,7 @@ class MiMoTTSProvider(TTSProvider):
         if not audio:
             raise ValueError("MiMo TTS returned empty audio data.")
         extension = extension_from_format(audio_format)
-        return TTSResult(audio=audio, media_type=_MEDIA_TYPES.get(audio_format, "application/octet-stream"), extension=extension, raw_pcm=raw_pcm, provider_metadata={"adapter": "mimo_tts", "model": payload["model"], "voice": payload["audio"]["voice"]})
+        return TTSResult(audio=audio, media_type=_MEDIA_TYPES.get(audio_format, "application/octet-stream"), extension=extension, raw_pcm=raw_pcm, provider_metadata={"adapter": "mimo_tts", "model": payload["model"], "voice": payload["audio"]["voice"], "language": request.language})
 
     def list_voices(self) -> list[dict[str, Any]]:
         return normalized_voices(self.extra_config.get("voices", []))

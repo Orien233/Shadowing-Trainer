@@ -838,7 +838,7 @@ export default function SentenceTrainer({
           )}
         </div>
         {!isGapSegment && (
-          <div className="sentence-translation">{currentSentence?.translation ?? t("trainer.noTranslation")}</div>
+          <div className="sentence-translation" dir="auto">{currentSentence?.translation || t("trainer.noTranslation")}</div>
         )}
         {isGapSegment && (
           <div className="sentence-translation muted">{t("trainer.noSpeechDetected")}</div>

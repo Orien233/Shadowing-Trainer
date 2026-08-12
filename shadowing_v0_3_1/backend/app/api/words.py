@@ -1,6 +1,6 @@
 from typing import Literal
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import JSONResponse
 from sqlmodel import Session
 
@@ -47,9 +47,13 @@ def get_word_collections(
         "collected_time_desc",
         "alphabetical",
     ] = "collected_time_asc",
+    language: str | None = Query(default=None),
     session: Session = Depends(get_session),
 ):
-    return list_word_collections(session, sort=sort)
+    try:
+        return list_word_collections(session, sort=sort, language=language)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
 @router.delete(

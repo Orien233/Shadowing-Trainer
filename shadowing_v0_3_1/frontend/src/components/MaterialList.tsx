@@ -1,7 +1,9 @@
 import { useEffect, useState } from "react";
 import { deleteMaterial, processMaterial } from "../lib/api";
 import type { Material } from "../types";
+import { languageLabel } from "../i18n/catalog";
 import { useLanguage } from "../i18n/LanguageContext";
+import { mediaTypeLabel, stageLabel, statusLabel } from "../i18n/statusLabels";
 
 interface Props {
   materials: Material[];
@@ -22,7 +24,7 @@ export default function MaterialList({
   onProcessed,
   onDeleted,
 }: Props) {
-  const { t } = useLanguage();
+  const { uiLocale, t } = useLanguage();
   const [processingIds, setProcessingIds] = useState<number[]>([]);
   const [deletingIds, setDeletingIds] = useState<number[]>([]);
   const [openMenuId, setOpenMenuId] = useState<number | null>(null);
@@ -92,17 +94,17 @@ export default function MaterialList({
               className={`material-item ${material.id === activeId ? "active" : ""}`}
             >
               <button type="button" className="material-main" onClick={() => onSelect(material.id)}>
-                <div className="material-title">{material.title}</div>
+                <div className="material-title" dir="auto">{material.title}</div>
                 <div className="material-meta">
-                  <span>{material.file_type}</span>
-                  <span>{material.status}</span>
-                  <span>{material.content_language}</span>
-                  <span>→ {material.translation_language}</span>
+                  <span>{mediaTypeLabel(t, material.file_type)}</span>
+                  <span>{statusLabel(t, material.status)}</span>
+                  <span>{languageLabel(material.content_language, uiLocale)}</span>
+                  <span>→ {languageLabel(material.translation_language, uiLocale)}</span>
                 </div>
                 {isProcessing && (
                   <div className="material-progress" aria-label={t("material.processingProgress")}>
                     <span>{t("material.processing")}</span>
-                    <span>{material.processing_stage || t("material.queued")}</span>
+                    <span>{stageLabel(t, material.processing_stage)}</span>
                     <strong>{material.processing_progress ?? 0}%</strong>
                   </div>
                 )}

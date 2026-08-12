@@ -25,6 +25,7 @@ import type {
   ProviderTestResponse,
   ProviderVoice,
 } from "../types";
+import { useLanguage } from "../i18n/LanguageContext";
 
 const capabilities: ProviderCapability[] = ["llm", "tts", "asr"];
 
@@ -44,16 +45,19 @@ const standardFields = new Set(["base_url", "api_key", "model_name"]);
 
 const FALLBACK_CATALOG: ProviderCatalogEntry[] = [
   {
-    key: "openai_compatible", label: "OpenAI-compatible", kind: "llm",
-    capabilities: ["generate_text", "generate_json"], endpoint_mode: "base_url",
+    key: "openai_chat_compatible", label: "OpenAI Chat Completions", kind: "llm",
+    capabilities: ["generate_text", "generate_json"], available_capabilities: ["generate_text", "generate_json"],
+    available_formats: ["json_schema", "response_format", "prompt_only"], endpoint_mode: "base_url",
     endpoint_hint: "API base URL, for example https://api.example.com/v1", required_fields: ["base_url", "api_key", "model_name"],
-    config_fields: [], voice_presets: [], docs_url: null,
+    config_fields: [{ key: "json_schema_name", label: "JSON schema name", field_type: "string", required: false, options: [], default: "response", placeholder: null, help_text: null }, { key: "auth_scheme", label: "Authentication scheme", field_type: "select", required: false, options: ["bearer", "api-key", "none"], default: "bearer", placeholder: null, help_text: null }],
+    voice_presets: [], docs_url: null,
   },
   {
-    key: "openai_compatible", label: "OpenAI-compatible speech", kind: "tts",
-    capabilities: ["synthesize"], endpoint_mode: "full_endpoint",
+    key: "openai_audio_tts", label: "OpenAI Audio TTS", kind: "tts",
+    capabilities: ["synthesize"], available_capabilities: ["synthesize"],
+    available_formats: ["wav", "mp3", "flac", "opus", "aac", "pcm"], endpoint_mode: "full_endpoint",
     endpoint_hint: "Full speech endpoint, for example https://api.example.com/v1/audio/speech", required_fields: ["base_url", "api_key", "model_name"],
-    config_fields: [{ key: "default_voice", label: "Default voice", field_type: "select", required: false, options: ["alloy", "echo", "fable", "onyx", "nova", "shimmer"], default: "alloy", placeholder: null, help_text: "Used when no voice is chosen for a practice." }],
+    config_fields: [{ key: "default_voice", label: "Default voice", field_type: "select", required: false, options: ["alloy", "echo", "fable", "onyx", "nova", "shimmer"], default: "alloy", placeholder: null, help_text: "Used when no voice is chosen for a practice." }, { key: "instructions", label: "Voice instructions", field_type: "string", required: false, options: [], default: null, placeholder: "Optional speaking style instruction", help_text: null }, { key: "send_language_instruction", label: "Send language context as instructions", field_type: "boolean", required: false, options: [], default: false, placeholder: null, help_text: "Enable only when this endpoint supports the optional OpenAI instructions field." }],
     voice_presets: [
       { id: "alloy", name: "Alloy" }, { id: "echo", name: "Echo" }, { id: "fable", name: "Fable" },
       { id: "onyx", name: "Onyx" }, { id: "nova", name: "Nova" }, { id: "shimmer", name: "Shimmer" },
@@ -62,13 +66,13 @@ const FALLBACK_CATALOG: ProviderCatalogEntry[] = [
   },
   {
     key: "openai_audio_asr", label: "OpenAI Audio Transcription", kind: "asr",
-    capabilities: ["transcribe", "word_timestamps"], endpoint_mode: "base_url",
+    capabilities: ["transcribe", "word_timestamps"], available_capabilities: ["transcribe", "word_timestamps"], endpoint_mode: "base_url",
     endpoint_hint: "https://api.openai.com/v1", required_fields: ["base_url", "api_key", "model_name"],
     config_fields: [], voice_presets: [], docs_url: null,
   },
   {
     key: "mimo_tts", label: "MiMo TTS", kind: "tts",
-    capabilities: ["synthesize"], endpoint_mode: "full_endpoint",
+    capabilities: ["synthesize"], available_capabilities: ["synthesize"], available_formats: ["wav", "mp3", "flac", "opus", "pcm16"], endpoint_mode: "full_endpoint",
     endpoint_hint: "Full MiMo chat-completions endpoint", required_fields: ["base_url", "api_key", "model_name"],
     config_fields: [
       { key: "default_voice", label: "Default voice", field_type: "string", required: false, options: [], default: "mimo_default", placeholder: "mimo_default", help_text: null },
@@ -77,7 +81,7 @@ const FALLBACK_CATALOG: ProviderCatalogEntry[] = [
   },
   {
     key: "mimo_asr", label: "MiMo ASR", kind: "asr",
-    capabilities: ["transcribe"], endpoint_mode: "full_endpoint",
+    capabilities: ["transcribe"], available_capabilities: ["transcribe"], endpoint_mode: "full_endpoint",
     endpoint_hint: "Full MiMo chat-completions endpoint", required_fields: ["base_url", "api_key", "model_name"],
     config_fields: [], voice_presets: [], docs_url: null,
   },
@@ -85,10 +89,6 @@ const FALLBACK_CATALOG: ProviderCatalogEntry[] = [
 
 function catalogId(entry: ProviderCatalogEntry): string {
   return `${entry.kind}:${entry.key}`;
-}
-
-function missingReason(missing: string[]): string {
-  return missing.length ? `Remote ASR unavailable: missing ${missing.join(", ")}.` : "Remote ASR is unavailable.";
 }
 
 function configDefaults(entry: ProviderCatalogEntry): ProviderDraft["extra_config"] {
@@ -120,23 +120,8 @@ function displayVoice(voice: ProviderVoice): string {
   return `${voice.name || voice.id}${languages}`;
 }
 
-function testSummary(result: ProviderTestResponse): string {
-  const verification = result.verification_level ? ` Verification: ${result.verification_level}.` : "";
-  const providerCapabilities = result.capabilities.length ? ` Capabilities: ${result.capabilities.join(", ")}.` : "";
-  const billing = result.billable ? " This test may be billable." : "";
-  return `${result.ok ? "Test passed." : "Test failed."} ${result.message}${verification}${providerCapabilities}${billing}`;
-}
-
-function localASRSummary(status: LocalASRStatus | null): string {
-  if (!status) return "Local Whisper environment status could not be loaded.";
-  if (!status.runtime_ready) return status.error || "Local Whisper is unavailable.";
-  if (status.model_loaded) return `Ready: ${status.model_name} is loaded on ${status.device}.`;
-  if (status.model_cached) return `Ready: ${status.model_name} is cached and will load on first use.`;
-  if (status.will_download_on_first_use) return `Ready: ${status.model_name} will download on first use.`;
-  return `Ready: ${status.model_name} will load on first use.`;
-}
-
-export default function SettingsPanel() {
+export default function SettingsPanel({ onProvidersChanged }: { onProvidersChanged?: () => void }) {
+  const { t } = useLanguage();
   const [providers, setProviders] = useState<AIProvider[]>([]);
   const [catalog, setCatalog] = useState<ProviderCatalogEntry[]>(FALLBACK_CATALOG);
   const [scenes, setScenes] = useState<ASRSceneSettings | null>(null);
@@ -156,6 +141,31 @@ export default function SettingsPanel() {
     [adapters, draft.provider_type],
   );
   const selectedConfigFields = selectedCatalog.config_fields || [];
+  const capabilityLabel = (value: string) => t(`settings.capability.${value}`) === `settings.capability.${value}` ? value.toUpperCase() : t(`settings.capability.${value}`);
+  const adapterLabel = (entry: ProviderCatalogEntry) => t(`settings.adapter.${entry.kind}.${entry.key}`) === `settings.adapter.${entry.kind}.${entry.key}` ? entry.label : t(`settings.adapter.${entry.kind}.${entry.key}`);
+  const formatLabel = (value: string) => t(`settings.format.${value}`) === `settings.format.${value}` ? value : t(`settings.format.${value}`);
+  const capabilityValueLabel = (value: string) => t(`settings.capabilityValue.${value}`) === `settings.capabilityValue.${value}` ? value : t(`settings.capabilityValue.${value}`);
+  const configFieldLabel = (field: ProviderConfigField) => {
+    const key = `settings.configField.${field.key}.label`;
+    const translated = t(key);
+    return translated === key ? field.label : translated;
+  };
+  const configFieldHelp = (field: ProviderConfigField) => {
+    if (!field.help_text) return null;
+    const key = `settings.configField.${field.key}.help`;
+    const translated = t(key);
+    return translated === key ? field.help_text : translated;
+  };
+  const missingReason = (missing: string[]) => missing.length ? t("settings.remoteMissing", { values: missing.map(capabilityValueLabel).join(", ") }) : t("settings.remoteUnavailable");
+  const testSummary = (result: ProviderTestResponse) => `${result.ok ? t("settings.testPassed") : t("settings.testFailedStatus")} ${result.message}${result.verification_level ? ` ${t("settings.verification", { value: result.verification_level })}` : ""}${result.capabilities.length ? ` ${t("settings.testCapabilities", { values: result.capabilities.map(capabilityValueLabel).join(", ") })}` : ""}${result.billable ? ` ${t("settings.testBillable")}` : ""}`;
+  const localASRSummary = (status: LocalASRStatus | null) => {
+    if (!status) return t("settings.localStatusUnavailable");
+    if (!status.runtime_ready) return status.error || t("settings.localUnavailableGeneric");
+    if (status.model_loaded) return t("settings.localReadyLoaded", { model: status.model_name, device: status.device });
+    if (status.model_cached) return t("settings.localReadyCached", { model: status.model_name });
+    if (status.will_download_on_first_use) return t("settings.localReadyDownload", { model: status.model_name });
+    return t("settings.localReady", { model: status.model_name });
+  };
 
   const load = async () => {
     try {
@@ -175,7 +185,7 @@ export default function SettingsPanel() {
         return currentEntry ? current : newDraft(usableCatalog[0], current.name);
       });
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Settings failed to load.");
+      setMessage(error instanceof Error ? error.message : t("settings.loadFailed"));
     }
   };
 
@@ -240,10 +250,11 @@ export default function SettingsPanel() {
       setDraft(newDraft(catalog.find((entry) => entry.kind === "llm") || FALLBACK_CATALOG[0]));
       setEditingProviderId(null);
       setDraftTest(null);
-      setMessage(editingProviderId !== null ? "Provider configuration updated." : "Provider configuration saved.");
+      setMessage(editingProviderId !== null ? t("settings.updated") : t("settings.saved"));
+      onProvidersChanged?.();
       await load();
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Could not add provider.");
+      setMessage(error instanceof Error ? error.message : t("settings.addFailed"));
     }
   }
 
@@ -256,19 +267,19 @@ export default function SettingsPanel() {
       setMessage(testSummary(result));
     } catch (error) {
       setDraftTest(null);
-      setMessage(error instanceof Error ? error.message : "Provider test failed.");
+      setMessage(error instanceof Error ? error.message : t("settings.testFailed"));
     } finally {
       setTestingDraft(false);
     }
   }
 
   async function testSaved(provider: AIProvider, mode: "configuration" | "network" | "inference" = "configuration") {
-    if (mode === "inference" && !window.confirm("This sends a small live provider request and may incur charges. Continue?")) return;
+    if (mode === "inference" && !window.confirm(t("settings.paidConfirm"))) return;
     try {
       const result = await testProvider(provider.id, { test_mode: mode });
       setMessage(testSummary(result));
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Provider test failed.");
+      setMessage(error instanceof Error ? error.message : t("settings.testFailed"));
     }
   }
 
@@ -286,7 +297,7 @@ export default function SettingsPanel() {
       const voices = await listProviderVoices(provider.id);
       setProviderVoices((current) => ({ ...current, [provider.id]: voices }));
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Could not load provider voices.");
+      setMessage(error instanceof Error ? error.message : t("settings.voiceLoadFailed"));
     } finally {
       setLoadingVoices(null);
     }
@@ -295,9 +306,10 @@ export default function SettingsPanel() {
   async function setDefault(provider: AIProvider) {
     try {
       await updateProvider(provider.id, { is_default: true, is_enabled: true });
+      onProvidersChanged?.();
       await load();
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Could not set default.");
+      setMessage(error instanceof Error ? error.message : t("settings.defaultFailed"));
     }
   }
 
@@ -313,11 +325,11 @@ export default function SettingsPanel() {
     });
     setEditingProviderId(provider.id);
     setDraftTest(null);
-    setMessage(`Editing ${provider.name}. Leave API key blank to retain it.`);
+    setMessage(t("settings.editing", { name: provider.name }));
   }
 
   async function remove(id: number) {
-    if (!window.confirm("Delete this provider configuration?")) return;
+    if (!window.confirm(t("settings.deleteConfirm"))) return;
     try {
       await deleteProvider(id);
       setProviderVoices((current) => {
@@ -325,9 +337,20 @@ export default function SettingsPanel() {
         delete next[id];
         return next;
       });
+      onProvidersChanged?.();
       await load();
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Could not delete provider.");
+      setMessage(error instanceof Error ? error.message : t("settings.deleteFailed"));
+    }
+  }
+
+  async function toggleProviderEnabled(provider: AIProvider) {
+    try {
+      await updateProvider(provider.id, { is_enabled: !provider.is_enabled });
+      onProvidersChanged?.();
+      await load();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : t("settings.updateFailed"));
     }
   }
 
@@ -338,13 +361,13 @@ export default function SettingsPanel() {
     try {
       setScenes(await updateASRSceneSettings(payload));
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Could not update ASR setting.");
+      setMessage(error instanceof Error ? error.message : t("settings.asrUpdateFailed"));
       await load();
     }
   }
 
   async function checkLocalASR(loadModel = false) {
-    if (loadModel && !window.confirm("Loading Local Whisper can download the configured model and use significant memory. Continue?")) return;
+    if (loadModel && !window.confirm(t("settings.loadModelConfirm"))) return;
     setCheckingLocalASR(true);
     try {
       const status = await testLocalASR(loadModel);
@@ -352,7 +375,7 @@ export default function SettingsPanel() {
       setMessage(localASRSummary(status));
       await load();
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Local Whisper check failed.");
+      setMessage(error instanceof Error ? error.message : t("settings.localCheckFailed"));
     } finally {
       setCheckingLocalASR(false);
     }
@@ -363,10 +386,10 @@ export default function SettingsPanel() {
     try {
       const status = await releaseLocalASR();
       setLocalASR(status);
-      setMessage("Local Whisper model was released from memory.");
+      setMessage(t("settings.localReleased"));
       await load();
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Could not release Local Whisper.");
+      setMessage(error instanceof Error ? error.message : t("settings.localReleaseFailed"));
     } finally {
       setCheckingLocalASR(false);
     }
@@ -374,21 +397,23 @@ export default function SettingsPanel() {
 
   function renderConfigField(field: ProviderConfigField) {
     const value = draft.extra_config[field.key];
+    const label = configFieldLabel(field);
+    const help = configFieldHelp(field);
     const voiceOptions = field.key === "default_voice" ? selectedCatalog.voice_presets || [] : [];
     const options = [...new Set([...(field.options || []), ...voiceOptions.map((voice) => voice.id)])];
     if (field.field_type === "boolean") {
-      return <label key={field.key} className="config-checkbox"><input type="checkbox" checked={Boolean(value)} onChange={(event) => setConfigValue(field, event.target.checked)} /> {field.label}{field.required ? " *" : ""}{field.help_text && <small>{field.help_text}</small>}</label>;
+      return <label key={field.key} className="config-checkbox"><input type="checkbox" checked={Boolean(value)} onChange={(event) => setConfigValue(field, event.target.checked)} /> {label}{field.required ? " *" : ""}{help && <small>{help}</small>}</label>;
     }
     if (field.field_type === "select") {
-      return <label key={field.key}>{field.label}{field.required ? " *" : ""}<select value={value == null ? "" : String(value)} onChange={(event) => setConfigValue(field, event.target.value || null)}><option value="">Select…</option>{options.map((option) => {
+      return <label key={field.key}>{label}{field.required ? " *" : ""}<select value={value == null ? "" : String(value)} onChange={(event) => setConfigValue(field, event.target.value || null)}><option value="">{t("settings.select")}</option>{options.map((option) => {
         const preset = voiceOptions.find((voice) => voice.id === option);
         return <option key={option} value={option}>{preset ? displayVoice(preset) : option}</option>;
-      })}</select>{field.help_text && <small>{field.help_text}</small>}</label>;
+      })}</select>{help && <small>{help}</small>}</label>;
     }
     if (field.field_type === "number") {
-      return <label key={field.key}>{field.label}{field.required ? " *" : ""}<input type="number" value={value == null ? "" : String(value)} placeholder={field.placeholder || ""} onChange={(event) => setConfigValue(field, event.target.value === "" ? null : Number(event.target.value))} />{field.help_text && <small>{field.help_text}</small>}</label>;
+      return <label key={field.key}>{label}{field.required ? " *" : ""}<input type="number" value={value == null ? "" : String(value)} placeholder={field.placeholder || ""} onChange={(event) => setConfigValue(field, event.target.value === "" ? null : Number(event.target.value))} />{help && <small>{help}</small>}</label>;
     }
-    return <label key={field.key}>{field.label}{field.required ? " *" : ""}<input value={value == null ? "" : String(value)} placeholder={field.placeholder || ""} onChange={(event) => setConfigValue(field, event.target.value)} />{field.help_text && <small>{field.help_text}</small>}</label>;
+    return <label key={field.key}>{label}{field.required ? " *" : ""}<input value={value == null ? "" : String(value)} placeholder={field.placeholder || ""} onChange={(event) => setConfigValue(field, event.target.value)} />{help && <small>{help}</small>}</label>;
   }
 
   function toggleBoundary(key: "enabled_capabilities" | "enabled_formats", value: string, checked: boolean) {
@@ -405,31 +430,16 @@ export default function SettingsPanel() {
   const materialLocalAvailable = scenes?.material_transcription_local_available ?? true;
   const recordingLocalAvailable = scenes?.recording_evaluation_local_available ?? true;
 
-  return <div className="card settings-panel"><h2>Settings</h2><p className="muted">Credentials stay in the backend. A blank API-key edit retains the saved key.</p>
-    <section className="provider-section"><h3>Quick templates</h3><p className="muted">OpenAI and MiMo templates are built in and cannot be edited or deleted. Using one only pre-fills a new configuration; it does not save credentials.</p><div className="panel-actions">{catalog.filter((entry) => entry.preset !== false).map((entry) => <button key={catalogId(entry)} onClick={() => { setDraft(newDraft(entry)); setEditingProviderId(null); setDraftTest(null); }}>{entry.label}</button>)}</div></section>
-    <section className="provider-section provider-draft"><h3>{editingProviderId === null ? "New provider configuration" : "Edit provider configuration"}</h3>
-      <div className="form-grid">
-        <label>Name<input value={draft.name} placeholder={selectedCatalog.label} onChange={(event) => setDraftValue("name", event.target.value)} /></label>
-        <label>Capability<select value={draft.capability} onChange={(event) => selectCapability(event.target.value as ProviderCapability)}>{capabilities.map((capability) => <option key={capability} value={capability}>{capability.toUpperCase()}</option>)}</select></label>
-        <label>Adapter<select value={catalogId(selectedCatalog)} onChange={(event) => selectAdapter(event.target.value)}>{adapters.map((entry) => <option key={catalogId(entry)} value={catalogId(entry)}>{entry.label}</option>)}</select></label>
-        {selectedCatalog.endpoint_mode !== "none" && <label>{selectedCatalog.endpoint_mode === "full_endpoint" ? "Full endpoint" : "API base URL"}{selectedCatalog.required_fields.includes("base_url") ? " *" : ""}<input placeholder={selectedCatalog.endpoint_hint || ""} value={draft.base_url} onChange={(event) => setDraftValue("base_url", event.target.value)} /></label>}
-        {selectedCatalog.required_fields.includes("api_key") && <label>API key *<input type="password" value={draft.api_key} onChange={(event) => setDraftValue("api_key", event.target.value)} /></label>}
-        {selectedCatalog.required_fields.includes("model_name") && <label>Model / voice *<input value={draft.model_name} onChange={(event) => setDraftValue("model_name", event.target.value)} /></label>}
-        {selectedConfigFields.map(renderConfigField)}
-        <div className="boundary-options"><strong>Enabled capabilities</strong>{(selectedCatalog.available_capabilities || selectedCatalog.capabilities).map((item) => <label key={item} className="config-checkbox"><input type="checkbox" checked={draft.enabled_capabilities.includes(item)} onChange={(event) => toggleBoundary("enabled_capabilities", item, event.target.checked)} /> {item}</label>)}</div>
-        {(selectedCatalog.available_formats || []).length > 0 && <div className="boundary-options"><strong>{draft.capability === "llm" ? "JSON output methods" : "Enabled output formats"}</strong>{(selectedCatalog.available_formats || []).map((item) => <label key={item} className="config-checkbox"><input type="checkbox" checked={draft.enabled_formats.includes(item)} onChange={(event) => toggleBoundary("enabled_formats", item, event.target.checked)} /> {item}</label>)}</div>}
-        {selectedCatalog.voice_presets?.length && !selectedConfigFields.some((field) => field.key === "default_voice") && <label>Default voice<select value={String(draft.extra_config.default_voice || "")} onChange={(event) => setConfigValue({ key: "default_voice", label: "Default voice", field_type: "select", required: false, options: [], default: null, placeholder: null, help_text: null }, event.target.value || null)}><option value="">No default voice</option>{selectedCatalog.voice_presets.map((voice) => <option key={voice.id} value={voice.id}>{displayVoice(voice)}</option>)}</select></label>}
-      </div>
-      <div className="catalog-summary"><span>Protocol allows: {(selectedCatalog.available_capabilities || selectedCatalog.capabilities).join(", ") || "none"}. Checked boundaries are enforced by the backend.</span>{selectedCatalog.endpoint_hint && <span> Endpoint: {selectedCatalog.endpoint_hint}</span>}{selectedCatalog.docs_url && <a href={selectedCatalog.docs_url} target="_blank" rel="noreferrer">Adapter documentation</a>}</div>
-      <div className="panel-actions"><button disabled={!isDraftComplete() || testingDraft} onClick={() => void testDraft()}>{testingDraft ? "Testing…" : "Test draft"}</button><button disabled={!isDraftComplete()} onClick={() => void saveConfiguration()}>{editingProviderId === null ? "Save configuration" : "Save changes"}</button>{editingProviderId !== null && <button onClick={() => { setEditingProviderId(null); setDraft(newDraft(catalog[0] || FALLBACK_CATALOG[0])); }}>Cancel edit</button>}</div>
-      {draftTest && <p className={`provider-test ${draftTest.ok ? "success" : "error"}`}>Verification level: {draftTest.verification_level || "unspecified"}{draftTest.billable ? " · may incur charges" : ""}</p>}
-    </section>
-    {capabilities.map((capability) => {
-      const capabilityProviders = providers.filter((provider) => provider.capability === capability);
-      return <section key={capability} className="provider-section"><h3>{capability.toUpperCase()}</h3>{capabilityProviders.length ? capabilityProviders.map((provider) => <div className="provider-row" key={provider.id}><div className="provider-details"><span><strong>{provider.name}</strong> · {provider.model_name || "no model"} · {provider.base_url || "no URL"} · {provider.is_enabled ? "enabled" : "disabled"} · capabilities: {provider.capabilities.join(", ") || "none"}</span>{provider.capability === "tts" && providerVoices[provider.id] && <span className="provider-voices">Available voices: {providerVoices[provider.id].length ? providerVoices[provider.id].map(displayVoice).join(", ") : "none reported"}</span>}</div><div><button onClick={() => void setDefault(provider)} disabled={provider.is_default}>{provider.is_default ? "Default" : "Set default"}</button><button onClick={() => void edit(provider)}>Edit</button><button onClick={() => void updateProvider(provider.id, { is_enabled: !provider.is_enabled }).then(load).catch((error) => setMessage(error instanceof Error ? error.message : "Could not update provider."))}>{provider.is_enabled ? "Disable" : "Enable"}</button>{provider.capability === "tts" && <button onClick={() => void loadVoices(provider)} disabled={loadingVoices === provider.id}>{loadingVoices === provider.id ? "Loading voices…" : providerVoices[provider.id] ? "Hide voices" : "Show voices"}</button>}<button onClick={() => void testSaved(provider)}>Check configuration</button><button onClick={() => void testSaved(provider, "network")}>{provider.capability === "llm" ? "Verify connection" : "Verify adapter"}</button><button className="provider-live-test" onClick={() => void testSaved(provider, "inference")}>Run paid test</button><button onClick={() => void remove(provider.id)}>Delete</button></div></div>) : <p className="muted">No provider configured.</p>}</section>;
-    })}
-    <section className="provider-section"><h3>Local Whisper runtime</h3><p className={localASR?.runtime_ready ? "muted" : "provider-test error"}>{localASRSummary(localASR)}</p>{localASR && <p className="muted">Model: {localASR.model_name} · {localASR.device} · {localASR.compute_type} · {localASR.model_cached ? "cached" : "not cached"}</p>}<div className="panel-actions"><button disabled={checkingLocalASR} onClick={() => void checkLocalASR()}>{checkingLocalASR ? "Checking…" : "Check environment"}</button>{localASR?.runtime_ready && !localASR.model_loaded && <button disabled={checkingLocalASR} onClick={() => void checkLocalASR(true)}>Load model</button>}{localASR?.model_loaded && <button disabled={checkingLocalASR} onClick={() => void releaseLocalASRModel()}>Release model memory</button>}</div>{!localASR?.installed && <p className="muted">Install it when local ASR is needed: <code>pip install -r requirements-local-whisper.txt</code></p>}</section>
-    <section className="provider-section"><h3>ASR scene routing</h3><label><input type="checkbox" checked={scenes?.material_transcription_use_local ?? true} disabled={!materialRemoteAvailable || !materialLocalAvailable} onChange={(event) => void updateScene("material_transcription_use_local", event.target.checked)} /> Use Local Whisper for material transcription</label><p className="muted">Effective route: {scenes?.material_transcription_effective_route || (scenes?.material_transcription_use_local ? "local" : "remote")}.{!materialLocalAvailable ? ` Local Whisper unavailable: ${scenes?.material_transcription_local_unavailable_reason || "not installed"}.` : ""}{!materialRemoteAvailable ? ` ${missingReason(scenes?.material_transcription_missing_capabilities ?? [])}` : ""}</p><label><input type="checkbox" checked={scenes?.recording_evaluation_use_local ?? true} disabled={!recordingRemoteAvailable || !recordingLocalAvailable} onChange={(event) => void updateScene("recording_evaluation_use_local", event.target.checked)} /> Use Local Whisper for recording evaluation</label><p className="muted">Effective route: {scenes?.recording_evaluation_effective_route || (scenes?.recording_evaluation_use_local ? "local" : "remote")}.{!recordingLocalAvailable ? ` Local Whisper unavailable: ${scenes?.recording_evaluation_local_unavailable_reason || "not installed"}.` : ""}{!recordingRemoteAvailable ? ` ${missingReason(scenes?.recording_evaluation_missing_capabilities ?? [])}` : ""}</p></section>
-    {message && <p className="muted">{message}</p>}
-  </div>;
+  const routeSummary = (route: string, localAvailable: boolean, reason: string | null | undefined, remoteAvailable: boolean, missing: string[]) => <>{t("settings.route", { route: t(`settings.route.${route}`) === `settings.route.${route}` ? route : t(`settings.route.${route}`) })}{!localAvailable ? ` ${t("settings.localUnavailable", { reason: reason || t("settings.notInstalled") })}` : ""}{!remoteAvailable ? ` ${missingReason(missing)}` : ""}</>;
+  return <div className="card settings-panel"><h2>{t("settings.title")}</h2><p className="muted">{t("settings.credentialsHint")}</p>
+    <section className="provider-section"><h3>{t("settings.quickTemplates")}</h3><p className="muted">{t("settings.templatesHint")}</p><div className="panel-actions">{catalog.filter((entry) => entry.preset !== false).map((entry) => <button key={catalogId(entry)} onClick={() => { setDraft(newDraft(entry)); setEditingProviderId(null); setDraftTest(null); }}>{adapterLabel(entry)}</button>)}</div></section>
+    <section className="provider-section provider-draft"><h3>{editingProviderId === null ? t("settings.newProvider") : t("settings.editProvider")}</h3><div className="form-grid">
+      <label>{t("settings.name")}<input value={draft.name} placeholder={adapterLabel(selectedCatalog)} onChange={(event) => setDraftValue("name", event.target.value)} /></label><label>{t("settings.capability")}<select value={draft.capability} onChange={(event) => selectCapability(event.target.value as ProviderCapability)}>{capabilities.map((capability) => <option key={capability} value={capability}>{capabilityLabel(capability)}</option>)}</select></label><label>{t("settings.adapter")}<select value={catalogId(selectedCatalog)} onChange={(event) => selectAdapter(event.target.value)}>{adapters.map((entry) => <option key={catalogId(entry)} value={catalogId(entry)}>{adapterLabel(entry)}</option>)}</select></label>
+      {selectedCatalog.endpoint_mode !== "none" && <label>{selectedCatalog.endpoint_mode === "full_endpoint" ? t("settings.fullEndpoint") : t("settings.apiBaseUrl")}{selectedCatalog.required_fields.includes("base_url") ? " *" : ""}<input placeholder={selectedCatalog.endpoint_hint || ""} value={draft.base_url} onChange={(event) => setDraftValue("base_url", event.target.value)} /></label>}{selectedCatalog.required_fields.includes("api_key") && <label>{t("settings.apiKey")} *<input type="password" value={draft.api_key} onChange={(event) => setDraftValue("api_key", event.target.value)} /></label>}{selectedCatalog.required_fields.includes("model_name") && <label>{t("settings.modelVoice")} *<input value={draft.model_name} onChange={(event) => setDraftValue("model_name", event.target.value)} /></label>}{selectedConfigFields.map(renderConfigField)}
+      <div className="boundary-options"><strong>{t("settings.enabledCapabilities")}</strong>{(selectedCatalog.available_capabilities || selectedCatalog.capabilities).map((item) => <label key={item} className="config-checkbox"><input type="checkbox" checked={draft.enabled_capabilities.includes(item)} onChange={(event) => toggleBoundary("enabled_capabilities", item, event.target.checked)} /> {capabilityValueLabel(item)}</label>)}</div>{(selectedCatalog.available_formats || []).length > 0 && <div className="boundary-options"><strong>{draft.capability === "llm" ? t("settings.jsonFormats") : t("settings.enabledFormats")}</strong>{(selectedCatalog.available_formats || []).map((item) => <label key={item} className="config-checkbox"><input type="checkbox" checked={draft.enabled_formats.includes(item)} onChange={(event) => toggleBoundary("enabled_formats", item, event.target.checked)} /> {formatLabel(item)}</label>)}</div>}
+      {selectedCatalog.voice_presets?.length && !selectedConfigFields.some((field) => field.key === "default_voice") && <label>{t("settings.defaultVoice")}<select value={String(draft.extra_config.default_voice || "")} onChange={(event) => setConfigValue({ key: "default_voice", label: "Default voice", field_type: "select", required: false, options: [], default: null, placeholder: null, help_text: null }, event.target.value || null)}><option value="">{t("settings.noDefaultVoice")}</option>{selectedCatalog.voice_presets.map((voice) => <option key={voice.id} value={voice.id}>{displayVoice(voice)}</option>)}</select></label>}</div>
+      <div className="catalog-summary"><span>{t("settings.protocolAllows", { values: (selectedCatalog.available_capabilities || selectedCatalog.capabilities).map(capabilityValueLabel).join(", ") || t("settings.none") })}</span>{selectedCatalog.endpoint_hint && <span> {t("settings.endpoint", { value: selectedCatalog.endpoint_hint })}</span>}{selectedCatalog.docs_url && <a href={selectedCatalog.docs_url} target="_blank" rel="noreferrer">{t("settings.adapterDocs")}</a>}</div><div className="panel-actions"><button disabled={!isDraftComplete() || testingDraft} onClick={() => void testDraft()}>{testingDraft ? t("settings.testing") : t("settings.testDraft")}</button><button disabled={!isDraftComplete()} onClick={() => void saveConfiguration()}>{editingProviderId === null ? t("settings.saveConfiguration") : t("settings.saveChanges")}</button>{editingProviderId !== null && <button onClick={() => { setEditingProviderId(null); setDraft(newDraft(catalog[0] || FALLBACK_CATALOG[0])); }}>{t("settings.cancelEdit")}</button>}</div>{draftTest && <p className={`provider-test ${draftTest.ok ? "success" : "error"}`}>{t("settings.verificationLevel", { value: draftTest.verification_level || t("settings.unspecified") })}{draftTest.billable ? ` · ${t("settings.mayCharge")}` : ""}</p>}</section>
+    {capabilities.map((capability) => { const capabilityProviders = providers.filter((provider) => provider.capability === capability); return <section key={capability} className="provider-section"><h3>{capabilityLabel(capability)}</h3>{capabilityProviders.length ? capabilityProviders.map((provider) => <div className="provider-row" key={provider.id}><div className="provider-details"><span><strong>{provider.name}</strong> · {provider.model_name || t("settings.noModel")} · {provider.base_url || t("settings.noUrl")} · {provider.is_enabled ? t("settings.enabled") : t("settings.disabled")} · {t("settings.capabilities", { values: provider.capabilities.map(capabilityValueLabel).join(", ") || t("settings.none") })}</span>{provider.capability === "tts" && providerVoices[provider.id] && <span className="provider-voices">{t("settings.availableVoices", { values: providerVoices[provider.id].length ? providerVoices[provider.id].map(displayVoice).join(", ") : t("settings.noneReported") })}</span>}</div><div><button onClick={() => void setDefault(provider)} disabled={provider.is_default}>{provider.is_default ? t("settings.default") : t("settings.setDefault")}</button><button onClick={() => void edit(provider)}>{t("settings.edit")}</button><button onClick={() => void toggleProviderEnabled(provider)}>{provider.is_enabled ? t("settings.disable") : t("settings.enable")}</button>{provider.capability === "tts" && <button onClick={() => void loadVoices(provider)} disabled={loadingVoices === provider.id}>{loadingVoices === provider.id ? t("settings.loadingVoices") : providerVoices[provider.id] ? t("settings.hideVoices") : t("settings.showVoices")}</button>}<button onClick={() => void testSaved(provider)}>{t("settings.checkConfiguration")}</button><button onClick={() => void testSaved(provider, "network")}>{provider.capability === "llm" ? t("settings.verifyConnection") : t("settings.verifyAdapter")}</button><button className="provider-live-test" onClick={() => void testSaved(provider, "inference")}>{t("settings.runPaidTest")}</button><button onClick={() => void remove(provider.id)}>{t("settings.delete")}</button></div></div>) : <p className="muted">{t("settings.noProviders")}</p>}</section>; })}
+    <section className="provider-section"><h3>{t("settings.localWhisper")}</h3><p className={localASR?.runtime_ready ? "muted" : "provider-test error"}>{localASRSummary(localASR)}</p>{localASR && <p className="muted">{t("settings.modelStatus", { model: localASR.model_name, device: localASR.device, computeType: localASR.compute_type, cached: localASR.model_cached ? t("settings.cached") : t("settings.notCached") })}</p>}<div className="panel-actions"><button disabled={checkingLocalASR} onClick={() => void checkLocalASR()}>{checkingLocalASR ? t("settings.checking") : t("settings.checkEnvironment")}</button>{localASR?.runtime_ready && !localASR.model_loaded && <button disabled={checkingLocalASR} onClick={() => void checkLocalASR(true)}>{t("settings.loadModel")}</button>}{localASR?.model_loaded && <button disabled={checkingLocalASR} onClick={() => void releaseLocalASRModel()}>{t("settings.releaseModel")}</button>}</div>{!localASR?.installed && <p className="muted">{t("settings.installLocalAsr")} <code>pip install -r requirements-local-whisper.txt</code></p>}</section>
+    <section className="provider-section"><h3>{t("settings.asrRouting")}</h3><label><input type="checkbox" checked={scenes?.material_transcription_use_local ?? true} disabled={!materialRemoteAvailable || !materialLocalAvailable} onChange={(event) => void updateScene("material_transcription_use_local", event.target.checked)} /> {t("settings.materialLocalAsr")}</label><p className="muted">{routeSummary(scenes?.material_transcription_effective_route || (scenes?.material_transcription_use_local ? "local" : "remote"), materialLocalAvailable, scenes?.material_transcription_local_unavailable_reason, materialRemoteAvailable, scenes?.material_transcription_missing_capabilities ?? [])}</p><label><input type="checkbox" checked={scenes?.recording_evaluation_use_local ?? true} disabled={!recordingRemoteAvailable || !recordingLocalAvailable} onChange={(event) => void updateScene("recording_evaluation_use_local", event.target.checked)} /> {t("settings.recordingLocalAsr")}</label><p className="muted">{routeSummary(scenes?.recording_evaluation_effective_route || (scenes?.recording_evaluation_use_local ? "local" : "remote"), recordingLocalAvailable, scenes?.recording_evaluation_local_unavailable_reason, recordingRemoteAvailable, scenes?.recording_evaluation_missing_capabilities ?? [])}</p></section>{message && <p className="muted">{message}</p>}</div>;
 }

@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Any, Dict, Iterable, List
 
 
-END_PUNCTUATION = (".", "!", "?", "\u3002", "\uff01", "\uff1f")
+END_PUNCTUATION = (".", "!", "?", "。", "！", "？", "؟", "।", "॥")
 MAX_DURATION = 8.0
 MAX_SEGMENTS_PER_SENTENCE = 3
 
@@ -49,7 +49,16 @@ def extract_sentence_effective_word_bounds(
 
 
 # segment the ASR output into sentences based on punctuation and duration heuristics
-def segment_to_sentences(segments: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+def _uses_spaces_between_segments(language: str | None) -> bool:
+    primary = str(language or "").replace("_", "-").casefold().split("-", 1)[0]
+    return primary not in {"zh", "ja"}
+
+
+def segment_to_sentences(
+    segments: List[Dict[str, Any]],
+    *,
+    language: str | None = None,
+) -> List[Dict[str, Any]]:
     if not segments:
         return []
 
@@ -63,7 +72,9 @@ def segment_to_sentences(segments: List[Dict[str, Any]]) -> List[Dict[str, Any]]
         sentence = {
             "start_time": buffer[0]["start"],
             "end_time": buffer[-1]["end"],
-            "source_text": " ".join(item["text"] for item in buffer).strip(),
+            "source_text": (" " if _uses_spaces_between_segments(language) else "").join(
+                str(item["text"]).strip() for item in buffer
+            ).strip(),
             "word_start_time": word_start_time,
             "word_end_time": word_end_time,
         }

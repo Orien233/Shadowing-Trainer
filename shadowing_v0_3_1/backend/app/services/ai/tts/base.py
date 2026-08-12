@@ -8,6 +8,10 @@ from app.services.ai.audio_types import AudioCapability, TTSResult, UnsupportedA
 @dataclass(frozen=True)
 class TTSRequest:
     text: str
+    # Canonical BCP-47 language tag for the text being spoken.  Adapters map
+    # this context to their own request shape (or instructions) instead of
+    # assuming the application UI language.
+    language: str | None = None
     voice: str | None = None
     model: str | None = None
     speed: float = 1.0
