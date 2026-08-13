@@ -225,11 +225,11 @@ data/cache/
 
 # Project runtime data
 shadowing_v0_3/backend/data/
-shadowing_v0_3_1/backend/data/
+shadowing/backend/data/
 
 # Frontend TypeScript build metadata
 shadowing_v0_3/frontend/*.tsbuildinfo
-shadowing_v0_3_1/frontend/*.tsbuildinfo
+shadowing/frontend/*.tsbuildinfo
 shadowing_v0_3/frontend/vite.config.js
 shadowing_v0_3/frontend/vite.config.d.ts
 
