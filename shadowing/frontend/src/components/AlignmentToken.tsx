@@ -1,9 +1,9 @@
-import { getAlignmentTokenClass, getInsertionLabel } from "../utils/alignmentColors.js";
+import { getAlignmentTokenClass, getInsertionLabel } from "../utils/alignmentColors";
 import { useLanguage } from "../i18n/LanguageContext";
-import { getAlignmentTokenTitle } from "../utils/alignmentText.js";
-import { splitDisplayText } from "../utils/sentenceTokenText.js";
+import { getAlignmentTokenTitle } from "../utils/alignmentText";
+import { splitDisplayText } from "../utils/sentenceTokenText";
 
-function joinClasses(...classes) {
+function joinClasses(...classes: Array<string | undefined>) {
   return classes.filter(Boolean).join(" ");
 }
 
@@ -12,7 +12,7 @@ export function AlignmentTokenCore({
   className = "",
   coreProps = {},
   children,
-}) {
+}: { token?: AlignmentTokenType; className?: string; coreProps?: HTMLAttributes<HTMLSpanElement>; children?: ReactNode }) {
   return (
     <span {...coreProps} className={joinClasses(getAlignmentTokenClass(token), className)}>
       {children}
@@ -26,7 +26,7 @@ export default function AlignmentToken({
   coreClassName = "",
   coreProps = {},
   children,
-}) {
+}: { token: AlignmentTokenType; wrapClassName?: string; coreClassName?: string; coreProps?: HTMLAttributes<HTMLSpanElement>; children?: (parts: { leading: string; core: string; trailing: string; label: string | null }) => ReactNode }) {
   const { uiLocale, t } = useLanguage();
   const label = getInsertionLabel(token, uiLocale);
   const parts = splitDisplayText(token?.text);
@@ -49,3 +49,5 @@ export default function AlignmentToken({
     </span>
   );
 }
+import type { HTMLAttributes, ReactNode } from "react";
+import type { AlignmentToken as AlignmentTokenType } from "../types";

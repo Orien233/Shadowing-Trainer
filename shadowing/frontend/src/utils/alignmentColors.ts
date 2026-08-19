@@ -1,7 +1,9 @@
 const BASE_TOKEN_CLASS =
   "inline-flex items-center gap-1 rounded px-1.5 py-0.5 border align-baseline";
 
-const STATUS_CLASSES = {
+import type { AlignmentToken } from "../types";
+
+const STATUS_CLASSES: Record<string, string> = {
   correct: "text-green-700 bg-green-50 border-green-200",
   minor: "text-yellow-800 bg-yellow-50 border-yellow-200",
   insertion: "text-yellow-800 bg-yellow-50 border-yellow-200",
@@ -11,14 +13,14 @@ const STATUS_CLASSES = {
   default: "border-transparent",
 };
 
-const SEVERITY_CLASSES = {
+const SEVERITY_CLASSES: Record<string, string> = {
   correct: STATUS_CLASSES.correct,
   minor: STATUS_CLASSES.minor,
   major: STATUS_CLASSES.substitution,
   default: STATUS_CLASSES.default,
 };
 
-const INSERTION_LABELS = {
+const INSERTION_LABELS: Record<string, Record<string, string>> = {
   "zh-CN": { filler: "\u8bed\u6c14\u8bcd", repetition: "\u91cd\u590d", correction: "\u81ea\u6211\u4fee\u6b63", extra: "\u591a\u4f59" },
   "en-US": { filler: "filler", repetition: "repeat", correction: "self-correction", extra: "extra" },
 };
@@ -28,14 +30,14 @@ function getUILocale() {
   return "en-US";
 }
 
-export function getAlignmentTokenClass(token) {
+export function getAlignmentTokenClass(token?: AlignmentToken) {
   const status = token?.status ?? "default";
   const severity = token?.severity ?? "default";
   const statusClass = STATUS_CLASSES[status] ?? SEVERITY_CLASSES[severity] ?? STATUS_CLASSES.default;
   return `${BASE_TOKEN_CLASS} ${statusClass}`;
 }
 
-export function getInsertionLabel(token, uiLocale = getUILocale()) {
+export function getInsertionLabel(token?: AlignmentToken, uiLocale = getUILocale()) {
   if (!token) return null;
   const labels = INSERTION_LABELS[uiLocale] ?? INSERTION_LABELS["en-US"];
   if (token.status === "filler") return labels.filler;

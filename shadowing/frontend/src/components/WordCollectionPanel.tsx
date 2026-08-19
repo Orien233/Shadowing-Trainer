@@ -1,10 +1,12 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ChangeEvent } from "react";
 import { languageLabel } from "../i18n/catalog";
 import { useLanguage } from "../i18n/LanguageContext";
 import { deleteWordCollection } from "../lib/api";
-import { normalizeWordText } from "../utils/sentenceTokenText.js";
+import { normalizeWordText } from "../utils/sentenceTokenText";
+import type { WordCollection } from "../types";
+import type { WordCollectionSortMode } from "../lib/api";
 
-const SORT_OPTIONS = [
+const SORT_OPTIONS: Array<{ value: WordCollectionSortMode; labelKey: string }> = [
   { value: "collected_time_asc", labelKey: "wordCollection.sort.collectedAsc" },
   { value: "collected_time_desc", labelKey: "wordCollection.sort.collectedDesc" },
   { value: "alphabetical", labelKey: "wordCollection.sort.alphabetical" },
@@ -15,10 +17,10 @@ export default function WordCollectionPanel({
   loading,
   onRefresh,
   onDeleted,
-}) {
+}: { collections?: WordCollection[]; loading?: boolean; onRefresh?: (sort: WordCollectionSortMode) => void | Promise<void>; onDeleted?: (id: number) => void }) {
   const { uiLocale, t } = useLanguage();
   const [deletingIds, setDeletingIds] = useState(() => new Set());
-  const [sortMode, setSortMode] = useState("collected_time_asc");
+  const [sortMode, setSortMode] = useState<WordCollectionSortMode>("collected_time_asc");
   const visibleCollections = collections ?? [];
   const isLoading = Boolean(loading);
 
@@ -26,11 +28,11 @@ export default function WordCollectionPanel({
     void onRefresh?.(sortMode);
   }, [onRefresh, sortMode]);
 
-  function handleSortChange(event) {
-    setSortMode(event.target.value);
+  function handleSortChange(event: ChangeEvent<HTMLSelectElement>) {
+    setSortMode(event.target.value as WordCollectionSortMode);
   }
 
-  async function handleDelete(collection) {
+  async function handleDelete(collection: WordCollection) {
     if (deletingIds.has(collection.id)) return;
 
     setDeletingIds((prev) => new Set([...prev, collection.id]));

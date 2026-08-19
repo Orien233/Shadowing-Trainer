@@ -1,13 +1,14 @@
 import { languageLabel } from "../i18n/catalog";
 import { useLanguage } from "../i18n/LanguageContext";
-import HighlightedSentence from "./HighlightedSentence.jsx";
+import type { WordAlignment } from "../types";
+import HighlightedSentence from "./HighlightedSentence";
 
-function formatAccuracy(value) {
+function formatAccuracy(value: number | undefined) {
   if (typeof value !== "number" || Number.isNaN(value)) return "-";
   return `${Math.round(value * 100)}%`;
 }
 
-export default function WordAlignmentView({ alignment }) {
+export default function WordAlignmentView({ alignment }: { alignment?: WordAlignment | null }) {
   const { uiLocale, t } = useLanguage();
   if (!alignment) return null;
   const summary = alignment.summary ?? {};

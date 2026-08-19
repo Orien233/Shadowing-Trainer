@@ -1,4 +1,5 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, type KeyboardEvent } from "react";
+import type { AlignmentToken, WordCollection } from "../types";
 import { useLanguage } from "../i18n/LanguageContext";
 import { collectWord, WordCollectionApiError } from "../lib/api";
 import {
@@ -7,12 +8,12 @@ import {
   normalizeWordText,
   splitCollectableSegments,
   tokenizeSentenceText,
-} from "../utils/sentenceTokenText.js";
-import { getInsertionLabel } from "../utils/alignmentColors.js";
-import { AlignmentTokenCore } from "./AlignmentToken.jsx";
-import { getAlignmentTokenTitle } from "../utils/alignmentText.js";
+} from "../utils/sentenceTokenText";
+import { getInsertionLabel } from "../utils/alignmentColors";
+import { AlignmentTokenCore } from "./AlignmentToken";
+import { getAlignmentTokenTitle } from "../utils/alignmentText";
 
-const STATUS_PRIORITY = {
+const STATUS_PRIORITY: Record<string, number> = {
   deletion: 5,
   substitution: 4,
   minor: 3,
@@ -22,27 +23,27 @@ const STATUS_PRIORITY = {
   default: 0,
 };
 
-function isCJKLanguage(language) {
+function isCJKLanguage(language: string) {
   return ["zh", "ja", "ko"].includes(String(language || "en").replace("_", "-").toLowerCase().split("-", 1)[0]);
 }
 
-function alignmentUnits(text, language) {
+function alignmentUnits(text: string, language: string) {
   const normalized = normalizeWordText(text);
   if (!normalized) return [];
   return isCJKLanguage(language) ? Array.from(normalized) : [normalized];
 }
 
-function chooseAlignmentToken(matches, displayToken) {
+function chooseAlignmentToken(matches: AlignmentToken[], displayToken: AlignmentToken): AlignmentToken {
   if (!matches.length) return { ...displayToken, status: "default", severity: "default" };
   return matches.reduce((chosen, candidate) =>
-    (STATUS_PRIORITY[candidate.status] ?? 0) > (STATUS_PRIORITY[chosen.status] ?? 0) ? candidate : chosen
+    (STATUS_PRIORITY[candidate.status ?? ""] ?? 0) > (STATUS_PRIORITY[chosen.status ?? ""] ?? 0) ? candidate : chosen
   );
 }
 
 // Alignment reference tokens are a scoring projection, not a display model.
 // Match their status to source-derived display tokens while preserving every
 // character (including source whitespace and punctuation) from the transcript.
-function attachAlignmentToSourceTokens(sourceTokens, alignmentTokens, language) {
+function attachAlignmentToSourceTokens(sourceTokens: AlignmentToken[], alignmentTokens: AlignmentToken[] | undefined, language: string): AlignmentToken[] {
   const remaining = Array.isArray(alignmentTokens) ? [...alignmentTokens] : [];
   return sourceTokens.map((displayToken) => {
     const matches = [];
@@ -63,7 +64,7 @@ export default function CollectableSentenceText({
   collectedWordSet,
   onCollected,
   onRefreshCollections,
-}) {
+}: { sourceText?: string; tokens?: AlignmentToken[]; materialId?: number; sentenceId?: number; language?: string; collectedWordSet?: Set<string>; onCollected?: (collection: WordCollection) => void; onRefreshCollections?: () => void | Promise<void> }) {
   const { uiLocale, t } = useLanguage();
   const [pendingKeys, setPendingKeys] = useState(() => new Set());
   const rawSourceText = sourceText ?? "";
@@ -72,7 +73,7 @@ export default function CollectableSentenceText({
     [language, rawSourceText, tokens]
   );
 
-  async function handleCollect(wordText) {
+  async function handleCollect(wordText: string) {
     const cleanWordText = cleanCollectableWordText(wordText);
     const normalizedWord = normalizeWordText(cleanWordText);
     if (!normalizedWord || !materialId || !sentenceId) return;
@@ -96,7 +97,7 @@ export default function CollectableSentenceText({
     } catch (error) {
       if (
         error instanceof WordCollectionApiError &&
-        (error.status === 409 || error.detail === "WORD_ALREADY_COLLECTED")
+        (error.status === 409 || (error as WordCollectionApiError & { detail?: string }).detail === "WORD_ALREADY_COLLECTED")
       ) {
         alert(t("wordCollection.alreadyCollected"));
         await onRefreshCollections?.();
@@ -127,7 +128,7 @@ export default function CollectableSentenceText({
         const wordSegmentIndexes = segments.reduce((indexes, segment, index) => {
           if (segment.type === "word") indexes.push(index);
           return indexes;
-        }, []);
+        }, [] as number[]);
         const lastWordSegmentIndex = wordSegmentIndexes[wordSegmentIndexes.length - 1];
         const label = getInsertionLabel(token, uiLocale);
 
@@ -148,7 +149,7 @@ export default function CollectableSentenceText({
                 role: "button", tabIndex: 0,
                 title: isCollected ? t("wordCollection.alreadyCollected") : t("wordCollection.collect"),
                 onClick: () => void handleCollect(cleanWordText),
-                onKeyDown: (event) => {
+                onKeyDown: (event: KeyboardEvent<HTMLSpanElement>) => {
                   if (event.key !== "Enter" && event.key !== " ") return;
                   event.preventDefault();
                   void handleCollect(cleanWordText);

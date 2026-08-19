@@ -1,4 +1,5 @@
 import { fireEvent, render, screen } from "@testing-library/react";
+import type { ComponentProps } from "react";
 import { beforeEach, expect, it, vi } from "vitest";
 
 const api = vi.hoisted(() => ({
@@ -12,10 +13,10 @@ vi.mock("../lib/api", () => ({
   WordCollectionApiError: class WordCollectionApiError extends Error {},
 }));
 
-import CollectableSentenceText from "./CollectableSentenceText.jsx";
+import CollectableSentenceText from "./CollectableSentenceText";
 import { LanguageProvider } from "../i18n/LanguageContext";
 
-function renderSentence(props) {
+function renderSentence(props: ComponentProps<typeof CollectableSentenceText>) {
   return render(
     <LanguageProvider>
       <CollectableSentenceText materialId={1} sentenceId={2} collectedWordSet={new Set()} {...props} />

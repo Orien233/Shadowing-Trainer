@@ -1,14 +1,19 @@
+import type { AlignmentToken } from "../types";
+
+export interface DisplayTextParts { leading: string; core: string; trailing: string; }
+export interface CollectableSegment { type: "word" | "punctuation"; text: string; }
+
 const DISPLAY_TOKEN_PATTERN = /\S+|\s+/g;
 const EDGE_PUNCTUATION_PATTERN = /^([\p{P}]*)(.*?)([\p{P}]*)$/u;
 const EDGE_PUNCTUATION = /^[\s!"#$%&()*+,\-./:;<=>?@[\\\]^_`{|}~'“”‘’]+|[\s!"#$%&()*+,\-./:;<=>?@[\\\]^_`{|}~'“”‘’]+$/g;
 const WORD_CHAR_PATTERN = /[\p{L}\p{N}\p{M}]/u;
 const APOSTROPHES = new Set(["'", "’", "‘", "‛", "′"]);
 
-function isWordChar(char) {
+function isWordChar(char: string) {
   return WORD_CHAR_PATTERN.test(char);
 }
 
-function isWordApostrophe(chars, index) {
+function isWordApostrophe(chars: string[], index: number) {
   return (
     APOSTROPHES.has(chars[index]) &&
     index > 0 &&
@@ -18,7 +23,7 @@ function isWordApostrophe(chars, index) {
   );
 }
 
-export function splitDisplayText(text) {
+export function splitDisplayText(text: unknown): DisplayTextParts {
   const displayText = String(text ?? "");
   const match = displayText.match(EDGE_PUNCTUATION_PATTERN);
   if (!match) {
@@ -33,7 +38,7 @@ export function splitDisplayText(text) {
   return { leading, core, trailing };
 }
 
-export function normalizeWordText(wordText) {
+export function normalizeWordText(wordText: unknown): string {
   return cleanCollectableWordText(wordText)
     .normalize("NFKC")
     .replace(/[’‘‛′]/g, "'")
@@ -42,16 +47,18 @@ export function normalizeWordText(wordText) {
     .replace(/ς/g, "σ");
 }
 
-export function buildCollectedWordKey(normalizedWord, language) {
+export function buildCollectedWordKey(normalizedWord: string, language?: string): string {
   return `${String(language || "en").trim().toLowerCase() || "en"}:${normalizedWord}`;
 }
 
-export function tokenizeSentenceText(sourceText, language = "en") {
+export function tokenizeSentenceText(sourceText: unknown, language = "en"): AlignmentToken[] {
   const value = String(sourceText ?? "");
   const primaryLanguage = String(language || "en").replace("_", "-").toLowerCase().split("-", 1)[0];
-  if (["zh", "ja", "ko"].includes(primaryLanguage) && typeof Intl?.Segmenter === "function") {
+  type SegmenterConstructor = new (locale?: string | string[], options?: { granularity?: "grapheme" | "word" | "sentence" }) => { segment: (input: string) => Iterable<{ segment: string; isWordLike?: boolean }> };
+  const Segmenter = (Intl as typeof Intl & { Segmenter?: SegmenterConstructor }).Segmenter;
+  if (["zh", "ja", "ko"].includes(primaryLanguage) && typeof Segmenter === "function") {
     const tokens = [];
-    const segmenter = new Intl.Segmenter(language, { granularity: "word" });
+    const segmenter = new Segmenter(language, { granularity: "word" });
     for (const segment of segmenter.segment(value)) {
       if (segment.isWordLike) {
         tokens.push({
@@ -90,15 +97,15 @@ export function tokenizeSentenceText(sourceText, language = "en") {
   return tokens;
 }
 
-export function splitCollectableSegments(text) {
+export function splitCollectableSegments(text: unknown): CollectableSegment[] {
   const chars = Array.from(String(text ?? ""));
-  const segments = [];
-  let currentType = null;
+  const segments: CollectableSegment[] = [];
+  let currentType: CollectableSegment["type"] | null = null;
   let currentText = "";
 
   function pushCurrent() {
     if (!currentText) return;
-    segments.push({ type: currentType, text: currentText });
+    segments.push({ type: currentType as CollectableSegment["type"], text: currentText });
     currentType = null;
     currentText = "";
   }
@@ -116,7 +123,7 @@ export function splitCollectableSegments(text) {
   return segments;
 }
 
-export function cleanCollectableWordText(wordText) {
+export function cleanCollectableWordText(wordText: unknown): string {
   return splitCollectableSegments(String(wordText ?? "").replace(EDGE_PUNCTUATION, ""))
     .filter((segment) => segment.type === "word")
     .map((segment) => segment.text)
