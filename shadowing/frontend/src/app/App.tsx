@@ -47,6 +47,7 @@ export default function App() {
   const [materialDrawerOpen, setMaterialDrawerOpen] = useState(false);
   const [sentences, setSentences] = useState<Sentence[]>([]);
   const [latestEvaluations, setLatestEvaluations] = useState<Record<number, SentenceLatestEvaluation>>({});
+  const [currentSentenceOrder, setCurrentSentenceOrder] = useState<number | null>(null);
   const [wordCollections, setWordCollections] = useState<WordCollection[]>([]);
   const [loadingSentences, setLoadingSentences] = useState(false);
   const [loadingWordCollections, setLoadingWordCollections] = useState(false);
@@ -164,6 +165,7 @@ export default function App() {
   }, [t]);
 
   useEffect(() => {
+    setCurrentSentenceOrder(null);
     if (!activeMaterialId) {
       sentenceRequestIdRef.current += 1;
       setSentences([]);
@@ -265,6 +267,7 @@ export default function App() {
       <AppHeader
         activePanel={activePanel}
         materialTitle={activeMaterial?.title ?? null}
+        currentSentence={currentSentenceOrder}
         sentenceCount={sentences.length}
         onPanelChange={setActivePanel}
       />
@@ -330,6 +333,7 @@ export default function App() {
               collectedWordSet={collectedWordSet}
               onWordCollected={handleWordCollected}
               onRefreshWordCollections={loadWordCollections}
+              onSentenceChange={setCurrentSentenceOrder}
             />
           )}
         </section>

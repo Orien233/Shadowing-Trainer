@@ -1,9 +1,19 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  ArrowLeft,
+  ArrowRight,
+  ArrowsClockwise,
+  Play,
+  Star,
+  VideoCamera,
+  Waveform,
+} from "@phosphor-icons/react";
 import { apiBase } from "../../lib/api";
 import type { Evaluation, Material, Sentence, SentenceLatestEvaluation, WordCollection } from "../../types";
 import CollectableSentenceText from "./alignment/CollectableSentenceText";
 import EvaluationPanel from "./evaluation/EvaluationPanel";
 import RecorderPanel from "./recorder/RecorderPanel";
+import SentenceProgress from "./SentenceProgress";
 import { asEvaluation } from "./evaluation/mappers";
 import {
   buildTimelineSegments,
@@ -23,6 +33,7 @@ interface Props {
   collectedWordSet: Set<string>;
   onWordCollected: (collection: WordCollection) => void;
   onRefreshWordCollections: () => Promise<void>;
+  onSentenceChange?: (displayOrder: number | null) => void;
 }
 
 const PROGRAMMATIC_SEEK_TOLERANCE = SEGMENT_EPSILON * 2;
@@ -32,6 +43,20 @@ type VideoFrameAwareElement = HTMLVideoElement & {
   cancelVideoFrameCallback?: (handle: number) => void;
 };
 
+function isTypingTarget(target: EventTarget | null): boolean {
+  return target instanceof HTMLInputElement ||
+    target instanceof HTMLTextAreaElement ||
+    target instanceof HTMLSelectElement ||
+    (target instanceof HTMLElement && target.isContentEditable);
+}
+
+function formatTime(seconds: number): string {
+  const safeSeconds = Number.isFinite(seconds) ? Math.max(seconds, 0) : 0;
+  const minutes = Math.floor(safeSeconds / 60);
+  const remaining = safeSeconds - minutes * 60;
+  return `${String(minutes).padStart(2, "0")}:${remaining.toFixed(2).padStart(5, "0")}`;
+}
+
 export default function SentenceTrainer({
   material,
   sentences,
@@ -39,6 +64,7 @@ export default function SentenceTrainer({
   collectedWordSet,
   onWordCollected,
   onRefreshWordCollections,
+  onSentenceChange,
 }: Props) {
   const { t } = useLanguage();
   const [segmentIndex, setSegmentIndex] = useState(0);
@@ -92,6 +118,10 @@ export default function SentenceTrainer({
   const currentSentence = currentSegment?.sentence ?? null;
   const isGapSegment = currentSegment?.type === "gap";
   const referenceAlignmentTokens = evaluation?.word_alignment?.reference_tokens ?? [];
+  const evaluatedSentenceIds = useMemo(
+    () => new Set(Object.keys(evaluationBySentence).map(Number)),
+    [evaluationBySentence]
+  );
 
   const normalizedLatestEvaluations = useMemo(() => {
     const next: Record<number, Evaluation> = {};
@@ -226,6 +256,10 @@ export default function SentenceTrainer({
     }
     setEvaluation(evaluationBySentence[currentSentence.id] ?? null);
   }, [currentSegment?.key, currentSentence, evaluationBySentence, isGapSegment]);
+
+  useEffect(() => {
+    onSentenceChange?.(currentSentence?.display_order ?? null);
+  }, [currentSentence?.display_order, onSentenceChange]);
 
   useEffect(
     () => () => {
@@ -500,6 +534,11 @@ export default function SentenceTrainer({
     jumpToSegment(nextIndex, activeIndex);
   }
 
+  function selectSentence(sentenceId: number) {
+    const nextIndex = segments.findIndex((segment) => segment.sentence?.id === sentenceId);
+    if (nextIndex >= 0) jumpToSegment(nextIndex);
+  }
+
   function handleLoopChange(checked: boolean) {
     if (checked) {
       setAutoPlay(false);
@@ -606,6 +645,26 @@ export default function SentenceTrainer({
     [currentSentence?.id]
   );
 
+  useEffect(() => {
+    function handleKeyboardShortcut(event: KeyboardEvent) {
+      if (isTypingTarget(event.target)) return;
+      if (event.key.toLowerCase() === "l") {
+        event.preventDefault();
+        void playCurrentSegment();
+        return;
+      }
+      if (event.key === "ArrowLeft") {
+        event.preventDefault();
+        prevSegment();
+      } else if (event.key === "ArrowRight") {
+        event.preventDefault();
+        nextSegment();
+      }
+    }
+    window.addEventListener("keydown", handleKeyboardShortcut);
+    return () => window.removeEventListener("keydown", handleKeyboardShortcut);
+  }, [currentSegment?.key, segments.length]);
+
   if (!material) {
     return (
       <div className="card">
@@ -654,10 +713,20 @@ export default function SentenceTrainer({
   }
 
   return (
-    <div className="trainer-grid">
+    <div className="practice-canvas">
+      <SentenceProgress
+        sentences={sentences}
+        currentSentenceId={currentSentence?.id ?? null}
+        evaluatedSentenceIds={evaluatedSentenceIds}
+        onSelect={selectSentence}
+      />
+
       {material.file_type === "video" && (
-        <div className="card video-card">
-          <h2>{t("trainer.videoPlayback")}</h2>
+        <details className="video-card">
+          <summary>
+            <VideoCamera size={18} weight="regular" />
+            {t("trainer.videoPlayback")}
+          </summary>
           <div className="video-frame">
             <video
               ref={videoRef}
@@ -665,7 +734,7 @@ export default function SentenceTrainer({
               controls
               aria-label={t("trainer.videoAria")}
               preload="metadata"
-              src={`${apiBase}/api/materials/${material.id}/video`}
+              src={apiBase + "/api/materials/" + material.id + "/video"}
               onPause={handleVideoPause}
               onPlay={handleVideoPlay}
               onRateChange={handleVideoRateChange}
@@ -676,100 +745,140 @@ export default function SentenceTrainer({
               onError={handleVideoError}
             />
           </div>
-        </div>
+        </details>
       )}
 
-      <div className="card">
-        <h2>{t("trainer.title")}</h2>
-        <div className="sentence-badge">
-          {isGapSegment
-            ? t("trainer.silentSegment", { index: currentSegment.displayOrder })
-            : t("trainer.sentenceProgress", {
-                current: currentSentence?.display_order ?? 0,
-                total: sentences.length,
-              })}
-        </div>
-
-        <div className="sentence-text">
-          {isGapSegment ? (
-            t("trainer.silentSegmentText")
+      <section className="sentence-stage" aria-labelledby="current-sentence-heading">
+        <div className="sentence-stage-copy">
+          <span className="sentence-kicker">
+            {isGapSegment
+              ? t("trainer.silentSegment", { index: currentSegment.displayOrder })
+              : t("trainer.sentenceProgress", {
+                  current: currentSentence?.display_order ?? 0,
+                  total: sentences.length,
+                })}
+          </span>
+          <div id="current-sentence-heading" className="sentence-text" role="heading" aria-level={1}>
+            {isGapSegment ? (
+              t("trainer.silentSegmentText")
+            ) : (
+              <CollectableSentenceText
+                sourceText={currentSentence?.source_text ?? ""}
+                tokens={referenceAlignmentTokens}
+                materialId={material.id}
+                sentenceId={currentSentence?.id}
+                language={material.content_language}
+                collectedWordSet={collectedWordSet}
+                onCollected={onWordCollected}
+                onRefreshCollections={onRefreshWordCollections}
+              />
+            )}
+          </div>
+          {!isGapSegment ? (
+            <div className="sentence-translation" dir="auto">
+              {currentSentence?.translation || t("trainer.noTranslation")}
+            </div>
           ) : (
-            <CollectableSentenceText
-              sourceText={currentSentence?.source_text ?? ""}
-              tokens={referenceAlignmentTokens}
-              materialId={material.id}
-              sentenceId={currentSentence?.id}
-              language={material.content_language}
-              collectedWordSet={collectedWordSet}
-              onCollected={onWordCollected}
-              onRefreshCollections={onRefreshWordCollections}
-            />
+            <div className="sentence-translation muted">{t("trainer.noSpeechDetected")}</div>
           )}
-        </div>
-        {!isGapSegment && (
-          <div className="sentence-translation" dir="auto">{currentSentence?.translation || t("trainer.noTranslation")}</div>
-        )}
-        {isGapSegment && (
-          <div className="sentence-translation muted">{t("trainer.noSpeechDetected")}</div>
-        )}
-        {mediaError && <p className="media-error">{mediaError}</p>}
-
-        <div className="row gap wrap">
-          <button type="button" onClick={prevSegment}>{t("trainer.previousSegment")}</button>
-          <button type="button" onClick={playCurrentSegment}>{t("trainer.playCurrentSegment")}</button>
-          <button type="button" onClick={nextSegment}>{t("trainer.nextSegment")}</button>
           {!isGapSegment && (
-            <div className="row gap">
-              <label className="checkbox">
-                <input
-                  type="checkbox"
-                  checked={autoPlay}
-                  onChange={(event) => handleAutoPlayChange(event.target.checked)}
-                />
-                {t("trainer.autoPlay")}
-              </label>
-              <label className="checkbox">
-                <input
-                  type="checkbox"
-                  checked={loop}
-                  onChange={(event) => handleLoopChange(event.target.checked)}
-                />
-                {t("trainer.loopSegment")}
-              </label>
+            <div className="collection-hint">
+              <Star size={17} weight="regular" aria-hidden="true" />
+              {t("trainer.collectHint")}
             </div>
           )}
+          {mediaError && <p className="media-error" role="alert">{mediaError}</p>}
         </div>
 
-        <div className="progress-row">
-          <span>{currentSegmentPlaybackTime.toFixed(2)}s</span>
-          <span>{currentSegment.duration.toFixed(2)}s</span>
+        <div className="reference-player">
+          <button
+            type="button"
+            className="player-play-button"
+            aria-label={t("trainer.playCurrentSegment")}
+            onClick={() => void playCurrentSegment()}
+          >
+            <Play size={19} weight="fill" />
+          </button>
+          <time>{formatTime(currentSegmentPlaybackTime)}</time>
+          <Waveform className="waveform-icon" size={28} weight="regular" aria-hidden="true" />
+          <input
+            className="timeline-slider"
+            type="range"
+            min={0}
+            max={currentSegment.duration > 0 ? currentSegment.duration : 0}
+            step={0.01}
+            value={currentSegment.duration > 0 ? currentSegmentPlaybackTime : 0}
+            onChange={(event) => handleSegmentTimelineChange(event.target.value)}
+            disabled={currentSegment.duration <= 0}
+            aria-label={t("trainer.timelineAria")}
+          />
+          <time>{formatTime(currentSegment.duration)}</time>
         </div>
-        <input
-          className="timeline-slider"
-          type="range"
-          min={0}
-          max={currentSegment.duration > 0 ? currentSegment.duration : 0}
-          step={0.01}
-          value={currentSegment.duration > 0 ? currentSegmentPlaybackTime : 0}
-          onChange={(event) => handleSegmentTimelineChange(event.target.value)}
-          disabled={currentSegment.duration <= 0}
-          aria-label={t("trainer.timelineAria")}
-        />
-
-        <div className="time-row">
-          <span>{currentSegment.start.toFixed(2)}s</span>
-          <span>{currentSegment.end.toFixed(2)}s</span>
-        </div>
-        <p className="muted">
+        <span className="global-time-label">
           {t("trainer.globalPosition", {
             current: playbackTime.toFixed(2),
             total: timelineDuration.toFixed(2),
           })}
-        </p>
-      </div>
+        </span>
 
-      {!isGapSegment && <RecorderPanel sentence={currentSentence} onEvaluated={handleEvaluated} />}
+        {!isGapSegment ? (
+          <RecorderPanel
+            sentence={currentSentence}
+            onEvaluated={handleEvaluated}
+            onPlayReference={playCurrentSegment}
+          />
+        ) : (
+          <div className="silent-segment-actions">{t("trainer.noSpeechDetected")}</div>
+        )}
+
+        {!isGapSegment && (
+          <div className="practice-mode-controls">
+            <label className="checkbox">
+              <input
+                type="checkbox"
+                checked={autoPlay}
+                onChange={(event) => handleAutoPlayChange(event.target.checked)}
+              />
+              {t("trainer.autoPlay")}
+            </label>
+            <label className="checkbox">
+              <input
+                type="checkbox"
+                checked={loop}
+                onChange={(event) => handleLoopChange(event.target.checked)}
+              />
+              <ArrowsClockwise size={16} weight="regular" aria-hidden="true" />
+              {t("trainer.loopSegment")}
+            </label>
+          </div>
+        )}
+      </section>
+
       {!isGapSegment && <EvaluationPanel evaluation={evaluation} />}
+
+      <footer className="practice-footer">
+        <div className="shortcut-legend" aria-label={t("trainer.shortcuts")}>
+          <span>{t("trainer.shortcuts")}</span>
+          <span><kbd>L</kbd>{t("recorder.listenReference")}</span>
+          <span><kbd>Space</kbd>{t("recorder.start")}</span>
+          <span><kbd>C</kbd>{t("recorder.compare")}</span>
+          <span><kbd>R</kbd>{t("recorder.rerecord")}</span>
+        </div>
+        <div className="sentence-navigator">
+          <strong>
+            {t("trainer.compactProgress", {
+              current: currentSentence?.display_order ?? currentSegment.displayOrder,
+              total: sentences.length,
+            })}
+          </strong>
+          <button type="button" className="icon-button" aria-label={t("trainer.previousSegment")} onClick={prevSegment}>
+            <ArrowLeft size={18} weight="bold" />
+          </button>
+          <button type="button" className="icon-button" aria-label={t("trainer.nextSegment")} onClick={nextSegment}>
+            <ArrowRight size={18} weight="bold" />
+          </button>
+        </div>
+      </footer>
     </div>
   );
 }

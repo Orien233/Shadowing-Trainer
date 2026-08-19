@@ -30,6 +30,7 @@ const NAV_ITEMS: NavItem[] = [
 interface Props {
   activePanel: AppPanel;
   materialTitle: string | null;
+  currentSentence: number | null;
   sentenceCount: number;
   onPanelChange: (panel: AppPanel) => void;
 }
@@ -37,6 +38,7 @@ interface Props {
 export default function AppHeader({
   activePanel,
   materialTitle,
+  currentSentence,
   sentenceCount,
   onPanelChange,
 }: Props) {
@@ -79,7 +81,9 @@ export default function AppHeader({
           </span>
           {sentenceCount > 0 && (
             <span className="material-context-meta">
-              {t("nav.sentenceCount", { count: sentenceCount })}
+              {currentSentence
+                ? t("nav.sentencePosition", { current: currentSentence, total: sentenceCount })
+                : t("nav.sentenceCount", { count: sentenceCount })}
             </span>
           )}
         </div>

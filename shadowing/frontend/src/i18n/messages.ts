@@ -539,6 +539,7 @@ Object.assign(zhCN, {
   "nav.aiText": "AI 文本",
   "nav.noMaterial": "尚未选择素材",
   "nav.sentenceCount": "共 {count} 句",
+  "nav.sentencePosition": "第 {current} / {total} 句",
   "nav.languageCompact": "中 · 英",
   "nav.help": "使用帮助",
   "nav.helpTitle": "练习流程",
@@ -547,6 +548,15 @@ Object.assign(zhCN, {
   "material.drawerRail": "素材",
   "material.drawerTitle": "素材库",
   "material.workspace": "练习工作区",
+  "trainer.sentenceList": "句子进度",
+  "trainer.goToSentence": "前往第 {current} / {total} 句",
+  "trainer.compactProgress": "句子 {current} / {total}",
+  "trainer.compactTotal": "共 {total} 句",
+  "trainer.collectHint": "点击句中单词即可收藏",
+  "trainer.shortcuts": "快捷键",
+  "recorder.listenReference": "听原句",
+  "recorder.compare": "对比评分",
+  "recorder.recordingReady": "录音完成",
 });
 
 Object.assign(enUS, {
@@ -556,6 +566,7 @@ Object.assign(enUS, {
   "nav.aiText": "AI Text",
   "nav.noMaterial": "No material selected",
   "nav.sentenceCount": "{count} sentences",
+  "nav.sentencePosition": "Sentence {current} / {total}",
   "nav.languageCompact": "EN · 中",
   "nav.help": "Help",
   "nav.helpTitle": "Practice flow",
@@ -564,6 +575,15 @@ Object.assign(enUS, {
   "material.drawerRail": "Materials",
   "material.drawerTitle": "Material library",
   "material.workspace": "Practice workspace",
+  "trainer.sentenceList": "Sentence progress",
+  "trainer.goToSentence": "Go to sentence {current} of {total}",
+  "trainer.compactProgress": "Sentence {current} / {total}",
+  "trainer.compactTotal": "{total} sentences",
+  "trainer.collectHint": "Select a word in the sentence to collect it",
+  "trainer.shortcuts": "Shortcuts",
+  "recorder.listenReference": "Listen",
+  "recorder.compare": "Compare",
+  "recorder.recordingReady": "Recording ready",
 });
 
 export const messages: Record<UILocale, Messages> = {
