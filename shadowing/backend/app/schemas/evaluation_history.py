@@ -6,8 +6,8 @@ from pydantic import BaseModel, Field
 
 class SentenceLatestEvaluationRead(BaseModel):
     sentence_id: int
-    main_db_recording_id: int | None
-    main_db_evaluation_id: int | None
+    recording_id: int
+    evaluation_id: int
     completeness_score: int
     fluency_score: int
     sync_score: int

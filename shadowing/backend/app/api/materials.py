@@ -16,7 +16,7 @@ from app.models.material import Material
 from app.models.recording import Recording
 from app.models.sentence import Sentence
 from app.schemas.material import MaterialDetail, MaterialRead
-from app.schemas.material_score import (
+from app.schemas.evaluation_history import (
     MaterialLatestEvaluationsRead,
     SentenceLatestEvaluationRead,
 )
@@ -168,7 +168,7 @@ def get_material_latest_evaluations(
     evaluations = [
         _build_latest_evaluation_read(
             sentence_id=row.sentence_id,
-            main_db_recording_id=row.recording_id,
+            recording_id=row.recording_id,
             evaluation=row.evaluation,
         )
         for row in latest_rows
@@ -190,13 +190,13 @@ def _build_material_detail(session: Session, material: Material) -> MaterialDeta
 def _build_latest_evaluation_read(
     *,
     sentence_id: int,
-    main_db_recording_id: int | None,
+    recording_id: int,
     evaluation: Evaluation,
 ) -> SentenceLatestEvaluationRead:
     return SentenceLatestEvaluationRead(
         sentence_id=sentence_id,
-        main_db_recording_id=main_db_recording_id,
-        main_db_evaluation_id=evaluation.id,
+        recording_id=recording_id,
+        evaluation_id=evaluation.id,
         completeness_score=evaluation.completeness_score,
         fluency_score=evaluation.fluency_score,
         sync_score=evaluation.sync_score,

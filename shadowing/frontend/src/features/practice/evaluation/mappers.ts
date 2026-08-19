@@ -2,8 +2,8 @@ import type { Evaluation, SentenceLatestEvaluation } from "../../../types";
 
 export function asEvaluation(snapshot: SentenceLatestEvaluation): Evaluation {
   return {
-    id: snapshot.main_db_evaluation_id ?? 0,
-    recording_id: snapshot.main_db_recording_id ?? 0,
+    id: snapshot.evaluation_id,
+    recording_id: snapshot.recording_id,
     completeness_score: snapshot.completeness_score,
     fluency_score: snapshot.fluency_score,
     sync_score: snapshot.sync_score,

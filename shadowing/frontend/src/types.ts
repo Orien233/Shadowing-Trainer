@@ -94,8 +94,8 @@ export interface Evaluation {
 
 export interface SentenceLatestEvaluation {
   sentence_id: number;
-  main_db_recording_id: number | null;
-  main_db_evaluation_id: number | null;
+  recording_id: number;
+  evaluation_id: number;
   completeness_score: number;
   fluency_score: number;
   sync_score: number;
