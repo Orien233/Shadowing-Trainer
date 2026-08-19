@@ -5,7 +5,7 @@ export type MessageParams = Record<string, string | number>;
 type Messages = Record<string, string>;
 
 const zhCN: Messages = {
-  "app.title": "Shadowing Trainer v0.4.1",
+  "app.title": "Shadowing Trainer",
   "app.workflow": "上传素材 → 转写切句 → 翻译 → 逐句播放 → 跟读录音 → 基础评估",
   "app.securityNote": "本地运维令牌仅用于兼容请求头，不构成访问控制；请勿将后端暴露到不可信网络。",
   "app.aiText": "AI 文本",
@@ -53,7 +53,7 @@ const zhCN: Messages = {
 };
 
 const enUS: Messages = {
-  "app.title": "Shadowing Trainer v0.4.1",
+  "app.title": "Shadowing Trainer",
   "app.workflow": "Upload → transcribe and segment → translate → play by sentence → record → evaluate",
   "app.securityNote": "The local operations token is only a compatibility header, not access control. Do not expose the backend to an untrusted network.",
   "app.aiText": "AI Text",
