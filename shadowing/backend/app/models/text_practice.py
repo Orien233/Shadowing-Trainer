@@ -29,14 +29,3 @@ class TextPractice(SQLModel, table=True):
     material_id: int | None = Field(default=None, index=True)
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     updated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
-
-
-class TextPracticeWord(SQLModel, table=True):
-    __tablename__ = "text_practice_words"
-
-    id: Optional[int] = Field(default=None, primary_key=True)
-    text_practice_id: int = Field(index=True)
-    word_collection_id: int | None = Field(default=None, index=True)
-    word_text: str
-    selection_mode: str = "requested"  # requested, used, unused
-    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))

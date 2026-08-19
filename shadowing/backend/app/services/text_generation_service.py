@@ -8,7 +8,7 @@ from datetime import UTC, datetime
 
 from sqlmodel import Session, select
 
-from app.models.text_practice import TextPractice, TextPracticeWord
+from app.models.text_practice import TextPractice
 from app.models.word_collection import WordCollection
 from app.schemas.text_practice import TextGenerationRequest, TextPracticeCreate
 from app.services.ai.audio_types import ProviderCapability
@@ -153,10 +153,6 @@ def create_generated_practice(session: Session, request: TextGenerationRequest) 
     unused_words = [word for word in requested_words if word not in used_words] if not unused_words else unused_words
     practice = TextPractice(title=title, body=body, source_type="llm", target_language=request.target_language, translation_language=request.translation_language, difficulty=request.difficulty, desired_length=request.desired_length, topic=topic, explanation=str(payload.get("explanation", "")).strip() or None, requested_words_json=json.dumps(requested_words, ensure_ascii=False), used_words_json=json.dumps(used_words, ensure_ascii=False), unused_words_json=json.dumps(unused_words, ensure_ascii=False), llm_provider_id=provider_record.id)
     session.add(practice)
-    session.flush()
-    for item in collections:
-        mode = "used" if item.word_text in used_words else "unused"
-        session.add(TextPracticeWord(text_practice_id=practice.id, word_collection_id=item.id, word_text=item.word_text, selection_mode=mode))
     session.commit()
     session.refresh(practice)
     return practice

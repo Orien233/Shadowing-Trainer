@@ -8,7 +8,6 @@ BACKEND_DIR = Path(__file__).resolve().parents[2]
 ENV_FILES = (
     BACKEND_DIR / ".env",
     BACKEND_DIR / ".env.local",
-    BACKEND_DIR / ".env.example",
 )
 
 # Centralized configuration management using Pydantic's BaseSettings, loading from .env files and providing convenient properties for file paths.
@@ -178,7 +177,8 @@ class Settings(BaseSettings):
 
     @property
     def data_path(self) -> Path:
-        return Path(self.data_dir)
+        path = Path(self.data_dir)
+        return path if path.is_absolute() else (BACKEND_DIR / path).resolve()
 
     @property
     def whisper_model_path(self) -> Path:

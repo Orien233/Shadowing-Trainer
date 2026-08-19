@@ -17,7 +17,7 @@ from app.models.asr_scene_setting import ASRSceneSetting
 from app.models.job import Job
 from app.models.material import Material
 from app.models.sentence import Sentence
-from app.models.text_practice import TextPractice, TextPracticeWord
+from app.models.text_practice import TextPractice
 from app.models.word_collection import WordCollection
 from app.schemas.ai_provider import ASRSceneSettingUpdate, ProviderTestRequest
 from app.schemas.text_practice import TextGenerationRequest, TTSOptions
@@ -44,7 +44,7 @@ from app.api.providers import _read
 
 def _engine():
     engine = create_engine("sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool)
-    SQLModel.metadata.create_all(engine, tables=[AIProvider.__table__, ASRSceneSetting.__table__, TextPractice.__table__, TextPracticeWord.__table__, WordCollection.__table__, Job.__table__, Material.__table__, Sentence.__table__])
+    SQLModel.metadata.create_all(engine, tables=[AIProvider.__table__, ASRSceneSetting.__table__, TextPractice.__table__, WordCollection.__table__, Job.__table__, Material.__table__, Sentence.__table__])
     return engine
 
 

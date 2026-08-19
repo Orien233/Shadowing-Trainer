@@ -7,7 +7,7 @@ from app.models.sentence import Sentence
 from app.models.word_collection import WordCollection
 from app.models.ai_provider import AIProvider
 from app.models.asr_scene_setting import ASRSceneSetting
-from app.models.text_practice import TextPractice, TextPracticeWord
+from app.models.text_practice import TextPractice
 from app.models.learning_language_preference import LearningLanguagePreference
 
 __all__ = [
@@ -21,6 +21,5 @@ __all__ = [
     "AIProvider",
     "ASRSceneSetting",
     "TextPractice",
-    "TextPracticeWord",
     "LearningLanguagePreference",
 ]
