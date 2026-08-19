@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from app.services.ai.http_transport import provider_http
-from app.services.ai.audio_types import AudioCapability, TTSResult
+from app.services.ai.audio_types import ProviderCapability, TTSResult
 from app.services.ai.audio_utils import (
     configuration_message,
     extension_from_format,
@@ -22,7 +22,7 @@ from app.services.ai.tts.base import TTSProvider, TTSRequest
 class OpenAIAudioTTSProvider(TTSProvider):
     """Native OpenAI Audio Speech adapter using a user-provided full endpoint."""
 
-    capabilities = frozenset({AudioCapability.SYNTHESIZE})
+    capabilities = frozenset({ProviderCapability.SYNTHESIZE})
 
     def __init__(
         self,
@@ -119,7 +119,3 @@ class OpenAIAudioTTSProvider(TTSProvider):
             model_name=self.model_name,
             provider_name="OpenAI Audio TTS",
         )
-
-
-class OpenAICompatibleTTSProvider(OpenAIAudioTTSProvider):
-    """Backward-compatible class name for legacy OpenAI-compatible records."""

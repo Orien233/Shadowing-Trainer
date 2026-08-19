@@ -13,7 +13,6 @@ LLM_ADAPTER_DESCRIPTORS = (
         canonical_key="openai_chat_compatible",
         kind="llm",
         adapter_class=OpenAIChatCompatibleLLMProvider,
-        aliases=("openai_compatible", "openai-compatible", "openai"),
         capabilities=LLM_CAPABILITIES,
         format_options=("json_schema", "response_format", "prompt_only"),
         preset_defaults={"base_url": "https://api.openai.com/v1", "enabled_capabilities": ["generate_text", "generate_json"], "enabled_formats": ["response_format"]},

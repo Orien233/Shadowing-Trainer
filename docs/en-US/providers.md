@@ -14,7 +14,7 @@ Provider profiles are persisted by the backend. The static Adapter Catalog descr
 | ASR | OpenAI Audio Transcription | Base URL | `transcribe`, `word_timestamps` | Not applicable |
 | ASR | MiMo ASR | Full endpoint | `transcribe` | Not applicable |
 
-Local Whisper is a system-level local ASR fallback, not a remote database profile. Historical implementations for Azure, Deepgram, ElevenLabs, DashScope, Anthropic, Gemini, Ollama, vLLM, and others remain useful as future source references, but they are not registered in the v0.4.1 Catalog and cannot be created, enabled, tested, or used by business workflows.
+Local Whisper is a system-level local ASR fallback, not a remote database profile. The 0.4.2 baseline keeps only adapters explicitly supported by the Catalog; unregistered historical implementations have been removed from the runtime source.
 
 ## Quick templates and user profiles
 

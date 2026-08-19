@@ -2,7 +2,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import Any
 
-from app.services.ai.audio_types import AudioCapability, TTSResult, UnsupportedAudioCapabilityError
+from app.services.ai.audio_types import ProviderCapability, TTSResult, UnsupportedAudioCapabilityError
 
 
 @dataclass(frozen=True)
@@ -20,9 +20,9 @@ class TTSRequest:
 
 
 class TTSProvider(ABC):
-    capabilities: frozenset[AudioCapability] = frozenset({AudioCapability.SYNTHESIZE})
+    capabilities: frozenset[ProviderCapability] = frozenset({ProviderCapability.SYNTHESIZE})
 
-    def supports(self, capability: AudioCapability) -> bool:
+    def supports(self, capability: ProviderCapability) -> bool:
         return capability in self.capabilities
 
     @abstractmethod
@@ -35,7 +35,7 @@ class TTSProvider(ABC):
         method.  That distinction prevents the UI from treating a locally
         configured list as a live vendor voice catalog.
         """
-        if not self.supports(AudioCapability.LIST_VOICES):
+        if not self.supports(ProviderCapability.LIST_VOICES):
             raise UnsupportedAudioCapabilityError(
                 "This TTS provider does not support list_voices."
             )

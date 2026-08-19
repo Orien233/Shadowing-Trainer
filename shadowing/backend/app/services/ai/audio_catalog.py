@@ -8,7 +8,7 @@ from app.services.ai.audio_types import ProviderCapability
 from app.services.ai.asr.mimo import MiMoASRProvider
 from app.services.ai.asr.openai_compatible import OpenAIWhisperASRProvider
 from app.services.ai.tts.mimo import MiMoTTSProvider
-from app.services.ai.tts.openai_compatible import OpenAICompatibleTTSProvider
+from app.services.ai.tts.openai_compatible import OpenAIAudioTTSProvider
 
 _CONFIG_ONLY = AdapterTestStrategy(mode="configuration", label="Configuration validation", description="Validates settings locally; no paid audio request is made.")
 _PCM = (
@@ -18,8 +18,8 @@ _PCM = (
 )
 
 TTS_ADAPTER_DESCRIPTORS = (
-    AdapterDescriptor(canonical_key="openai_audio_tts", kind="tts", adapter_class=OpenAICompatibleTTSProvider,
-        aliases=("openai_compatible", "openai-compatible", "openai"), capabilities=frozenset({ProviderCapability.SYNTHESIZE}),
+    AdapterDescriptor(canonical_key="openai_audio_tts", kind="tts", adapter_class=OpenAIAudioTTSProvider,
+        capabilities=frozenset({ProviderCapability.SYNTHESIZE}),
         format_options=("wav", "mp3", "flac", "opus", "aac", "pcm"), label="OpenAI Audio TTS",
         preset_defaults={"base_url": "https://api.openai.com/v1/audio/speech", "enabled_capabilities": ["synthesize"], "enabled_formats": ["wav"]},
         endpoint_mode="full_endpoint", endpoint_hint="Full endpoint, e.g. https://api.openai.com/v1/audio/speech",

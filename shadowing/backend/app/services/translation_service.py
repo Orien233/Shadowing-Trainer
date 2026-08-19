@@ -15,7 +15,7 @@ from app.core.config import settings
 from app.core.database import engine
 from app.services.ai.audio_types import ProviderCapability
 from app.services.language_catalog import LANGUAGE_CATALOG, normalize_language_tag
-from app.services.provider_factory import get_llm_provider_with_legacy_fallback, require_provider_capabilities
+from app.services.provider_factory import get_provider, require_provider_capabilities
 
 
 logger = logging.getLogger(__name__)
@@ -135,7 +135,7 @@ async def translate_sentence(
             if active_provider is None:
                 with Session(engine) as session:
                     require_provider_capabilities(session, "llm", {ProviderCapability.GENERATE_TEXT, ProviderCapability.GENERATE_JSON})
-                    active_provider = get_llm_provider_with_legacy_fallback(session)
+                    active_provider = get_provider(session, "llm")
             parsed = await asyncio.to_thread(
                 _generate_json_with_slot,
                 active_provider,
@@ -220,7 +220,7 @@ async def translate_sentences(
                 "llm",
                 {ProviderCapability.GENERATE_TEXT, ProviderCapability.GENERATE_JSON},
             )
-            provider = get_llm_provider_with_legacy_fallback(session)
+            provider = get_provider(session, "llm")
     except Exception as error:
         # Translation is enrichment, not a prerequisite for preserving an ASR
         # transcript or a user-authored TTS practice.  Keep the sentence count

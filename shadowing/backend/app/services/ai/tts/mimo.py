@@ -4,7 +4,7 @@ import base64
 from typing import Any
 
 from app.services.ai.http_transport import provider_http
-from app.services.ai.audio_types import AudioCapability, TTSResult
+from app.services.ai.audio_types import ProviderCapability, TTSResult
 from app.services.ai.audio_utils import (
     configuration_message,
     extension_from_format,
@@ -29,7 +29,7 @@ class MiMoTTSProvider(TTSProvider):
     endpoint supplied by the user.
     """
 
-    capabilities = frozenset({AudioCapability.SYNTHESIZE})
+    capabilities = frozenset({ProviderCapability.SYNTHESIZE})
 
     def __init__(self, base_url: str, api_key: str, model_name: str, extra_config: dict[str, Any] | None = None) -> None:
         self.base_url, self.api_key, self.model_name = base_url.rstrip("/"), api_key, model_name

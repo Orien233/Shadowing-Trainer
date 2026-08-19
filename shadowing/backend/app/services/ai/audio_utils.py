@@ -139,36 +139,6 @@ def raw_pcm_from_config(
         raise ValueError(f"{provider_name} raw PCM configuration is invalid: {exc}") from exc
 
 
-def raw_pcm_from_azure_output_format(output_format: str, *, provider_name: str) -> RawPCMFormat | None:
-    """Parse Azure's ``raw-24khz-16bit-mono-pcm`` style output names."""
-    normalized = output_format.strip().lower().replace("_", "-")
-    if "pcm" not in normalized or "riff" in normalized:
-        return None
-    import re
-
-    rate = re.search(r"(\d+)khz", normalized)
-    width = re.search(r"(16|24|32)bit", normalized)
-    channels = 2 if "stereo" in normalized else 1 if "mono" in normalized else None
-    if not rate or not width or channels is None:
-        raise ValueError(
-            f"{provider_name} raw PCM output format must state sample rate, bit depth, and mono/stereo."
-        )
-    sample_format = {"16": "s16le", "24": "s24le", "32": "s32le"}[width.group(1)]
-    return RawPCMFormat(sample_rate=int(rate.group(1)) * 1000, channels=channels, sample_format=sample_format)
-
-
-def raw_pcm_from_elevenlabs_output_format(output_format: str, *, provider_name: str) -> RawPCMFormat | None:
-    """Parse ElevenLabs ``pcm_24000`` output format names."""
-    normalized = output_format.strip().lower().replace("-", "_")
-    if not normalized.startswith("pcm_"):
-        return None
-    try:
-        sample_rate = int(normalized.removeprefix("pcm_").split("_", 1)[0])
-    except ValueError as exc:
-        raise ValueError(f"{provider_name} PCM output format must include a sample rate.") from exc
-    return RawPCMFormat(sample_rate=sample_rate, channels=1, sample_format="s16le")
-
-
 def as_mapping(value: Any) -> dict[str, Any]:
     return value if isinstance(value, dict) else {}
 

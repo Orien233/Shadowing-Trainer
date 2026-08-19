@@ -28,12 +28,11 @@ from app.services.local_whisper_runtime import LocalWhisperStatus
 from app.services.vad_service import TrimmedAudioResult
 from app.services.ai.audio_types import ProviderCapability, RawPCMFormat, TTSResult
 from app.services.ai.tts.base import TTSRequest
-from app.services.ai.tts.openai_compatible import OpenAICompatibleTTSProvider
+from app.services.ai.tts.openai_compatible import OpenAIAudioTTSProvider
 from app.services.ai.tts.mimo import MiMoTTSProvider
 from app.services.ai.asr.mimo import MiMoASRProvider
 from app.services.ai.asr.openai_compatible import OpenAIWhisperASRProvider
 from app.services.ai.asr._helpers import openai_verbose_result
-from app.services.ai.asr.azure_speech import AzureSpeechASRProvider
 from app.services.ai.adapter_registry import catalog_payload, get_adapter_descriptor
 from app.services.ai.llm._shared import extract_json_object
 from app.services.provider_security import redact_provider_error, sanitize_url
@@ -48,12 +47,12 @@ def _engine():
     return engine
 
 
-def test_factory_creates_openai_compatible_provider():
-    llm = create_provider(AIProvider(name="x", capability="llm", provider_type="openai_compatible", base_url="https://example.test/v1", api_key="secret", model_name="model"))
-    tts = create_provider(AIProvider(name="x", capability="tts", provider_type="openai_compatible", base_url="https://example.test/v1", api_key="secret", model_name="model"))
+def test_factory_creates_supported_openai_providers():
+    llm = create_provider(AIProvider(name="x", capability="llm", provider_type="openai_chat_compatible", base_url="https://example.test/v1", api_key="secret", model_name="model"))
+    tts = create_provider(AIProvider(name="x", capability="tts", provider_type="openai_audio_tts", base_url="https://example.test/v1", api_key="secret", model_name="model"))
     asr = create_provider(AIProvider(name="x", capability="asr", provider_type="openai_audio_asr", base_url="https://example.test/v1", api_key="secret", model_name="model"))
-    assert llm.__class__.__name__ == "OpenAICompatibleLLMProvider"
-    assert tts.__class__.__name__ == "OpenAICompatibleTTSProvider"
+    assert llm.__class__.__name__ == "OpenAIChatCompatibleLLMProvider"
+    assert tts.__class__.__name__ == "OpenAIAudioTTSProvider"
     assert asr.__class__.__name__ == "OpenAIWhisperASRProvider"
 
 
@@ -69,9 +68,9 @@ def test_factory_creates_mimo_audio_adapters():
     assert asr.__class__.__name__ == "MiMoASRProvider"
 
 
-def test_adapter_registry_resolves_legacy_aliases_and_exposes_safe_catalog():
-    assert get_adapter_descriptor("llm", "openai_compatible").canonical_key == "openai_chat_compatible"
-    assert get_adapter_descriptor("tts", "openai_compatible").canonical_key == "openai_audio_tts"
+def test_adapter_registry_exposes_only_canonical_types_and_a_safe_catalog():
+    assert get_adapter_descriptor("llm", "openai_compatible") is None
+    assert get_adapter_descriptor("tts", "openai_compatible") is None
     assert get_adapter_descriptor("asr", "openai_compatible") is None
     catalog = catalog_payload()
     keys = {(item["kind"], item["key"]) for item in catalog}
@@ -81,12 +80,12 @@ def test_adapter_registry_resolves_legacy_aliases_and_exposes_safe_catalog():
     assert all("api_key" not in {field["key"] for field in item["config_fields"]} for item in catalog)
 
 
-def test_legacy_profiles_are_not_registered():
+def test_unsupported_profiles_are_not_registered():
     assert get_adapter_descriptor("llm", "ollama_chat") is None
 
 
 def test_adapter_capabilities_are_static_and_safe_to_read():
-    llm = AIProvider(name="llm", capability="llm", provider_type="openai_compatible", base_url="https://example.test/v1", model_name="model")
+    llm = AIProvider(name="llm", capability="llm", provider_type="openai_chat_compatible", base_url="https://example.test/v1", model_name="model")
     remote_asr = AIProvider(name="remote", capability="asr", provider_type="openai_audio_asr", base_url="https://example.test/v1", model_name="model")
     mimo_asr = AIProvider(name="mimo", capability="asr", provider_type="mimo_asr", base_url="https://example.test", model_name="model")
     assert get_declared_capabilities(llm) == {ProviderCapability.GENERATE_TEXT, ProviderCapability.GENERATE_JSON}
@@ -104,7 +103,7 @@ def test_openai_tts_uses_user_provided_full_endpoint(monkeypatch):
         called["url"] = url
         return Response()
     monkeypatch.setattr("app.services.ai.tts.openai_compatible.provider_http.post", fake_post)
-    provider = OpenAICompatibleTTSProvider(base_url="https://voice.example/custom/speech", api_key="key", model_name="model")
+    provider = OpenAIAudioTTSProvider(base_url="https://voice.example/custom/speech", api_key="key", model_name="model")
     provider.synthesize(TTSRequest(text="Hello"))
     assert called["url"] == "https://voice.example/custom/speech"
 
@@ -123,7 +122,7 @@ def test_openai_tts_keeps_language_internal_for_base_compatible_endpoints(monkey
         return Response()
 
     monkeypatch.setattr("app.services.ai.tts.openai_compatible.provider_http.post", fake_post)
-    provider = OpenAICompatibleTTSProvider(
+    provider = OpenAIAudioTTSProvider(
         base_url="https://voice.example/custom/speech",
         api_key="key",
         model_name="model",
@@ -147,7 +146,7 @@ def test_openai_tts_sends_language_instruction_only_after_explicit_opt_in(monkey
         return Response()
 
     monkeypatch.setattr("app.services.ai.tts.openai_compatible.provider_http.post", fake_post)
-    provider = OpenAICompatibleTTSProvider(
+    provider = OpenAIAudioTTSProvider(
         base_url="https://voice.example/custom/speech",
         api_key="key",
         model_name="model",
@@ -163,7 +162,7 @@ def test_openai_pcm_result_declares_the_decoding_contract(monkeypatch):
         headers: dict[str, str] = {}
         def raise_for_status(self): pass
     monkeypatch.setattr("app.services.ai.tts.openai_compatible.provider_http.post", lambda *_args, **_kwargs: Response())
-    result = OpenAICompatibleTTSProvider(
+    result = OpenAIAudioTTSProvider(
         base_url="https://voice.example/custom/speech",
         api_key="key",
         model_name="tts",
@@ -192,7 +191,7 @@ def test_audio_connection_test_never_synthesizes(monkeypatch):
         "app.services.ai.tts.openai_compatible.provider_http.post",
         lambda *_args, **_kwargs: pytest.fail("connection test must not synthesize audio"),
     )
-    provider = OpenAICompatibleTTSProvider(
+    provider = OpenAIAudioTTSProvider(
         base_url="https://voice.example/custom/speech", api_key="key", model_name="tts",
     )
     assert "no billable request" in provider.test_connection()
@@ -430,27 +429,8 @@ def test_evaluation_forwards_content_language_to_recording_asr(monkeypatch):
     }
 
 
-def test_azure_fast_transcription_parser_normalizes_milliseconds_to_seconds():
-    segments = AzureSpeechASRProvider._segments(
-        {
-            "phrases": [{
-                "text": "hello world", "offsetMilliseconds": 1250, "durationMilliseconds": 900,
-                "words": [
-                    {"text": "hello", "offsetMilliseconds": 1250, "durationMilliseconds": 400},
-                    {"text": "world", "offsetMilliseconds": 1700, "durationMilliseconds": 450},
-                ],
-            }],
-        },
-        include_words=True,
-    )
-    assert segments[0].start == 1.25 and segments[0].end == 2.15
-    assert [(word.text, word.start, word.end) for word in segments[0].words] == [
-        ("hello", 1.25, 1.65), ("world", 1.7, 2.15),
-    ]
-
-
 def test_provider_read_masks_api_key():
-    response = _read(AIProvider(id=3, name="secret", capability="llm", provider_type="openai_compatible", api_key="sk-very-secret-key", model_name="model"))
+    response = _read(AIProvider(id=3, name="secret", capability="llm", provider_type="openai_chat_compatible", api_key="sk-very-secret-key", model_name="model"))
     assert response.api_key_masked is not None
     assert "very-secret" not in response.api_key_masked
     assert "sk-very-secret-key" not in response.model_dump_json()
@@ -766,7 +746,7 @@ def test_generated_word_selection_uses_single_structured_response(monkeypatch):
     engine = _engine()
     class Provider:
         def generate_json(self, **_kwargs): return {"title": "Trip", "body": "I travel with apple.", "used_words": ["apple"], "unused_words": ["book"]}
-    record = AIProvider(id=7, name="fake", capability="llm", provider_type="openai_compatible", base_url="x", model_name="x")
+    record = AIProvider(id=7, name="fake", capability="llm", provider_type="openai_chat_compatible", base_url="x", model_name="x")
     monkeypatch.setattr(text_generation_service, "require_provider_capabilities", lambda *_args, **_kwargs: record)
     monkeypatch.setattr(text_generation_service, "get_provider", lambda *_args: Provider())
     with Session(engine) as session:
@@ -836,7 +816,7 @@ def test_invalid_llm_json_does_not_issue_a_second_generation(monkeypatch):
         def generate_text(self, **_kwargs):
             calls["text"] += 1
             return "should not be called"
-    record = AIProvider(id=7, name="fake", capability="llm", provider_type="openai_compatible", base_url="x", model_name="x")
+    record = AIProvider(id=7, name="fake", capability="llm", provider_type="openai_chat_compatible", base_url="x", model_name="x")
     monkeypatch.setattr(text_generation_service, "require_provider_capabilities", lambda *_args, **_kwargs: record)
     monkeypatch.setattr(text_generation_service, "get_provider", lambda *_args: Provider())
     with Session(engine) as session:
@@ -889,7 +869,7 @@ def test_tts_options_validate_explicit_language_and_queue_freezes_target_languag
         provider = AIProvider(
             name="tts",
             capability="tts",
-            provider_type="openai_compatible",
+            provider_type="openai_audio_tts",
             base_url="https://example.test/audio/speech",
             api_key="key",
             model_name="tts",
@@ -939,7 +919,7 @@ def test_edit_after_queue_invalidates_tts_snapshot_without_synthesis(monkeypatch
     )
     with Session(engine) as session:
         provider = AIProvider(
-            name="tts", capability="tts", provider_type="openai_compatible",
+            name="tts", capability="tts", provider_type="openai_audio_tts",
             base_url="https://example.test/audio/speech", api_key="key", model_name="tts",
             is_default=True,
         )
@@ -1010,7 +990,7 @@ def test_tts_final_write_rechecks_snapshot_and_uses_job_isolated_audio_paths(mon
 
     with Session(engine) as session:
         provider = AIProvider(
-            name="tts", capability="tts", provider_type="openai_compatible",
+            name="tts", capability="tts", provider_type="openai_audio_tts",
             base_url="https://example.test/audio/speech", api_key="key", model_name="tts",
             is_default=True,
         )
@@ -1211,7 +1191,7 @@ def test_tts_job_creates_material_and_sentences(monkeypatch, tmp_path: Path):
     monkeypatch.setattr(tts_service, "get_audio_duration", lambda path: 1.25 if path.name != "text_practice_1.mp3" else 2.5)
     try:
         with Session(engine) as session:
-            provider = AIProvider(name="tts", capability="tts", provider_type="openai_compatible", base_url="https://example.test/audio/speech", api_key="key", model_name="tts")
+            provider = AIProvider(name="tts", capability="tts", provider_type="openai_audio_tts", base_url="https://example.test/audio/speech", api_key="key", model_name="tts")
             session.add(provider); session.commit(); session.refresh(provider)
             practice = TextPractice(title="Generated", body="First sentence. Second sentence!", source_type="import", target_language="ja", tts_provider_id=provider.id, tts_job_id="job", tts_options_json='{"speed_preset":"normal", "language":"ja"}')
             session.add(practice); session.commit()

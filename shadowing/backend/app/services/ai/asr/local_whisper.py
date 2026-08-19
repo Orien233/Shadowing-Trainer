@@ -1,7 +1,7 @@
 from typing import Any
 
 from app.services.ai.asr.base import ASRProvider, openai_language_code, resolve_asr_language
-from app.services.ai.audio_types import ASRResult, ASRSegment, ASRWord, AudioCapability
+from app.services.ai.audio_types import ASRResult, ASRSegment, ASRWord, ProviderCapability
 from app.services.local_whisper_runtime import get_local_whisper_status, LocalWhisperUnavailableError
 from app.services.transcription_service import transcribe_audio
 
@@ -9,7 +9,7 @@ from app.services.transcription_service import transcribe_audio
 class LocalWhisperASRProvider(ASRProvider):
     """Thin provider wrapper retaining the cached faster-whisper model."""
 
-    capabilities = frozenset({AudioCapability.TRANSCRIBE, AudioCapability.WORD_TIMESTAMPS})
+    capabilities = frozenset({ProviderCapability.TRANSCRIBE, ProviderCapability.WORD_TIMESTAMPS})
 
     def __init__(
         self,
@@ -33,7 +33,7 @@ class LocalWhisperASRProvider(ASRProvider):
         language: str | None = None,
     ) -> ASRResult:
         if word_timestamps:
-            self.require(AudioCapability.WORD_TIMESTAMPS)
+            self.require(ProviderCapability.WORD_TIMESTAMPS)
         raw_segments = transcribe_audio(
             audio_path,
             word_timestamps=word_timestamps,

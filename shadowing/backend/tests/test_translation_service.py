@@ -55,7 +55,7 @@ def test_batch_same_language_returns_originals_without_resolving_provider(monkey
     def fail_provider_resolution(*_args, **_kwargs):
         raise AssertionError("Provider resolution must be skipped for same-language translation")
 
-    monkeypatch.setattr(translation_service, "get_llm_provider_with_legacy_fallback", fail_provider_resolution)
+    monkeypatch.setattr(translation_service, "get_provider", fail_provider_resolution)
 
     result = asyncio.run(
         translation_service.translate_sentences(

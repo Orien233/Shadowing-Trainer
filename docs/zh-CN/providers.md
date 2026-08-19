@@ -14,7 +14,7 @@ Provider 配置由后端持久化。静态 Adapter Catalog 描述协议能提供
 | ASR | OpenAI Audio Transcription | Base URL | `transcribe`, `word_timestamps` | 不适用 |
 | ASR | MiMo ASR | 完整 Endpoint | `transcribe` | 不适用 |
 
-Local Whisper 是系统级本地 ASR 回退，不是数据库中的远程 Provider 配置档。Azure、Deepgram、ElevenLabs、DashScope、Anthropic、Gemini、Ollama、vLLM 等历史实现文件仍可为未来开发提供参考，但未注册到 v0.4.1 Catalog，不能新建、启用、测试或参与业务调用。
+Local Whisper 是系统级本地 ASR 回退，不是数据库中的远程 Provider 配置档。0.4.2 基线只保留 Catalog 中明确支持的适配器；未注册的历史实现已经从运行代码中移除。
 
 ## 快捷模板与我的配置
 

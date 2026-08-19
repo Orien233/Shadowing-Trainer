@@ -266,17 +266,12 @@ def get_provider(session: Session, capability: str, provider_id: int | None = No
     return create_provider(get_provider_record(session, capability, provider_id))
 
 
-def get_llm_provider_with_legacy_fallback(session: Session):
-    return get_provider(session, "llm")
-
-
 __all__ = [
     "ProviderConfigurationError",
     "create_provider",
     "descriptor_config_fields",
     "get_declared_capabilities",
     "get_enabled_capabilities",
-    "get_llm_provider_with_legacy_fallback",
     "get_provider",
     "get_provider_descriptor",
     "get_provider_record",

@@ -11,7 +11,7 @@ from app.services.ai.asr.base import (
     UnsupportedASRLanguageError,
     resolve_asr_language,
 )
-from app.services.ai.audio_types import ASRResult, ASRSegment, AudioCapability
+from app.services.ai.audio_types import ASRResult, ASRSegment, ProviderCapability
 from app.services.ai.audio_utils import configuration_message
 
 
@@ -22,7 +22,7 @@ class MiMoASRProvider(ASRProvider):
     returns transcription text in the chat completion message.
     """
 
-    capabilities = frozenset({AudioCapability.TRANSCRIBE})
+    capabilities = frozenset({ProviderCapability.TRANSCRIBE})
 
     def __init__(self, base_url: str, api_key: str, model_name: str, extra_config: dict[str, Any] | None = None) -> None:
         self.base_url, self.api_key, self.model_name = base_url.rstrip("/"), api_key, model_name
@@ -57,7 +57,7 @@ class MiMoASRProvider(ASRProvider):
         if not self.api_key:
             raise ValueError("Provider API key is not configured.")
         if word_timestamps:
-            self.require(AudioCapability.WORD_TIMESTAMPS)
+            self.require(ProviderCapability.WORD_TIMESTAMPS)
         # Validate before reading/encoding the whole file or issuing a billable
         # request.  This repeats the Router check for direct Adapter callers.
         requested_language = self.provider_language(language)

@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 
-from app.services.ai.audio_types import ASRResult, AudioCapability, UnsupportedAudioCapabilityError
+from app.services.ai.audio_types import ASRResult, ProviderCapability, UnsupportedAudioCapabilityError
 
 
 class UnsupportedASRLanguageError(ValueError):
@@ -35,9 +35,9 @@ def openai_language_code(language: str | None) -> str | None:
 
 
 class ASRProvider(ABC):
-    capabilities: frozenset[AudioCapability] = frozenset({AudioCapability.TRANSCRIBE})
+    capabilities: frozenset[ProviderCapability] = frozenset({ProviderCapability.TRANSCRIBE})
 
-    def supports(self, capability: AudioCapability) -> bool:
+    def supports(self, capability: ProviderCapability) -> bool:
         return capability in self.capabilities
 
     def provider_language(self, language: str | None) -> str | None:
@@ -74,7 +74,7 @@ class ASRProvider(ABC):
     def transcribe_text(self, audio_path: str, *, language: str | None = None) -> str:
         return self.transcribe(audio_path, language=language).text
 
-    def require(self, capability: AudioCapability) -> None:
+    def require(self, capability: ProviderCapability) -> None:
         if not self.supports(capability):
             raise UnsupportedAudioCapabilityError(f"This ASR provider does not support {capability.value}.")
 

@@ -14,10 +14,6 @@ class ProviderCapability(StrEnum):
     WORD_TIMESTAMPS = "word_timestamps"
 
 
-# Backward-compatible name for existing audio Adapter imports.
-AudioCapability = ProviderCapability
-
-
 class UnsupportedAudioCapabilityError(ValueError):
     pass
 
