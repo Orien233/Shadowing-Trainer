@@ -446,7 +446,6 @@ def run_tts_synthesis(job_id: str, payload: dict) -> dict:
                 file_type="audio",
                 original_path=str(merged_path),
                 source_type="text_tts",
-                text_practice_id=practice_id,
                 content_language=content_language,
                 translation_language=translation_language,
             )

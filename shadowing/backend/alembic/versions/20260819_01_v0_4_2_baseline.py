@@ -115,7 +115,6 @@ def upgrade() -> None:
     sa.Column('processing_progress', sa.Integer(), nullable=False),
     sa.Column('error_message', sqlmodel.sql.sqltypes.AutoString(), nullable=True),
     sa.Column('source_type', sqlmodel.sql.sqltypes.AutoString(), nullable=False),
-    sa.Column('text_practice_id', sa.Integer(), nullable=True),
     sa.Column('content_language', sqlmodel.sql.sqltypes.AutoString(), nullable=False),
     sa.Column('translation_language', sqlmodel.sql.sqltypes.AutoString(), nullable=False),
     sa.Column('created_at', sa.DateTime(), nullable=False),
@@ -124,7 +123,6 @@ def upgrade() -> None:
     with op.batch_alter_table('material', schema=None) as batch_op:
         batch_op.create_index(batch_op.f('ix_material_content_language'), ['content_language'], unique=False)
         batch_op.create_index(batch_op.f('ix_material_job_id'), ['job_id'], unique=False)
-        batch_op.create_index(batch_op.f('ix_material_text_practice_id'), ['text_practice_id'], unique=False)
         batch_op.create_index(batch_op.f('ix_material_translation_language'), ['translation_language'], unique=False)
 
     op.create_table('recording',
@@ -257,7 +255,6 @@ def downgrade() -> None:
     op.drop_table('recording')
     with op.batch_alter_table('material', schema=None) as batch_op:
         batch_op.drop_index(batch_op.f('ix_material_translation_language'))
-        batch_op.drop_index(batch_op.f('ix_material_text_practice_id'))
         batch_op.drop_index(batch_op.f('ix_material_job_id'))
         batch_op.drop_index(batch_op.f('ix_material_content_language'))
 

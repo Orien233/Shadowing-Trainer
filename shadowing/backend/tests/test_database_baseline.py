@@ -37,13 +37,18 @@ def test_v0_4_2_baseline_matches_current_metadata():
 
         inspector = inspect(connection)
         assert set(inspector.get_table_names()) == set(SQLModel.metadata.tables)
+        material_columns = {
+            column["name"] for column in inspector.get_columns("material")
+        }
         assert {
             "content_language",
             "translation_language",
             "processing_progress",
-        }.issubset(
-            {column["name"] for column in inspector.get_columns("material")}
-        )
+        }.issubset(material_columns)
+        assert "text_practice_id" not in material_columns
+        assert "material_id" in {
+            column["name"] for column in inspector.get_columns("text_practices")
+        }
         assert "material_sentence_score" not in inspector.get_table_names()
         assert "user_id" in {
             column["name"] for column in inspector.get_columns("recording")

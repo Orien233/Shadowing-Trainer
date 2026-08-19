@@ -20,7 +20,6 @@ class Material(SQLModel, table=True):
     processing_progress: int = 0
     error_message: str | None = None
     source_type: str = "upload"
-    text_practice_id: int | None = Field(default=None, index=True)
     # Canonical BCP-47 tags. ``und`` is reserved for genuinely unknown source
     # language; normal UI/API writes use the supported language catalog.
     content_language: str = Field(default="en", index=True)
