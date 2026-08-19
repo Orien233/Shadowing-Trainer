@@ -92,7 +92,14 @@ export default function MaterialList({
                   </span>
                 </div>
                 {isProcessing && (
-                  <div className="material-progress" aria-label={t("material.processingProgress")}>
+                  <div
+                    className="material-progress"
+                    role="progressbar"
+                    aria-label={t("material.processingProgress")}
+                    aria-valuemin={0}
+                    aria-valuemax={100}
+                    aria-valuenow={Math.max(0, Math.min(100, material.processing_progress ?? 0))}
+                  >
                     <span>{t("material.processing")}</span>
                     <span>{stageLabel(t, material.processing_stage)}</span>
                     <strong>{material.processing_progress ?? 0}%</strong>

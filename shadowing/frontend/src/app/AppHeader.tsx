@@ -46,17 +46,51 @@ export default function AppHeader({
   const [activePopover, setActivePopover] = useState<"language" | "help" | null>(null);
   const rootRef = useRef<HTMLElement | null>(null);
   const navRefs = useRef<Array<HTMLButtonElement | null>>([]);
+  const languageTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const helpTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const languagePopoverRef = useRef<HTMLDivElement | null>(null);
+  const helpPopoverRef = useRef<HTMLDivElement | null>(null);
+  const previousPopoverRef = useRef<typeof activePopover>(null);
+  const restorePopoverFocusRef = useRef(true);
+
+  function closePopover(restoreFocus: boolean) {
+    restorePopoverFocusRef.current = restoreFocus;
+    setActivePopover(null);
+  }
 
   useEffect(() => {
     function closeFromOutside(event: PointerEvent) {
       const target = event.target;
       if (target instanceof Node && !rootRef.current?.contains(target)) {
-        setActivePopover(null);
+        closePopover(false);
       }
     }
     document.addEventListener("pointerdown", closeFromOutside);
     return () => document.removeEventListener("pointerdown", closeFromOutside);
   }, []);
+
+  useEffect(() => {
+    function closeOnEscape(event: globalThis.KeyboardEvent) {
+      if (event.key === "Escape" && activePopover) closePopover(true);
+    }
+    document.addEventListener("keydown", closeOnEscape);
+    return () => document.removeEventListener("keydown", closeOnEscape);
+  }, [activePopover]);
+
+  useEffect(() => {
+    const previous = previousPopoverRef.current;
+    if (activePopover) {
+      const popover = activePopover === "language" ? languagePopoverRef.current : helpPopoverRef.current;
+      const first = popover?.querySelector<HTMLElement>(
+        'button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), a[href], [tabindex]:not([tabindex="-1"])'
+      );
+      (first ?? popover)?.focus();
+    } else if (previous && restorePopoverFocusRef.current) {
+      (previous === "language" ? languageTriggerRef : helpTriggerRef).current?.focus();
+    }
+    restorePopoverFocusRef.current = true;
+    previousPopoverRef.current = activePopover;
+  }, [activePopover]);
 
   function handleTabKeyDown(index: number, event: KeyboardEvent<HTMLButtonElement>) {
     if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
@@ -104,7 +138,10 @@ export default function AppHeader({
               aria-selected={selected}
               tabIndex={selected || (activePanel === "settings" && index === 0) ? 0 : -1}
               className={`primary-tab ${selected ? "active" : ""}`}
-              onClick={() => onPanelChange(item.panel)}
+              onClick={() => {
+                closePopover(false);
+                onPanelChange(item.panel);
+              }}
               onKeyDown={(event) => handleTabKeyDown(index, event)}
             >
               <Icon size={18} weight={selected ? "fill" : "regular"} />
@@ -117,17 +154,22 @@ export default function AppHeader({
       <div className="header-actions">
         <div className="header-popover-anchor">
           <button
+            ref={languageTriggerRef}
             type="button"
             className={`header-control language-control ${activePopover === "language" ? "active" : ""}`}
             aria-expanded={activePopover === "language"}
             aria-haspopup="dialog"
-            onClick={() => setActivePopover((current) => current === "language" ? null : "language")}
+            aria-controls="language-popover"
+            onClick={() => {
+              restorePopoverFocusRef.current = true;
+              setActivePopover((current) => current === "language" ? null : "language");
+            }}
           >
             <span>{t("nav.languageCompact")}</span>
             <CaretDown size={16} weight="bold" />
           </button>
           {activePopover === "language" && (
-            <div className="header-popover language-popover" role="dialog" aria-label={t("language.preferences")}>
+            <div ref={languagePopoverRef} id="language-popover" className="header-popover language-popover" role="dialog" aria-label={t("language.preferences")} tabIndex={-1}>
               <LanguageSelector />
             </div>
           )}
@@ -135,16 +177,22 @@ export default function AppHeader({
 
         <div className="header-popover-anchor">
           <button
+            ref={helpTriggerRef}
             type="button"
             className={`icon-button ${activePopover === "help" ? "active" : ""}`}
             aria-label={t("nav.help")}
             aria-expanded={activePopover === "help"}
-            onClick={() => setActivePopover((current) => current === "help" ? null : "help")}
+            aria-haspopup="dialog"
+            aria-controls="help-popover"
+            onClick={() => {
+              restorePopoverFocusRef.current = true;
+              setActivePopover((current) => current === "help" ? null : "help");
+            }}
           >
             <Question size={22} weight="regular" />
           </button>
           {activePopover === "help" && (
-            <div className="header-popover help-popover" role="dialog" aria-label={t("nav.help")}>
+            <div ref={helpPopoverRef} id="help-popover" className="header-popover help-popover" role="dialog" aria-label={t("nav.help")} tabIndex={-1}>
               <strong>{t("nav.helpTitle")}</strong>
               <p>{t("app.workflow")}</p>
               <p className="muted">{t("app.securityNote")}</p>
@@ -157,7 +205,10 @@ export default function AppHeader({
           className={`icon-button ${activePanel === "settings" ? "active" : ""}`}
           aria-label={t("app.settings")}
           aria-pressed={activePanel === "settings"}
-          onClick={() => onPanelChange("settings")}
+          onClick={() => {
+            closePopover(false);
+            onPanelChange("settings");
+          }}
         >
           <GearSix size={22} weight={activePanel === "settings" ? "fill" : "regular"} />
         </button>

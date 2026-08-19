@@ -29,6 +29,7 @@ export default function MaterialDrawer({
   const { t } = useLanguage();
   const triggerRef = useRef<HTMLButtonElement | null>(null);
   const closeRef = useRef<HTMLButtonElement | null>(null);
+  const drawerRef = useRef<HTMLElement | null>(null);
   const wasOpenRef = useRef(false);
 
   useEffect(() => {
@@ -45,11 +46,34 @@ export default function MaterialDrawer({
 
   useEffect(() => {
     if (!open) return;
-    function closeOnEscape(event: KeyboardEvent) {
+    function handleKeyDown(event: KeyboardEvent) {
       if (event.key === "Escape") onOpenChange(false);
+      if (event.key !== "Tab") return;
+      const drawer = drawerRef.current;
+      if (!drawer) return;
+      const focusable = Array.from(drawer.querySelectorAll<HTMLElement>(
+        'button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), a[href], [tabindex]:not([tabindex="-1"])'
+      ));
+      if (focusable.length === 0) {
+        event.preventDefault();
+        drawer.focus();
+        return;
+      }
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (!drawer.contains(document.activeElement)) {
+        event.preventDefault();
+        (event.shiftKey ? last : first).focus();
+      } else if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
     }
-    window.addEventListener("keydown", closeOnEscape);
-    return () => window.removeEventListener("keydown", closeOnEscape);
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
   }, [onOpenChange, open]);
 
   return (
@@ -74,15 +98,17 @@ export default function MaterialDrawer({
             type="button"
             className="drawer-backdrop"
             tabIndex={-1}
-            aria-label={t("material.dismissDrawer")}
+            aria-hidden="true"
             onClick={() => onOpenChange(false)}
           />
           <aside
+            ref={drawerRef}
             id="material-drawer"
             className="material-drawer"
             role="dialog"
             aria-modal="true"
             aria-label={t("material.drawerTitle")}
+            tabIndex={-1}
           >
             <div className="material-drawer-header">
               <div>

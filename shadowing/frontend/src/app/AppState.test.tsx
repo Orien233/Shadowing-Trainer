@@ -93,6 +93,15 @@ beforeEach(() => {
 });
 
 describe("App language and panel state", () => {
+  it("shows a recoverable error when the material list cannot load", async () => {
+    api.listMaterials.mockRejectedValue(new Error("offline"));
+    api.listWordCollections.mockResolvedValue([]);
+    renderApp();
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("Could not load materials.");
+    expect(screen.getByRole("button", { name: "Retry" })).toBeInTheDocument();
+  });
+
   it("indexes an old material's collected words while filtering the visible library", async () => {
     api.listMaterials.mockResolvedValue([{
       id: 1, title: "Japanese material", file_type: "audio", original_path: "source.wav",

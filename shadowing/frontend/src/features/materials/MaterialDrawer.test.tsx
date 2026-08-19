@@ -4,8 +4,8 @@ import { describe, expect, it, vi } from "vitest";
 import { LanguageProvider } from "../../i18n/LanguageContext";
 import MaterialDrawer from "./MaterialDrawer";
 
-vi.mock("./MaterialUploader", () => ({ default: () => <div>Uploader</div> }));
-vi.mock("./MaterialList", () => ({ default: () => <div>Material list</div> }));
+vi.mock("./MaterialUploader", () => ({ default: () => <button type="button">Uploader action</button> }));
+vi.mock("./MaterialList", () => ({ default: () => <button type="button">Material action</button> }));
 
 function Harness() {
   const [open, setOpen] = useState(false);
@@ -49,5 +49,19 @@ describe("MaterialDrawer", () => {
 
     expect(screen.queryByRole("dialog", { name: "Material library" })).not.toBeInTheDocument();
     expect(trigger).toHaveFocus();
+  });
+
+  it("keeps Tab and Shift+Tab inside the modal drawer", () => {
+    render(<Harness />);
+    fireEvent.click(screen.getByRole("button", { name: "Open material library" }));
+
+    const close = screen.getByRole("button", { name: "Close material library" });
+    const last = screen.getByRole("button", { name: "Material action" });
+    last.focus();
+    fireEvent.keyDown(window, { key: "Tab" });
+    expect(close).toHaveFocus();
+
+    fireEvent.keyDown(window, { key: "Tab", shiftKey: true });
+    expect(last).toHaveFocus();
   });
 });

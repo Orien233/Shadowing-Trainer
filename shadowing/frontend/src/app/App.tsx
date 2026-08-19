@@ -89,8 +89,9 @@ export default function App() {
       });
     } catch (error) {
       console.error(error);
+      setLoadError(t("app.materialsLoadFailed"));
     }
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     void loadMaterials();

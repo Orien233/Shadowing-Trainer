@@ -46,13 +46,17 @@ export default function MaterialUploader({ onUploaded }: Props) {
         <span>{t("material.contentLanguage")}: <strong>{languageLabel(learningLanguage, uiLocale)}</strong></span>
         <span>{t("material.translationLanguage")}: <strong>{languageLabel(translationLanguage, uiLocale)}</strong></span>
       </div>
+      <label htmlFor="material-title">{t("material.titleLabel")}</label>
       <input
+        id="material-title"
         dir="auto"
         value={title}
         onChange={(e) => setTitle(e.target.value)}
         placeholder={t("material.titlePlaceholder")}
       />
+      <label htmlFor="material-file">{t("material.fileLabel")}</label>
       <input
+        id="material-file"
         type="file"
         accept="audio/*,video/*"
         onChange={(e) => setFile(e.target.files?.[0] ?? null)}
