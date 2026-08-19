@@ -100,15 +100,6 @@ def _calculate_warmup_count(sentence_count: int) -> int:
     return 3
 
 
-async def close_translation_http_client() -> None:
-    """Compatibility hook retained for the FastAPI lifespan callback.
-
-    Translation now uses the configured provider adapters directly; the old
-    DeepSeek-only async HTTP client has been removed.
-    """
-    return None
-
-
 async def translate_sentence(
     text: str,
     *,

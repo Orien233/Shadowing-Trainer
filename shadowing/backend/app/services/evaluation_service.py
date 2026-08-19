@@ -36,64 +36,6 @@ def _safe_get_duration(audio_path: str) -> float:
         return 0.0
 
 
-def _legacy_pause_ratio_from_prosody_metrics(recording_path: str) -> float:
-    metrics = extract_prosody_rhythm_metrics(
-        reference_audio_path=None,
-        learner_audio_path=recording_path,
-        reference_duration=None,
-        sample_rate=settings.eval_sample_rate,
-        backend=settings.prosody_backend,
-        enabled=True,
-    )
-    return float(metrics.pause_ratio)
-
-
-def estimate_pause_ratio(audio_path: str) -> float:
-    """Backward-compatible helper kept for legacy callers."""
-    return _legacy_pause_ratio_from_prosody_metrics(audio_path)
-
-
-def _legacy_feedback_tags(
-    *,
-    completeness_score: int,
-    fluency_score: int,
-    sync_score: int,
-    pronunciation_score: int,
-) -> list[str]:
-    tags: list[str] = []
-    if completeness_score < 70:
-        tags.append("content_mismatch")
-    if fluency_score < 70:
-        tags.append("too_many_pauses")
-    if sync_score < 70:
-        tags.append("pace_too_slow")
-    if pronunciation_score < 70:
-        tags.append("weak_imitation")
-    return tags
-
-
-def build_feedback(
-    completeness_score: int,
-    fluency_score: int,
-    sync_score: int,
-    pronunciation_score: int,
-) -> tuple[str, str]:
-    """Backward-compatible wrapper for deterministic feedback generation."""
-    tags = _legacy_feedback_tags(
-        completeness_score=completeness_score,
-        fluency_score=fluency_score,
-        sync_score=sync_score,
-        pronunciation_score=pronunciation_score,
-    )
-    return build_feedback_and_suggestion(
-        tags=tags,
-        completeness_score=completeness_score,
-        fluency_score=fluency_score,
-        sync_score=sync_score,
-        pronunciation_score=pronunciation_score,
-    )
-
-
 def _resolve_reference_audio_path(reference_audio_path: str | None) -> str | None:
     if not reference_audio_path:
         return None

@@ -70,25 +70,3 @@ def list_latest_scores_for_material(
         latest_by_sentence[sentence_id]
         for sentence_id in sorted(latest_by_sentence.keys())
     ]
-
-
-def get_latest_score_for_sentence(
-    *,
-    session: Session,
-    material_id: int,
-    sentence_id: int,
-    user_id: str | None = None,
-) -> MaterialSentenceScore | None:
-    normalized_user_id = resolve_user_id(user_id)
-    statement = (
-        select(MaterialSentenceScore)
-        .where(MaterialSentenceScore.user_id == normalized_user_id)
-        .where(MaterialSentenceScore.material_id == material_id)
-        .where(MaterialSentenceScore.sentence_id == sentence_id)
-        .order_by(
-            MaterialSentenceScore.created_at.desc(),
-            MaterialSentenceScore.id.desc(),
-        )
-        .limit(1)
-    )
-    return session.exec(statement).first()

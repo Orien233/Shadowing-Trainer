@@ -1,3 +1,13 @@
-# Compatibility install: remote-provider runtime plus baseline audio tools.
-# Add requirements-local-whisper.txt only when local ASR is required.
--r requirements-core.txt
+# Web / API
+fastapi==0.115.12
+uvicorn[standard]==0.34.1
+python-multipart==0.0.20
+sqlmodel==0.0.24
+alembic==1.15.2
+pydantic-settings==2.8.1
+httpx==0.28.1
+
+# Audio processing and the baseline local evaluation path
+librosa==0.10.2.post1
+soundfile==0.13.1
+numpy==2.0.2

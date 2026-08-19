@@ -1,2 +1,2 @@
--r requirements-core.txt
+-r requirements.txt
 pytest==8.3.5

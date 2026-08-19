@@ -1,4 +1,4 @@
 # Optional WavLM imitation-scoring extra.  Install PyTorch separately for the
 # desired CPU/CUDA platform, then install this file.
--r requirements-core.txt
+-r requirements.txt
 transformers==4.46.3
