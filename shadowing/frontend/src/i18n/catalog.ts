@@ -1,6 +1,7 @@
-export const UI_LOCALES = ["zh-CN", "en-US"] as const;
+import languageCatalog from "../../../shared/language_catalog.json";
 
-export type UILocale = (typeof UI_LOCALES)[number];
+export type UILocale = "zh-CN" | "en-US";
+export const UI_LOCALES: readonly UILocale[] = languageCatalog.ui_locales as UILocale[];
 
 export interface LanguageOption {
   code: string;
@@ -8,20 +9,11 @@ export interface LanguageOption {
   labels: Record<UILocale, string>;
 }
 
-export const LEARNING_LANGUAGES: LanguageOption[] = [
-  { code: "en", nativeName: "English", labels: { "zh-CN": "英语", "en-US": "English" } },
-  { code: "zh-CN", nativeName: "简体中文", labels: { "zh-CN": "简体中文", "en-US": "Chinese (Simplified)" } },
-  { code: "zh-TW", nativeName: "繁體中文", labels: { "zh-CN": "繁体中文", "en-US": "Chinese (Traditional)" } },
-  { code: "ja", nativeName: "日本語", labels: { "zh-CN": "日语", "en-US": "Japanese" } },
-  { code: "ko", nativeName: "한국어", labels: { "zh-CN": "韩语", "en-US": "Korean" } },
-  { code: "es", nativeName: "Español", labels: { "zh-CN": "西班牙语", "en-US": "Spanish" } },
-  { code: "fr", nativeName: "Français", labels: { "zh-CN": "法语", "en-US": "French" } },
-  { code: "de", nativeName: "Deutsch", labels: { "zh-CN": "德语", "en-US": "German" } },
-  { code: "it", nativeName: "Italiano", labels: { "zh-CN": "意大利语", "en-US": "Italian" } },
-  { code: "pt", nativeName: "Português", labels: { "zh-CN": "葡萄牙语", "en-US": "Portuguese" } },
-  { code: "ru", nativeName: "Русский", labels: { "zh-CN": "俄语", "en-US": "Russian" } },
-  { code: "ar", nativeName: "العربية", labels: { "zh-CN": "阿拉伯语", "en-US": "Arabic" } },
-];
+export const LEARNING_LANGUAGES: LanguageOption[] = languageCatalog.languages.map((item) => ({
+  code: item.code,
+  nativeName: item.native_name,
+  labels: item.labels,
+}));
 
 export function isUILocale(value: string | null): value is UILocale {
   return UI_LOCALES.includes(value as UILocale);

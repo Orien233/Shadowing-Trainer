@@ -8,7 +8,11 @@ canonical tag into a provider-specific parameter later.
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
+from pathlib import Path
+from types import MappingProxyType
+from typing import Mapping
 
 
 @dataclass(frozen=True)
@@ -16,25 +20,23 @@ class LanguageDescriptor:
     code: str
     english_name: str
     native_name: str
+    labels: Mapping[str, str]
 
 
-LANGUAGE_CATALOG: tuple[LanguageDescriptor, ...] = (
-    LanguageDescriptor("en", "English", "English"),
-    LanguageDescriptor("zh-CN", "Chinese (Simplified)", "简体中文"),
-    LanguageDescriptor("zh-TW", "Chinese (Traditional)", "繁體中文"),
-    LanguageDescriptor("ja", "Japanese", "日本語"),
-    LanguageDescriptor("ko", "Korean", "한국어"),
-    LanguageDescriptor("es", "Spanish", "Español"),
-    LanguageDescriptor("fr", "French", "Français"),
-    LanguageDescriptor("de", "German", "Deutsch"),
-    LanguageDescriptor("it", "Italian", "Italiano"),
-    LanguageDescriptor("pt", "Portuguese", "Português"),
-    LanguageDescriptor("ru", "Russian", "Русский"),
-    LanguageDescriptor("ar", "Arabic", "العربية"),
+CATALOG_PATH = Path(__file__).resolve().parents[3] / "shared" / "language_catalog.json"
+_CATALOG_DATA = json.loads(CATALOG_PATH.read_text(encoding="utf-8"))
+LANGUAGE_CATALOG: tuple[LanguageDescriptor, ...] = tuple(
+    LanguageDescriptor(
+        code=item["code"],
+        english_name=item["english_name"],
+        native_name=item["native_name"],
+        labels=MappingProxyType(dict(item["labels"])),
+    )
+    for item in _CATALOG_DATA["languages"]
 )
 
 SUPPORTED_LANGUAGE_CODES: tuple[str, ...] = tuple(item.code for item in LANGUAGE_CATALOG)
-SUPPORTED_UI_LOCALES: tuple[str, ...] = ("zh-CN", "en-US")
+SUPPORTED_UI_LOCALES: tuple[str, ...] = tuple(_CATALOG_DATA["ui_locales"])
 _CANONICAL_BY_FOLDED_TAG = {item.code.casefold(): item.code for item in LANGUAGE_CATALOG}
 _CANONICAL_BY_FOLDED_TAG.update({
     "zh_cn": "zh-CN",
@@ -104,6 +106,7 @@ def language_catalog_payload() -> list[dict[str, str]]:
             "code": item.code,
             "english_name": item.english_name,
             "native_name": item.native_name,
+            "labels": dict(item.labels),
         }
         for item in LANGUAGE_CATALOG
     ]

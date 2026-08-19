@@ -16,8 +16,10 @@ from app.models.job import Job
 from app.models.text_practice import TextPractice
 from app.services.language_catalog import (
     ASR_AUTO_LANGUAGE,
+    CATALOG_PATH,
     UNDETERMINED_LANGUAGE,
     LanguageValidationError,
+    language_catalog_payload,
     normalize_language_tag,
     normalize_ui_locale,
 )
@@ -47,6 +49,11 @@ def client() -> Iterator[TestClient]:
 
 
 def test_language_catalog_normalizes_case_and_bcp47_separator():
+    assert CATALOG_PATH.is_file()
+    assert language_catalog_payload()[0]["labels"] == {
+        "zh-CN": "英语",
+        "en-US": "English",
+    }
     assert normalize_language_tag("EN") == "en"
     assert normalize_language_tag("zh_cn") == "zh-CN"
     assert normalize_language_tag("ZH-tw") == "zh-TW"

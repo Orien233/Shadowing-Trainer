@@ -1,0 +1,77 @@
+{
+  "ui_locales": ["zh-CN", "en-US"],
+  "languages": [
+    {
+      "code": "en",
+      "english_name": "English",
+      "native_name": "English",
+      "labels": { "zh-CN": "英语", "en-US": "English" }
+    },
+    {
+      "code": "zh-CN",
+      "english_name": "Chinese (Simplified)",
+      "native_name": "简体中文",
+      "labels": { "zh-CN": "简体中文", "en-US": "Chinese (Simplified)" }
+    },
+    {
+      "code": "zh-TW",
+      "english_name": "Chinese (Traditional)",
+      "native_name": "繁體中文",
+      "labels": { "zh-CN": "繁体中文", "en-US": "Chinese (Traditional)" }
+    },
+    {
+      "code": "ja",
+      "english_name": "Japanese",
+      "native_name": "日本語",
+      "labels": { "zh-CN": "日语", "en-US": "Japanese" }
+    },
+    {
+      "code": "ko",
+      "english_name": "Korean",
+      "native_name": "한국어",
+      "labels": { "zh-CN": "韩语", "en-US": "Korean" }
+    },
+    {
+      "code": "es",
+      "english_name": "Spanish",
+      "native_name": "Español",
+      "labels": { "zh-CN": "西班牙语", "en-US": "Spanish" }
+    },
+    {
+      "code": "fr",
+      "english_name": "French",
+      "native_name": "Français",
+      "labels": { "zh-CN": "法语", "en-US": "French" }
+    },
+    {
+      "code": "de",
+      "english_name": "German",
+      "native_name": "Deutsch",
+      "labels": { "zh-CN": "德语", "en-US": "German" }
+    },
+    {
+      "code": "it",
+      "english_name": "Italian",
+      "native_name": "Italiano",
+      "labels": { "zh-CN": "意大利语", "en-US": "Italian" }
+    },
+    {
+      "code": "pt",
+      "english_name": "Portuguese",
+      "native_name": "Português",
+      "labels": { "zh-CN": "葡萄牙语", "en-US": "Portuguese" }
+    },
+    {
+      "code": "ru",
+      "english_name": "Russian",
+      "native_name": "Русский",
+      "labels": { "zh-CN": "俄语", "en-US": "Russian" }
+    },
+    {
+      "code": "ar",
+      "english_name": "Arabic",
+      "native_name": "العربية",
+      "labels": { "zh-CN": "阿拉伯语", "en-US": "Arabic" }
+    }
+  ]
+}
