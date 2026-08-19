@@ -1,12 +1,15 @@
 import importlib.util
+import sqlite3
 from pathlib import Path
 
+import pytest
 from alembic.migration import MigrationContext
 from alembic.operations import Operations
 from sqlalchemy import create_engine, inspect
 from sqlmodel import SQLModel
 
 import app.models  # noqa: F401
+from app.core.migrations import IncompatibleDatabaseError, ensure_baseline_database
 
 
 BASELINE_PATH = (
@@ -65,3 +68,31 @@ def test_v0_4_2_baseline_matches_current_metadata():
 
         baseline.downgrade()
         assert inspect(connection).get_table_names() == []
+
+
+def test_old_database_is_rejected_read_only_before_migration(tmp_path: Path):
+    database_path = tmp_path / "app.db"
+    with sqlite3.connect(database_path) as connection:
+        connection.execute(
+            "CREATE TABLE alembic_version (version_num VARCHAR(32) NOT NULL)"
+        )
+        connection.execute(
+            "INSERT INTO alembic_version (version_num) VALUES (?)",
+            ("20260811_03",),
+        )
+        connection.execute("CREATE TABLE preserved_user_data (value TEXT)")
+        connection.execute(
+            "INSERT INTO preserved_user_data (value) VALUES ('keep me')"
+        )
+        connection.commit()
+
+    with pytest.raises(IncompatibleDatabaseError, match="Automatic upgrade and stamp"):
+        ensure_baseline_database(database_path)
+
+    with sqlite3.connect(f"{database_path.resolve().as_uri()}?mode=ro", uri=True) as connection:
+        assert connection.execute(
+            "SELECT version_num FROM alembic_version"
+        ).fetchone() == ("20260811_03",)
+        assert connection.execute(
+            "SELECT value FROM preserved_user_data"
+        ).fetchone() == ("keep me",)
