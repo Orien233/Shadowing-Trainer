@@ -1,4 +1,5 @@
 import { useEffect, useState, type ChangeEvent } from "react";
+import { BookOpenText, Trash } from "@phosphor-icons/react";
 import { languageLabel } from "../../i18n/catalog";
 import { useLanguage } from "../../i18n/LanguageContext";
 import { deleteWordCollection } from "../../lib/api";
@@ -12,14 +13,21 @@ const SORT_OPTIONS: Array<{ value: WordCollectionSortMode; labelKey: string }> =
   { value: "alphabetical", labelKey: "wordCollection.sort.alphabetical" },
 ];
 
+interface Props {
+  collections?: WordCollection[];
+  loading?: boolean;
+  onRefresh?: (sort: WordCollectionSortMode) => void | Promise<void>;
+  onDeleted?: (id: number) => void;
+}
+
 export default function WordCollectionPanel({
   collections,
   loading,
   onRefresh,
   onDeleted,
-}: { collections?: WordCollection[]; loading?: boolean; onRefresh?: (sort: WordCollectionSortMode) => void | Promise<void>; onDeleted?: (id: number) => void }) {
+}: Props) {
   const { uiLocale, t } = useLanguage();
-  const [deletingIds, setDeletingIds] = useState(() => new Set());
+  const [deletingIds, setDeletingIds] = useState(() => new Set<number>());
   const [sortMode, setSortMode] = useState<WordCollectionSortMode>("collected_time_asc");
   const visibleCollections = collections ?? [];
   const isLoading = Boolean(loading);
@@ -35,15 +43,15 @@ export default function WordCollectionPanel({
   async function handleDelete(collection: WordCollection) {
     if (deletingIds.has(collection.id)) return;
 
-    setDeletingIds((prev) => new Set([...prev, collection.id]));
+    setDeletingIds((previous) => new Set([...previous, collection.id]));
     try {
       await deleteWordCollection(collection.id);
       onDeleted?.(collection.id);
     } catch (error) {
       alert(error instanceof Error ? error.message : t("wordCollection.removeFailed"));
     } finally {
-      setDeletingIds((prev) => {
-        const next = new Set(prev);
+      setDeletingIds((previous) => {
+        const next = new Set(previous);
         next.delete(collection.id);
         return next;
       });
@@ -51,9 +59,16 @@ export default function WordCollectionPanel({
   }
 
   return (
-    <div className="card word-collection-panel">
-      <div className="word-collection-heading">
-        <h2>{t("wordCollection.title")}</h2>
+    <section className="secondary-page word-collection-panel">
+      <header className="page-heading">
+        <div>
+          <span className="eyebrow">Shadowing</span>
+          <h2>
+            <BookOpenText size={26} weight="regular" aria-hidden="true" />
+            {t("wordCollection.title")}
+          </h2>
+          <p>{t("wordCollection.description")}</p>
+        </div>
         <div className="word-collection-controls">
           <label className="word-collection-sort">
             <span>{t("wordCollection.sort")}</span>
@@ -65,12 +80,15 @@ export default function WordCollectionPanel({
               ))}
             </select>
           </label>
-          {isLoading && <span className="material-state">{t("wordCollection.loading")}</span>}
+          {isLoading && <span className="material-state" role="status">{t("wordCollection.loading")}</span>}
         </div>
-      </div>
+      </header>
 
       {visibleCollections.length === 0 ? (
-        <p className="muted">{t("wordCollection.empty")}</p>
+        <div className="empty-state">
+          <BookOpenText size={32} weight="regular" aria-hidden="true" />
+          <p>{t("wordCollection.empty")}</p>
+        </div>
       ) : (
         <div className="word-collection-list">
           {visibleCollections.map((collection) => {
@@ -78,24 +96,30 @@ export default function WordCollectionPanel({
             const displayWord = String(collection.word_text ?? "").trim() ||
               normalizeWordText(collection.normalized_word || "");
             return (
-              <button
-                key={collection.id}
-                type="button"
-                className="word-collection-item"
-                disabled={isDeleting}
-                onClick={() => void handleDelete(collection)}
-                title={t("wordCollection.remove")}
-              >
-                <span className="word-collection-text" dir="auto">{displayWord}</span>
-                <span className="word-collection-meta">
-                  {languageLabel(collection.language || "en", uiLocale)}
-                  {isDeleting ? ` · ${t("wordCollection.removing")}` : ""}
-                </span>
-              </button>
+              <article className="word-collection-item" key={collection.id}>
+                <div className="word-collection-copy">
+                  <strong className="word-collection-text" dir="auto">{displayWord}</strong>
+                  {collection.translation && (
+                    <span className="word-collection-translation" dir="auto">{collection.translation}</span>
+                  )}
+                  <span className="word-collection-meta">
+                    {languageLabel(collection.language || "en", uiLocale)}
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  className="icon-button remove-word-button"
+                  disabled={isDeleting}
+                  aria-label={t("wordCollection.removeWord", { word: displayWord })}
+                  onClick={() => void handleDelete(collection)}
+                >
+                  <Trash size={18} weight="regular" />
+                </button>
+              </article>
             );
           })}
         </div>
       )}
-    </div>
+    </section>
   );
 }

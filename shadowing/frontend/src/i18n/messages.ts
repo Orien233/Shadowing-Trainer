@@ -545,6 +545,7 @@ Object.assign(zhCN, {
   "nav.helpTitle": "练习流程",
   "material.openDrawer": "打开素材库",
   "material.closeDrawer": "关闭素材库",
+  "material.dismissDrawer": "关闭素材库背景层",
   "material.drawerRail": "素材",
   "material.drawerTitle": "素材库",
   "material.workspace": "练习工作区",
@@ -557,6 +558,14 @@ Object.assign(zhCN, {
   "recorder.listenReference": "听原句",
   "recorder.compare": "对比评分",
   "recorder.recordingReady": "录音完成",
+  "wordCollection.description": "把练习中收藏的词集中复习，点击删除按钮即可移出词库。",
+  "wordCollection.removeWord": "移除单词 {word}",
+  "textGenerator.setupTitle": "生成设置",
+  "textGenerator.setupDescription": "选择词汇、主题与目标语言。",
+  "textGenerator.editorTitle": "练习文本",
+  "textGenerator.editorDescription": "生成后继续编辑，或直接粘贴自己的文本。",
+  "textGenerator.voiceTitle": "语音输出",
+  "textGenerator.voiceDescription": "选择声音参数并创建可跟读的素材。",
 });
 
 Object.assign(enUS, {
@@ -572,6 +581,7 @@ Object.assign(enUS, {
   "nav.helpTitle": "Practice flow",
   "material.openDrawer": "Open material library",
   "material.closeDrawer": "Close material library",
+  "material.dismissDrawer": "Dismiss material library",
   "material.drawerRail": "Materials",
   "material.drawerTitle": "Material library",
   "material.workspace": "Practice workspace",
@@ -584,6 +594,14 @@ Object.assign(enUS, {
   "recorder.listenReference": "Listen",
   "recorder.compare": "Compare",
   "recorder.recordingReady": "Recording ready",
+  "wordCollection.description": "Review words collected during practice, or remove items you no longer need.",
+  "wordCollection.removeWord": "Remove {word}",
+  "textGenerator.setupTitle": "Generation setup",
+  "textGenerator.setupDescription": "Choose the vocabulary, topic, and target languages.",
+  "textGenerator.editorTitle": "Practice text",
+  "textGenerator.editorDescription": "Refine generated copy or paste your own text.",
+  "textGenerator.voiceTitle": "Voice output",
+  "textGenerator.voiceDescription": "Choose voice options and turn the text into practice material.",
 });
 
 export const messages: Record<UILocale, Messages> = {

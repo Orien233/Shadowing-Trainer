@@ -73,7 +73,8 @@ export default function MaterialDrawer({
           <button
             type="button"
             className="drawer-backdrop"
-            aria-label={t("material.closeDrawer")}
+            tabIndex={-1}
+            aria-label={t("material.dismissDrawer")}
             onClick={() => onOpenChange(false)}
           />
           <aside

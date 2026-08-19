@@ -148,7 +148,7 @@ export default function SettingsPanel({ onProvidersChanged }: { onProvidersChang
   useEffect(() => { void load(); }, []);
 
   if (!selectedCatalog) {
-    return <div className="card settings-panel"><h2>{t("settings.title")}</h2><p className="provider-test error">{message || t("settings.catalogUnavailable")}</p><button onClick={() => void load()}>{t("settings.retry")}</button></div>;
+    return <div className="card settings-panel"><p className="provider-test error">{message || t("settings.catalogUnavailable")}</p><button onClick={() => void load()}>{t("settings.retry")}</button></div>;
   }
 
   function setDraftValue<K extends keyof ProviderDraft>(key: K, value: ProviderDraft[K]) {
@@ -393,7 +393,7 @@ export default function SettingsPanel({ onProvidersChanged }: { onProvidersChang
   const recordingLocalAvailable = scenes?.recording_evaluation_local_available ?? true;
 
   const routeSummary = (route: string, localAvailable: boolean, reason: string | null | undefined, remoteAvailable: boolean, missing: string[]) => <>{t("settings.route", { route: t(`settings.route.${route}`) === `settings.route.${route}` ? route : t(`settings.route.${route}`) })}{!localAvailable ? ` ${t("settings.localUnavailable", { reason: reason || t("settings.notInstalled") })}` : ""}{!remoteAvailable ? ` ${missingReason(missing)}` : ""}</>;
-  return <div className="card settings-panel"><h2>{t("settings.title")}</h2><p className="muted">{t("settings.credentialsHint")}</p>
+  return <div className="card settings-panel"><p className="muted">{t("settings.credentialsHint")}</p>
     <section className="provider-section"><h3>{t("settings.quickTemplates")}</h3><p className="muted">{t("settings.templatesHint")}</p><div className="panel-actions">{catalog.filter((entry) => entry.preset !== false).map((entry) => <button key={catalogId(entry)} onClick={() => { setDraft(newDraft(entry)); setEditingProviderId(null); setDraftTest(null); }}>{adapterLabel(entry)}</button>)}</div></section>
     <section className="provider-section provider-draft"><h3>{editingProviderId === null ? t("settings.newProvider") : t("settings.editProvider")}</h3><div className="form-grid">
       <label>{t("settings.name")}<input value={draft.name} placeholder={adapterLabel(selectedCatalog)} onChange={(event) => setDraftValue("name", event.target.value)} /></label><label>{t("settings.capability")}<select value={draft.capability} onChange={(event) => selectCapability(event.target.value as ProviderCapability)}>{capabilities.map((capability) => <option key={capability} value={capability}>{capabilityLabel(capability)}</option>)}</select></label><label>{t("settings.adapter")}<select value={catalogId(selectedCatalog)} onChange={(event) => selectAdapter(event.target.value)}>{adapters.map((entry) => <option key={catalogId(entry)} value={catalogId(entry)}>{adapterLabel(entry)}</option>)}</select></label>
