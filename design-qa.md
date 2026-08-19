@@ -4,9 +4,9 @@
 
 - [P1] 浏览器渲染证据缺失，无法完成设计稿与实现的同屏对照
   - Location: 沉浸式单句练习画布，桌面主状态。
-  - Evidence: 设计稿已成功打开；本地前后端也已在隔离数据目录中启动并通过 HTTP/接口检查，但应用内浏览器在建立截图连接时持续返回 `Trusted RPC dependency must resolve within a configured trusted code path`，因此没有生成实现截图。
+  - Evidence: 设计稿已成功打开；本地前后端也已在隔离数据目录中启动并通过 HTTP/接口检查，但应用内浏览器在建立截图连接时持续返回 `Trusted RPC dependency must resolve within a configured trusted code path`，因此没有生成实现截图。只读排查确认插件文件、配置中的受信路径和服务映射均存在，故障位于当前 Codex/Browser runtime 的信任环境或 Windows 路径规范化层。
   - Impact: 无法基于实际像素验证字体、间距、颜色、图标、折行、可见状态及 1440 × 1024 视口中的区域比例。按照 Product Design QA 规则，这会阻止视觉验收通过。
-  - Fix: 修复应用内浏览器的受信路径配置后，在同一 1440 × 1024 视口打开第 4 句并截图；或由用户明确允许使用 Playwright，再执行同状态截图、同屏比较和必要的修正循环。
+  - Fix: 完全重启 Codex 后重试应用内浏览器，并在同一 1440 × 1024 视口打开第 4 句截图；若仍失败，则由用户明确允许使用 Playwright，再执行同状态截图、同屏比较和必要的修正循环。
 
 **Comparison Target**
 
@@ -40,8 +40,8 @@
 
 **Primary Interactions Tested**
 
-- Automated frontend suite: 12 test files, 36 tests passed.
-- Covered behaviors include application panel state, AI-text draft retention, provider refresh, material drawer focus/Escape, sentence selection/progress, word collection removal, multilingual alignment, localized evaluation, language preference hydration, and timeline logic.
+- Automated frontend suite: 13 test files, 40 tests passed.
+- Covered behaviors include application panel state, material-load failure recovery, AI-text draft retention, provider refresh, header-popover focus/Escape, modal drawer focus trap/return, sentence selection/progress, word collection removal, multilingual alignment, localized evaluation, language preference hydration, and timeline logic.
 - Browser interactions, responsive viewport checks, and browser console inspection: blocked by the selected browser connection failure.
 
 **Open Questions**
@@ -50,7 +50,7 @@
 
 **Implementation Checklist**
 
-1. Restore the application-internal browser connection, or receive explicit approval for Playwright.
+1. Restart Codex and retry the application-internal browser connection, or receive explicit approval for Playwright.
 2. Capture the implementation at 1440 × 1024, 1× density, sentence 4 / 12, Chinese UI.
 3. Put the source and implementation captures into the same comparison input.
 4. Check full view plus focused header, practice controls, and score panel regions.
