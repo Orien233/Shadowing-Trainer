@@ -40,6 +40,13 @@ const scenes = {
   recording_evaluation_missing_capabilities: [],
 };
 
+const catalogEntry = (key: string, kind: "llm" | "tts" | "asr", capabilities: string[]) => ({
+  key, label: key, kind, capabilities, available_capabilities: capabilities,
+  available_formats: kind === "llm" ? ["response_format"] : kind === "tts" ? ["wav"] : [],
+  endpoint_mode: "base_url" as const, endpoint_hint: null, required_fields: [],
+  config_fields: [], voice_presets: [], docs_url: null,
+});
+
 function renderSettings() {
   return render(<LanguageProvider><SettingsPanel /></LanguageProvider>);
 }
@@ -51,8 +58,14 @@ function TextGeneratorLocaleHarness() {
 
 beforeEach(() => {
   window.localStorage.clear();
+  window.sessionStorage.clear();
   vi.clearAllMocks();
-  api.listProviderCatalog.mockResolvedValue([]);
+  api.listProviderCatalog.mockResolvedValue([
+    catalogEntry("openai_chat_compatible", "llm", ["generate_text", "generate_json"]),
+    catalogEntry("mimo_chat", "llm", ["generate_text"]),
+    catalogEntry("tts", "tts", ["synthesize"]),
+    catalogEntry("mimo_asr", "asr", ["transcribe"]),
+  ]);
   api.listProviderVoices.mockResolvedValue([]);
   api.getASRSceneSettings.mockResolvedValue(scenes);
   api.getLocalASRStatus.mockResolvedValue({

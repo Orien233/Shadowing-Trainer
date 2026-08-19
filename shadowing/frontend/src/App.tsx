@@ -296,9 +296,7 @@ export default function App() {
         </section>
 
         <section className="content">
-          <div hidden={activePanel !== "textGenerator"}>
-            <TextGeneratorPanel collections={wordCollections} defaultLanguage={learningLanguage} defaultTranslationLanguage={translationLanguage} providerRefreshToken={providerRevision} onMaterialReady={handleTextMaterialReady} />
-          </div>
+          {activePanel === "textGenerator" && <TextGeneratorPanel collections={wordCollections} defaultLanguage={learningLanguage} defaultTranslationLanguage={translationLanguage} providerRefreshToken={providerRevision} onMaterialReady={handleTextMaterialReady} />}
           {activePanel === "textGenerator" ? null : activePanel === "wordLibrary" ? (
             <WordCollectionPanel
               collections={learningWordCollections}

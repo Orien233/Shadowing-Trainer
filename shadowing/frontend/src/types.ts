@@ -15,12 +15,6 @@ export interface Material {
   created_at: string;
 }
 
-export interface LanguageCatalogItem {
-  code: string;
-  english_name: string;
-  native_name: string;
-}
-
 export interface LearningLanguagePreference {
   id: number;
   ui_locale: string;

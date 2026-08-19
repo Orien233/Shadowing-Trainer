@@ -184,8 +184,8 @@ describe("App language and panel state", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Settings" }));
     fireEvent.click(screen.getByRole("button", { name: "Simulate provider save" }));
-    await waitFor(() => expect(api.listProviders).toHaveBeenCalledTimes(2));
-    await waitFor(() => expect(api.listProviderVoices).toHaveBeenCalledWith(22));
+    await waitFor(() => expect(api.listProviders).toHaveBeenCalledTimes(1));
+    expect(api.listProviderVoices).not.toHaveBeenCalled();
 
     fireEvent.click(screen.getByRole("button", { name: "AI Text" }));
     await waitFor(() => expect(screen.getByRole("button", { name: "Generate text" })).toBeEnabled());

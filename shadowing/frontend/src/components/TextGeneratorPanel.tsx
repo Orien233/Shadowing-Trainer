@@ -15,13 +15,18 @@ function displayVoice(voice: ProviderVoice): string {
   return `${voice.name || voice.id}${languages}`;
 }
 
+const DRAFT_STORAGE_KEY = "shadowing.textGeneratorDraft";
+function readDraft(): { mode?: "random" | "manual" | "none"; selected?: number[]; title?: string } {
+  try { return JSON.parse(window.sessionStorage.getItem(DRAFT_STORAGE_KEY) || "{}"); } catch { return {}; }
+}
+
 export default function TextGeneratorPanel({ collections, defaultLanguage = "en", defaultTranslationLanguage = "zh-CN", providerRefreshToken = 0, onMaterialReady }: { collections: WordCollection[]; defaultLanguage?: string; defaultTranslationLanguage?: string; providerRefreshToken?: number; onMaterialReady: (materialId: number) => void }) {
   const { uiLocale, setLearningLanguage, setTranslationLanguage: setGlobalTranslationLanguage, t } = useLanguage();
-  const [mode, setMode] = useState<"random" | "manual" | "none">("random");
-  const [count, setCount] = useState(5); const [selected, setSelected] = useState<number[]>([]);
+  const [mode, setMode] = useState<"random" | "manual" | "none">(() => readDraft().mode || "random");
+  const [count, setCount] = useState(5); const [selected, setSelected] = useState<number[]>(() => readDraft().selected || []);
   const [topic, setTopic] = useState("daily_life"); const [customTopic, setCustomTopic] = useState("");
   const [language, setLanguage] = useState(defaultLanguage); const [translationLanguage, setTranslationLanguage] = useState(defaultTranslationLanguage); const [difficulty, setDifficulty] = useState("intermediate"); const [length, setLength] = useState(180);
-  const [practice, setPractice] = useState<TextPractice | null>(null); const [title, setTitle] = useState(() => t("textGenerator.defaultTitle")); const [body, setBody] = useState("");
+  const [practice, setPractice] = useState<TextPractice | null>(null); const [title, setTitle] = useState(() => readDraft().title || t("textGenerator.defaultTitle")); const [body, setBody] = useState("");
   const [busy, setBusy] = useState(false); const [message, setMessage] = useState(""); const [speed, setSpeed] = useState<"slow" | "normal" | "fast">("normal"); const [voice, setVoice] = useState(""); const [accent, setAccent] = useState(""); const [gender, setGender] = useState(""); const [ttsModel, setTtsModel] = useState("");
   const [providers, setProviders] = useState<AIProvider[]>([]); const [providersLoaded, setProvidersLoaded] = useState(false);
   const [voices, setVoices] = useState<ProviderVoice[]>([]); const [voicesLoaded, setVoicesLoaded] = useState(false);
@@ -33,6 +38,10 @@ export default function TextGeneratorPanel({ collections, defaultLanguage = "en"
   const selectedSet = useMemo(() => new Set(selected), [selected]);
   const canGenerate = hasCapabilities(providers, "llm", ["generate_text", "generate_json"]);
   const canSynthesize = hasCapabilities(providers, "tts", ["synthesize"]);
+
+  useEffect(() => {
+    try { window.sessionStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify({ mode, selected, title })); } catch { /* storage is optional */ }
+  }, [mode, selected, title]);
 
   useEffect(() => { if (practice) { setTitle(practice.title); setBody(practice.body); setLanguage(practice.target_language); setTranslationLanguage(practice.translation_language); } }, [practice]);
   useEffect(() => { if (!practice) setLanguage(defaultLanguage); }, [defaultLanguage, practice]);

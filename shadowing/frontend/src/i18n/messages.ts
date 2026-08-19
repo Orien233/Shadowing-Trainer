@@ -525,6 +525,13 @@ Object.assign(enUS, {
   "trainer.videoLoadFailed": "Video file could not be loaded. Please reprocess the material.",
 });
 
+zhCN["settings.catalogUnavailable"] = "Provider catalog unavailable. Check the backend connection and retry.";
+zhCN["settings.retryConnection"] = "请检查后端连接并重试。";
+zhCN["settings.retry"] = "重试";
+enUS["settings.catalogUnavailable"] = "Provider catalog unavailable. Check the backend connection and retry.";
+enUS["settings.retryConnection"] = "Check the backend connection and retry.";
+enUS["settings.retry"] = "Retry";
+
 export const messages: Record<UILocale, Messages> = {
   "zh-CN": zhCN,
   "en-US": enUS,
