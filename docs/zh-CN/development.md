@@ -27,11 +27,22 @@ Shadowing_v0_4/
    │  │  ├─ schemas/
    │  │  └─ services/
    │  └─ tests/
-   └─ frontend/
-      └─ src/
+   ├─ frontend/
+   │  └─ src/
+   │     ├─ app/
+   │     ├─ features/
+   │     │  ├─ materials/
+   │     │  ├─ practice/
+   │     │  ├─ vocabulary/
+   │     │  ├─ create-practice/
+   │     │  └─ settings/
+   │     ├─ i18n/
+   │     └─ lib/
+   └─ shared/
+      └─ language_catalog.json
 ```
 
-源码目录使用版本中立名称 `shadowing/`；Git 分支记录版本，不再随发布重命名运行目录。
+源码目录使用版本中立名称 `shadowing/`；Git 分支记录版本，不再随发布重命名运行目录。前端代码按产品功能归档，跨端语言目录只在 `shared/language_catalog.json` 维护一份；API 路由只负责 HTTP 编排，耗时素材处理和 Provider 测试位于独立服务。
 
 ## 运行数据
 
@@ -90,7 +101,7 @@ cd shadowing/backend
 ```powershell
 cd shadowing/frontend
 npm test
-npm exec tsc -- --noEmit
+npm run typecheck
 npm run build
 ```
 

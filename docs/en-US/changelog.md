@@ -9,6 +9,10 @@ This page preserves the release history previously carried in the root README. F
 - This release is a fresh database baseline; the old `backend/data/app.db` must not be upgraded or stamped.
 - The user must back up the data first, then explicitly move or delete the old `app.db` so the new release can create its database; materials, audio, video, recordings, and models in the data directory must not be deleted.
 - No compatibility upgrade from the old database is promised; see [Installation and startup](getting-started.md).
+- The historical Alembic chain is replaced by one 0.4.2 baseline, and startup now identifies and rejects an old database through a read-only preflight.
+- Removed unregistered provider adapters, the duplicate evaluation snapshot table, handwritten migration compatibility, and verified dead services and settings.
+- Completed the frontend TypeScript migration, organized it by product feature, and established one language catalog shared by both stacks.
+- Moved material processing, evaluation history, and provider testing out of API routes into dedicated services, with backend tests grouped by domain.
 
 ## v0.4.1
 

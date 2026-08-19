@@ -27,11 +27,22 @@ Shadowing_v0_4/
    │  │  ├─ schemas/
    │  │  └─ services/
    │  └─ tests/
-   └─ frontend/
-      └─ src/
+   ├─ frontend/
+   │  └─ src/
+   │     ├─ app/
+   │     ├─ features/
+   │     │  ├─ materials/
+   │     │  ├─ practice/
+   │     │  ├─ vocabulary/
+   │     │  ├─ create-practice/
+   │     │  └─ settings/
+   │     ├─ i18n/
+   │     └─ lib/
+   └─ shared/
+      └─ language_catalog.json
 ```
 
-The source directory uses the version-neutral name `shadowing/`; release versions belong in Git branches rather than runtime directory names.
+The source directory uses the version-neutral name `shadowing/`; release versions belong in Git branches rather than runtime directory names. Frontend code is grouped by product feature, while the cross-stack language catalog has one source in `shared/language_catalog.json`. API routes handle HTTP orchestration only; long-running material processing and provider tests live in dedicated services.
 
 ## Runtime data
 
@@ -90,7 +101,7 @@ Frontend:
 ```powershell
 cd shadowing/frontend
 npm test
-npm exec tsc -- --noEmit
+npm run typecheck
 npm run build
 ```
 
