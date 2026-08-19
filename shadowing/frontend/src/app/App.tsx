@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import MaterialList from "../features/materials/MaterialList";
-import MaterialUploader from "../features/materials/MaterialUploader";
+import { Power } from "@phosphor-icons/react";
+import AppHeader, { type AppPanel } from "./AppHeader";
+import MaterialDrawer from "../features/materials/MaterialDrawer";
 import SentenceTrainer from "../features/practice/SentenceTrainer";
 import WordCollectionPanel from "../features/vocabulary/WordCollectionPanel";
 import TextGeneratorPanel from "../features/create-practice/TextGeneratorPanel";
 import SettingsPanel from "../features/settings/SettingsPanel";
-import LanguageSelector from "../features/settings/LanguageSelector";
 import {
   cleanupRecordingFiles,
   getLatestMaterialEvaluations,
@@ -43,7 +43,8 @@ export default function App() {
   const { learningLanguage, translationLanguage, t } = useLanguage();
   const [materials, setMaterials] = useState<Material[]>([]);
   const [activeMaterialId, setActiveMaterialId] = useState<number | null>(null);
-  const [activePanel, setActivePanel] = useState<"practice" | "wordLibrary" | "textGenerator" | "settings">("practice");
+  const [activePanel, setActivePanel] = useState<AppPanel>("practice");
+  const [materialDrawerOpen, setMaterialDrawerOpen] = useState(false);
   const [sentences, setSentences] = useState<Sentence[]>([]);
   const [latestEvaluations, setLatestEvaluations] = useState<Record<number, SentenceLatestEvaluation>>({});
   const [wordCollections, setWordCollections] = useState<WordCollection[]>([]);
@@ -210,10 +211,6 @@ export default function App() {
     setActivePanel("practice");
   }
 
-  function handleOpenWordLibrary() {
-    setActivePanel("wordLibrary");
-  }
-
   function handleTextMaterialReady(materialId: number) {
     void loadMaterials();
     setActiveMaterialId(materialId);
@@ -265,37 +262,37 @@ export default function App() {
 
   return (
     <div className="app-shell">
-      <header className="app-header">
-        <div className="app-header-main">
-          <h1>{t("app.title")}</h1>
-          <p>{t("app.workflow")}</p>
-          <p className="muted">{t("app.securityNote")}</p>
-        </div>
-        <div className="app-header-controls">
-          <LanguageSelector />
-          <div className="top-panel-actions"><button type="button" onClick={() => setActivePanel("textGenerator")}>{t("app.aiText")}</button><button type="button" onClick={() => setActivePanel("settings")}>{t("app.settings")}</button></div>
-        </div>
-        <button type="button" className="shutdown-button" disabled={shuttingDown} onClick={handleShutdown}>
-          {shuttingDown ? t("app.closing") : t("app.close")}
-        </button>
-      </header>
+      <AppHeader
+        activePanel={activePanel}
+        materialTitle={activeMaterial?.title ?? null}
+        sentenceCount={sentences.length}
+        onPanelChange={setActivePanel}
+      />
 
-      <main className="layout">
-        {loadError && <div className="card error-message" role="alert">{loadError} <button type="button" onClick={() => void loadMaterials()}>{t("app.retry")}</button></div>}
-        <section className="sidebar">
-          <MaterialUploader onUploaded={handleUploaded} />
-          <MaterialList
-            materials={materials}
-            activeId={activeMaterialId}
-            isWordLibraryActive={activePanel === "wordLibrary"}
-            onSelect={handleSelectMaterial}
-            onOpenWordLibrary={handleOpenWordLibrary}
-            onProcessed={handleProcessed}
-            onDeleted={handleDeleted}
-          />
-        </section>
+      <MaterialDrawer
+        open={materialDrawerOpen}
+        materials={materials}
+        activeId={activeMaterialId}
+        onOpenChange={setMaterialDrawerOpen}
+        onUploaded={handleUploaded}
+        onSelect={handleSelectMaterial}
+        onProcessed={handleProcessed}
+        onDeleted={handleDeleted}
+      />
 
-        <section className="content">
+      <main className="workspace">
+        {loadError && (
+          <div className="workspace-alert error-message" role="alert">
+            <span>{loadError}</span>
+            <button type="button" onClick={() => void loadMaterials()}>{t("app.retry")}</button>
+          </div>
+        )}
+        <section
+          id="workspace-panel"
+          className={`workspace-panel panel-${activePanel}`}
+          role={activePanel === "settings" ? undefined : "tabpanel"}
+          aria-labelledby={activePanel === "settings" ? undefined : `nav-${activePanel}`}
+        >
           {activePanel === "textGenerator" && <TextGeneratorPanel collections={wordCollections} defaultLanguage={learningLanguage} defaultTranslationLanguage={translationLanguage} providerRefreshToken={providerRevision} onMaterialReady={handleTextMaterialReady} />}
           {activePanel === "textGenerator" ? null : activePanel === "wordLibrary" ? (
             <WordCollectionPanel
@@ -305,9 +302,26 @@ export default function App() {
               onDeleted={handleWordDeleted}
             />
           ) : activePanel === "settings" ? (
-            <SettingsPanel onProvidersChanged={handleProvidersChanged} />
+            <div className="secondary-workspace">
+              <div className="secondary-workspace-header">
+                <div>
+                  <span className="eyebrow">Shadowing</span>
+                  <h2>{t("settings.title")}</h2>
+                </div>
+                <button
+                  type="button"
+                  className="danger-button"
+                  disabled={shuttingDown}
+                  onClick={handleShutdown}
+                >
+                  <Power size={18} weight="bold" />
+                  {shuttingDown ? t("app.closing") : t("app.close")}
+                </button>
+              </div>
+              <SettingsPanel onProvidersChanged={handleProvidersChanged} />
+            </div>
           ) : loadingSentences ? (
-            <div className="card"><p>{t("app.sentencesLoading")}</p></div>
+            <div className="workspace-state"><p>{t("app.sentencesLoading")}</p></div>
           ) : (
             <SentenceTrainer
               material={activeMaterial}

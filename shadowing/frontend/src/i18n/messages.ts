@@ -532,6 +532,40 @@ enUS["settings.catalogUnavailable"] = "Provider catalog unavailable. Check the b
 enUS["settings.retryConnection"] = "Check the backend connection and retry.";
 enUS["settings.retry"] = "Retry";
 
+Object.assign(zhCN, {
+  "nav.primary": "主要功能",
+  "nav.practice": "跟读",
+  "nav.wordLibrary": "词库",
+  "nav.aiText": "AI 文本",
+  "nav.noMaterial": "尚未选择素材",
+  "nav.sentenceCount": "共 {count} 句",
+  "nav.languageCompact": "中 · 英",
+  "nav.help": "使用帮助",
+  "nav.helpTitle": "练习流程",
+  "material.openDrawer": "打开素材库",
+  "material.closeDrawer": "关闭素材库",
+  "material.drawerRail": "素材",
+  "material.drawerTitle": "素材库",
+  "material.workspace": "练习工作区",
+});
+
+Object.assign(enUS, {
+  "nav.primary": "Primary navigation",
+  "nav.practice": "Practice",
+  "nav.wordLibrary": "Library",
+  "nav.aiText": "AI Text",
+  "nav.noMaterial": "No material selected",
+  "nav.sentenceCount": "{count} sentences",
+  "nav.languageCompact": "EN · 中",
+  "nav.help": "Help",
+  "nav.helpTitle": "Practice flow",
+  "material.openDrawer": "Open material library",
+  "material.closeDrawer": "Close material library",
+  "material.drawerRail": "Materials",
+  "material.drawerTitle": "Material library",
+  "material.workspace": "Practice workspace",
+});
+
 export const messages: Record<UILocale, Messages> = {
   "zh-CN": zhCN,
   "en-US": enUS,

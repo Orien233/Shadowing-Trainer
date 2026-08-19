@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { ArrowRight, DotsThree } from "@phosphor-icons/react";
 import { deleteMaterial, processMaterial } from "../../lib/api";
 import type { Material } from "../../types";
 import { languageLabel } from "../../i18n/catalog";
@@ -8,9 +9,7 @@ import { mediaTypeLabel, stageLabel, statusLabel } from "../../i18n/statusLabels
 interface Props {
   materials: Material[];
   activeId: number | null;
-  isWordLibraryActive: boolean;
   onSelect: (id: number) => void;
-  onOpenWordLibrary: () => void;
   onProcessed: (material: Material) => void;
   onDeleted: (materialId: number) => void;
 }
@@ -18,9 +17,7 @@ interface Props {
 export default function MaterialList({
   materials,
   activeId,
-  isWordLibraryActive,
   onSelect,
-  onOpenWordLibrary,
   onProcessed,
   onDeleted,
 }: Props) {
@@ -71,16 +68,6 @@ export default function MaterialList({
   return (
     <div className="card">
       <h2>{t("material.listTitle")}</h2>
-      <button
-        type="button"
-        className={`word-library-button ${isWordLibraryActive ? "active" : ""}`}
-        onClick={() => {
-          setOpenMenuId(null);
-          onOpenWordLibrary();
-        }}
-      >
-        {t("material.wordLibrary")}
-      </button>
       <div className="material-list">
         {materials.length === 0 && <p className="muted">{t("material.empty")}</p>}
         {materials.map((material) => {
@@ -99,7 +86,10 @@ export default function MaterialList({
                   <span>{mediaTypeLabel(t, material.file_type)}</span>
                   <span>{statusLabel(t, material.status)}</span>
                   <span>{languageLabel(material.content_language, uiLocale)}</span>
-                  <span>→ {languageLabel(material.translation_language, uiLocale)}</span>
+                  <span className="material-language-direction">
+                    <ArrowRight size={12} weight="bold" aria-hidden="true" />
+                    {languageLabel(material.translation_language, uiLocale)}
+                  </span>
                 </div>
                 {isProcessing && (
                   <div className="material-progress" aria-label={t("material.processingProgress")}>
@@ -123,7 +113,7 @@ export default function MaterialList({
                     aria-label={t("material.moreActions")}
                     onClick={() => setOpenMenuId((prev) => (prev === material.id ? null : material.id))}
                   >
-                    ...
+                    <DotsThree size={22} weight="bold" />
                   </button>
                   {openMenuId === material.id && (
                     <div className="material-menu">

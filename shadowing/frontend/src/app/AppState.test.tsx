@@ -36,11 +36,6 @@ vi.mock("../features/settings/SettingsPanel", () => ({
     </div>
   ),
 }));
-vi.mock("../features/materials/MaterialList", () => ({
-  default: ({ onOpenWordLibrary }: { onOpenWordLibrary: () => void }) => (
-    <button type="button" onClick={onOpenWordLibrary}>Open library</button>
-  ),
-}));
 vi.mock("../features/vocabulary/WordCollectionPanel", () => ({
   default: ({ collections }: { collections: Array<{ id: number; word_text: string }> }) => (
     <div>{collections.map((collection) => <span key={collection.id}>{collection.word_text}</span>)}</div>
@@ -108,7 +103,7 @@ describe("App language and panel state", () => {
     renderApp();
 
     await waitFor(() => expect(screen.getByLabelText("old-material-word-collected")).toHaveTextContent("true"));
-    fireEvent.click(screen.getByRole("button", { name: "Open library" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Library" }));
     expect(await screen.findByText("English word")).toBeInTheDocument();
     expect(screen.queryByText("Japanese word")).not.toBeInTheDocument();
   });
@@ -117,7 +112,7 @@ describe("App language and panel state", () => {
     api.listWordCollections.mockResolvedValue([englishCollection]);
     renderApp();
 
-    fireEvent.click(screen.getByRole("button", { name: "AI Text" }));
+    fireEvent.click(screen.getByRole("tab", { name: "AI Text" }));
     const title = await screen.findByLabelText("Title");
     fireEvent.change(title, { target: { value: "Keep this draft" } });
     fireEvent.change(screen.getByLabelText("Word selection"), { target: { value: "manual" } });
@@ -127,7 +122,7 @@ describe("App language and panel state", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Settings" }));
     expect(screen.getByText("Settings panel")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "AI Text" }));
+    fireEvent.click(screen.getByRole("tab", { name: "AI Text" }));
 
     expect(screen.getByLabelText("Title")).toHaveValue("Keep this draft");
     expect(screen.getByLabelText("English word")).toBeChecked();
@@ -177,7 +172,7 @@ describe("App language and panel state", () => {
     ]);
     renderApp();
 
-    fireEvent.click(screen.getByRole("button", { name: "AI Text" }));
+    fireEvent.click(screen.getByRole("tab", { name: "AI Text" }));
     const title = await screen.findByLabelText("Title");
     fireEvent.change(title, { target: { value: "Keep this provider-refresh draft" } });
     await waitFor(() => expect(screen.getByRole("button", { name: "Generate text" })).toBeDisabled());
@@ -187,7 +182,7 @@ describe("App language and panel state", () => {
     await waitFor(() => expect(api.listProviders).toHaveBeenCalledTimes(1));
     expect(api.listProviderVoices).not.toHaveBeenCalled();
 
-    fireEvent.click(screen.getByRole("button", { name: "AI Text" }));
+    fireEvent.click(screen.getByRole("tab", { name: "AI Text" }));
     await waitFor(() => expect(screen.getByRole("button", { name: "Generate text" })).toBeEnabled());
     expect(document.querySelector('datalist option[value="fresh-voice"]')).toHaveTextContent("Fresh voice (ja)");
     expect(screen.queryByText(/default TTS provider supports synthesize/i)).not.toBeInTheDocument();
