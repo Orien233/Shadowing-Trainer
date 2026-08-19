@@ -6,9 +6,9 @@ const api = vi.hoisted(() => ({
   updateLanguagePreferences: vi.fn(),
 }));
 
-vi.mock("../lib/api", () => api);
+vi.mock("../../../lib/api", () => api);
 
-import { LanguageProvider } from "../i18n/LanguageContext";
+import { LanguageProvider } from "../../../i18n/LanguageContext";
 import WordAlignmentView from "./WordAlignmentView";
 
 beforeEach(() => {

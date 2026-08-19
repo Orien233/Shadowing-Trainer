@@ -1,8 +1,8 @@
 import { useState, type FormEvent } from "react";
-import { processMaterial, uploadMaterial } from "../lib/api";
-import type { Material } from "../types";
-import { languageLabel } from "../i18n/catalog";
-import { useLanguage } from "../i18n/LanguageContext";
+import { processMaterial, uploadMaterial } from "../../lib/api";
+import type { Material } from "../../types";
+import { languageLabel } from "../../i18n/catalog";
+import { useLanguage } from "../../i18n/LanguageContext";
 
 interface Props {
   onUploaded: (material: Material) => void;

@@ -1,7 +1,7 @@
-import { getAlignmentTokenClass, getInsertionLabel } from "../utils/alignmentColors";
-import { useLanguage } from "../i18n/LanguageContext";
-import { getAlignmentTokenTitle } from "../utils/alignmentText";
-import { splitDisplayText } from "../utils/sentenceTokenText";
+import { getAlignmentTokenClass, getInsertionLabel } from "../../../utils/alignmentColors";
+import { useLanguage } from "../../../i18n/LanguageContext";
+import { getAlignmentTokenTitle } from "../../../utils/alignmentText";
+import { splitDisplayText } from "../../../utils/sentenceTokenText";
 
 function joinClasses(...classes: Array<string | undefined>) {
   return classes.filter(Boolean).join(" ");
@@ -50,4 +50,4 @@ export default function AlignmentToken({
   );
 }
 import type { HTMLAttributes, ReactNode } from "react";
-import type { AlignmentToken as AlignmentTokenType } from "../types";
+import type { AlignmentToken as AlignmentTokenType } from "../../../types";

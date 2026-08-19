@@ -13,7 +13,7 @@ import {
   testProviderDraft,
   updateASRSceneSettings,
   updateProvider,
-} from "../lib/api";
+} from "../../lib/api";
 import type {
   AIProvider,
   ASRSceneSettings,
@@ -24,8 +24,8 @@ import type {
   ProviderConfigField,
   ProviderTestResponse,
   ProviderVoice,
-} from "../types";
-import { useLanguage } from "../i18n/LanguageContext";
+} from "../../types";
+import { useLanguage } from "../../i18n/LanguageContext";
 
 const capabilities: ProviderCapability[] = ["llm", "tts", "asr"];
 

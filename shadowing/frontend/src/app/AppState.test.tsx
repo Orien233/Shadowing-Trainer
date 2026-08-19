@@ -19,16 +19,16 @@ const api = vi.hoisted(() => ({
   updateTextPractice: vi.fn(),
 }));
 
-vi.mock("./lib/api", () => api);
-vi.mock("./components/MaterialUploader", () => ({ default: () => null }));
-vi.mock("./components/SentenceTrainer", () => ({
+vi.mock("../lib/api", () => api);
+vi.mock("../features/materials/MaterialUploader", () => ({ default: () => null }));
+vi.mock("../features/practice/SentenceTrainer", () => ({
   default: ({ collectedWordSet }: { collectedWordSet: Set<string> }) => (
     <output aria-label="old-material-word-collected">
       {String(collectedWordSet.has("ja:japaneseword"))}
     </output>
   ),
 }));
-vi.mock("./components/SettingsPanel", () => ({
+vi.mock("../features/settings/SettingsPanel", () => ({
   default: ({ onProvidersChanged }: { onProvidersChanged?: () => void }) => (
     <div>
       Settings panel
@@ -36,19 +36,19 @@ vi.mock("./components/SettingsPanel", () => ({
     </div>
   ),
 }));
-vi.mock("./components/MaterialList", () => ({
+vi.mock("../features/materials/MaterialList", () => ({
   default: ({ onOpenWordLibrary }: { onOpenWordLibrary: () => void }) => (
     <button type="button" onClick={onOpenWordLibrary}>Open library</button>
   ),
 }));
-vi.mock("./components/WordCollectionPanel", () => ({
+vi.mock("../features/vocabulary/WordCollectionPanel", () => ({
   default: ({ collections }: { collections: Array<{ id: number; word_text: string }> }) => (
     <div>{collections.map((collection) => <span key={collection.id}>{collection.word_text}</span>)}</div>
   ),
 }));
 
 import App from "./App";
-import { LanguageProvider } from "./i18n/LanguageContext";
+import { LanguageProvider } from "../i18n/LanguageContext";
 
 const englishCollection = {
   id: 11,

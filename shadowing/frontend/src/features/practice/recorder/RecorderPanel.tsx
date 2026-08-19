@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from "react";
-import { useLanguage } from "../i18n/LanguageContext";
-import { stageLabel } from "../i18n/statusLabels";
-import { getJob, retryJob, uploadRecording } from "../lib/api";
-import type { Evaluation, Sentence } from "../types";
+import { useLanguage } from "../../../i18n/LanguageContext";
+import { stageLabel } from "../../../i18n/statusLabels";
+import { getJob, retryJob, uploadRecording } from "../../../lib/api";
+import type { Evaluation, Sentence } from "../../../types";
 
 const MAX_SECONDS = 90;
 interface Props { sentence: Sentence | null; onEvaluated: (evaluation: Evaluation) => void; }

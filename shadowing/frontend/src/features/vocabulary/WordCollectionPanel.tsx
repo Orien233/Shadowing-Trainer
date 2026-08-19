@@ -1,10 +1,10 @@
 import { useEffect, useState, type ChangeEvent } from "react";
-import { languageLabel } from "../i18n/catalog";
-import { useLanguage } from "../i18n/LanguageContext";
-import { deleteWordCollection } from "../lib/api";
-import { normalizeWordText } from "../utils/sentenceTokenText";
-import type { WordCollection } from "../types";
-import type { WordCollectionSortMode } from "../lib/api";
+import { languageLabel } from "../../i18n/catalog";
+import { useLanguage } from "../../i18n/LanguageContext";
+import { deleteWordCollection } from "../../lib/api";
+import { normalizeWordText } from "../../utils/sentenceTokenText";
+import type { WordCollection } from "../../types";
+import type { WordCollectionSortMode } from "../../lib/api";
 
 const SORT_OPTIONS: Array<{ value: WordCollectionSortMode; labelKey: string }> = [
   { value: "collected_time_asc", labelKey: "wordCollection.sort.collectedAsc" },

@@ -1,9 +1,9 @@
 import { useEffect, useState } from "react";
-import { deleteMaterial, processMaterial } from "../lib/api";
-import type { Material } from "../types";
-import { languageLabel } from "../i18n/catalog";
-import { useLanguage } from "../i18n/LanguageContext";
-import { mediaTypeLabel, stageLabel, statusLabel } from "../i18n/statusLabels";
+import { deleteMaterial, processMaterial } from "../../lib/api";
+import type { Material } from "../../types";
+import { languageLabel } from "../../i18n/catalog";
+import { useLanguage } from "../../i18n/LanguageContext";
+import { mediaTypeLabel, stageLabel, statusLabel } from "../../i18n/statusLabels";
 
 interface Props {
   materials: Material[];

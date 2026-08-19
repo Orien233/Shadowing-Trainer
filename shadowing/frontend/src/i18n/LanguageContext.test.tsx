@@ -7,7 +7,7 @@ const api = vi.hoisted(() => ({
 }));
 
 vi.mock("../lib/api", () => api);
-import LanguageSelector from "../components/LanguageSelector";
+import LanguageSelector from "../features/settings/LanguageSelector";
 import { LanguageProvider, useLanguage } from "./LanguageContext";
 
 function CurrentLanguage() {

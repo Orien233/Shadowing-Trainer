@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { apiBase } from "../lib/api";
-import type { Evaluation, Material, Sentence, SentenceLatestEvaluation, WordCollection } from "../types";
-import CollectableSentenceText from "./CollectableSentenceText";
-import EvaluationPanel from "./EvaluationPanel";
-import RecorderPanel from "./RecorderPanel";
-import { useLanguage } from "../i18n/LanguageContext";
+import { apiBase } from "../../lib/api";
+import type { Evaluation, Material, Sentence, SentenceLatestEvaluation, WordCollection } from "../../types";
+import CollectableSentenceText from "./alignment/CollectableSentenceText";
+import EvaluationPanel from "./evaluation/EvaluationPanel";
+import RecorderPanel from "./recorder/RecorderPanel";
+import { useLanguage } from "../../i18n/LanguageContext";
 
 interface Props {
   material: Material | null;

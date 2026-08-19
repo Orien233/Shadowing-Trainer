@@ -1,6 +1,6 @@
-import { languageLabel } from "../i18n/catalog";
-import { useLanguage } from "../i18n/LanguageContext";
-import type { WordAlignment } from "../types";
+import { languageLabel } from "../../../i18n/catalog";
+import { useLanguage } from "../../../i18n/LanguageContext";
+import type { WordAlignment } from "../../../types";
 import HighlightedSentence from "./HighlightedSentence";
 
 function formatAccuracy(value: number | undefined) {

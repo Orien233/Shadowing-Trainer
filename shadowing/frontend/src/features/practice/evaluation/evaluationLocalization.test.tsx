@@ -7,11 +7,11 @@ const api = vi.hoisted(() => ({
   updateLanguagePreferences: vi.fn(),
 }));
 
-vi.mock("../lib/api", () => api);
+vi.mock("../../../lib/api", () => api);
 
-import { LanguageProvider } from "../i18n/LanguageContext";
-import type { Evaluation } from "../types";
-import AlignmentToken from "./AlignmentToken";
+import { LanguageProvider } from "../../../i18n/LanguageContext";
+import type { Evaluation } from "../../../types";
+import AlignmentToken from "../alignment/AlignmentToken";
 import EvaluationPanel from "./EvaluationPanel";
 
 function evaluation(overrides: Partial<Evaluation> = {}): Evaluation {

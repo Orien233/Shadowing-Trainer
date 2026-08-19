@@ -8,13 +8,13 @@ const api = vi.hoisted(() => ({
   updateLanguagePreferences: vi.fn(),
 }));
 
-vi.mock("../lib/api", () => ({
+vi.mock("../../../lib/api", () => ({
   ...api,
   WordCollectionApiError: class WordCollectionApiError extends Error {},
 }));
 
 import CollectableSentenceText from "./CollectableSentenceText";
-import { LanguageProvider } from "../i18n/LanguageContext";
+import { LanguageProvider } from "../../../i18n/LanguageContext";
 
 function renderSentence(props: ComponentProps<typeof CollectableSentenceText>) {
   return render(

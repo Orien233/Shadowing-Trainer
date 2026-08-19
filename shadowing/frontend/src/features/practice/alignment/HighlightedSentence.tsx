@@ -1,5 +1,5 @@
-import { useLanguage } from "../i18n/LanguageContext";
-import type { AlignmentToken as AlignmentTokenType } from "../types";
+import { useLanguage } from "../../../i18n/LanguageContext";
+import type { AlignmentToken as AlignmentTokenType } from "../../../types";
 import AlignmentToken from "./AlignmentToken";
 
 /**

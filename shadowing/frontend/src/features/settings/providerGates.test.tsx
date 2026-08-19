@@ -24,11 +24,11 @@ const api = vi.hoisted(() => ({
   updateTextPractice: vi.fn(),
 }));
 
-vi.mock("../lib/api", () => api);
+vi.mock("../../lib/api", () => api);
 
 import SettingsPanel from "./SettingsPanel";
-import TextGeneratorPanel from "./TextGeneratorPanel";
-import { LanguageProvider, useLanguage } from "../i18n/LanguageContext";
+import TextGeneratorPanel from "../create-practice/TextGeneratorPanel";
+import { LanguageProvider, useLanguage } from "../../i18n/LanguageContext";
 
 const scenes = {
   material_transcription_use_local: true,

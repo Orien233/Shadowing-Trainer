@@ -1,17 +1,17 @@
 import { useMemo, useState, type KeyboardEvent } from "react";
-import type { AlignmentToken, WordCollection } from "../types";
-import { useLanguage } from "../i18n/LanguageContext";
-import { collectWord, WordCollectionApiError } from "../lib/api";
+import type { AlignmentToken, WordCollection } from "../../../types";
+import { useLanguage } from "../../../i18n/LanguageContext";
+import { collectWord, WordCollectionApiError } from "../../../lib/api";
 import {
   buildCollectedWordKey,
   cleanCollectableWordText,
   normalizeWordText,
   splitCollectableSegments,
   tokenizeSentenceText,
-} from "../utils/sentenceTokenText";
-import { getInsertionLabel } from "../utils/alignmentColors";
+} from "../../../utils/sentenceTokenText";
+import { getInsertionLabel } from "../../../utils/alignmentColors";
 import { AlignmentTokenCore } from "./AlignmentToken";
-import { getAlignmentTokenTitle } from "../utils/alignmentText";
+import { getAlignmentTokenTitle } from "../../../utils/alignmentText";
 
 const STATUS_PRIORITY: Record<string, number> = {
   deletion: 5,

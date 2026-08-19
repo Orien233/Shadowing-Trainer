@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import MaterialList from "./components/MaterialList";
-import MaterialUploader from "./components/MaterialUploader";
-import SentenceTrainer from "./components/SentenceTrainer";
-import WordCollectionPanel from "./components/WordCollectionPanel";
-import TextGeneratorPanel from "./components/TextGeneratorPanel";
-import SettingsPanel from "./components/SettingsPanel";
-import LanguageSelector from "./components/LanguageSelector";
+import MaterialList from "../features/materials/MaterialList";
+import MaterialUploader from "../features/materials/MaterialUploader";
+import SentenceTrainer from "../features/practice/SentenceTrainer";
+import WordCollectionPanel from "../features/vocabulary/WordCollectionPanel";
+import TextGeneratorPanel from "../features/create-practice/TextGeneratorPanel";
+import SettingsPanel from "../features/settings/SettingsPanel";
+import LanguageSelector from "../features/settings/LanguageSelector";
 import {
   cleanupRecordingFiles,
   getLatestMaterialEvaluations,
@@ -13,11 +13,11 @@ import {
   listWordCollections,
   listMaterials,
   shutdownBackend,
-} from "./lib/api";
-import type { WordCollectionSortMode } from "./lib/api";
-import type { Material, Sentence, SentenceLatestEvaluation, WordCollection } from "./types";
-import { buildCollectedWordKey, normalizeWordText } from "./utils/sentenceTokenText";
-import { useLanguage } from "./i18n/LanguageContext";
+} from "../lib/api";
+import type { WordCollectionSortMode } from "../lib/api";
+import type { Material, Sentence, SentenceLatestEvaluation, WordCollection } from "../types";
+import { buildCollectedWordKey, normalizeWordText } from "../utils/sentenceTokenText";
+import { useLanguage } from "../i18n/LanguageContext";
 
 function indexLatestEvaluations(
   evaluations: SentenceLatestEvaluation[]

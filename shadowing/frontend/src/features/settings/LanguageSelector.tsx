@@ -1,5 +1,5 @@
-import { languageLabel, LEARNING_LANGUAGES, UI_LOCALES, type UILocale } from "../i18n/catalog";
-import { useLanguage } from "../i18n/LanguageContext";
+import { languageLabel, LEARNING_LANGUAGES, UI_LOCALES, type UILocale } from "../../i18n/catalog";
+import { useLanguage } from "../../i18n/LanguageContext";
 
 export default function LanguageSelector() {
   const {

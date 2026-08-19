@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
-import { generateTextPractice, getJob, importTextPractice, listProviderVoices, listProviders, synthesizeTextPractice, updateTextPractice } from "../lib/api";
-import type { AIProvider, ProviderVoice, TextPractice, WordCollection } from "../types";
-import { languageLabel, LEARNING_LANGUAGES } from "../i18n/catalog";
-import { useLanguage } from "../i18n/LanguageContext";
-import { stageLabel } from "../i18n/statusLabels";
+import { generateTextPractice, getJob, importTextPractice, listProviderVoices, listProviders, synthesizeTextPractice, updateTextPractice } from "../../lib/api";
+import type { AIProvider, ProviderVoice, TextPractice, WordCollection } from "../../types";
+import { languageLabel, LEARNING_LANGUAGES } from "../../i18n/catalog";
+import { useLanguage } from "../../i18n/LanguageContext";
+import { stageLabel } from "../../i18n/statusLabels";
 
 function hasCapabilities(providers: AIProvider[], capability: "llm" | "tts", required: string[]): boolean {
   const provider = providers.find((item) => item.capability === capability && item.is_enabled && item.is_default);
