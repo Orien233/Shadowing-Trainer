@@ -269,3 +269,70 @@
   align-items: center;
   gap: 6px;
 }
+
+.inline-notice,
+.panel-message {
+  margin: 0;
+  padding: 10px 12px;
+  border: 1px solid #cbd9f5;
+  border-radius: 8px;
+  background: var(--surface-blue);
+  color: var(--ink-soft);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+@media (max-width: 900px) {
+  .word-collection-list {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .generator-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .generator-setup {
+    grid-row: auto;
+  }
+}
+
+@media (max-width: 680px) {
+  .page-heading,
+  .word-collection-heading {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .word-collection-list {
+    grid-template-columns: 1fr;
+  }
+
+  .word-collection-controls {
+    width: 100%;
+  }
+
+  .word-collection-sort {
+    width: 100%;
+  }
+
+  .word-collection-sort select {
+    min-width: 0;
+    flex: 1;
+  }
+
+  .generator-card .form-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .generator-card {
+    padding: 15px;
+  }
+}
+
+@media (max-width: 480px) {
+  .word-collection-item {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 8px;
+  }
+}

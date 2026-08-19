@@ -18,6 +18,13 @@
   gap: 12px;
 }
 
+.upload-form > label {
+  margin-bottom: -6px;
+  color: var(--ink-soft);
+  font-size: 12px;
+  font-weight: 700;
+}
+
 .material-language-summary {
   display: flex;
   flex-wrap: wrap;
@@ -169,5 +176,32 @@
   font-size: 12px;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.material-language-direction {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+@media (max-width: 480px) {
+  .card {
+    padding: 14px;
+  }
+
+  .material-item {
+    gap: 7px;
+    padding: 10px;
+  }
+
+  .material-actions {
+    gap: 4px;
+  }
+
+  .material-title,
+  .material-error {
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
 }
 
