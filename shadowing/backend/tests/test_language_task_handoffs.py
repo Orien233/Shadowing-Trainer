@@ -7,11 +7,10 @@ import pytest
 from sqlalchemy.pool import StaticPool
 from sqlmodel import Session, SQLModel, create_engine
 
-from app.api import materials
 from app.models.material import Material
 from app.models.recording import Recording
 from app.models.sentence import Sentence
-from app.services import job_service
+from app.services import job_service, material_processing_service
 
 
 def _engine():
@@ -78,19 +77,19 @@ def test_material_processing_uses_material_languages_for_asr_segmentation_and_tr
             }
         ]
 
-    monkeypatch.setattr(materials, "engine", engine)
-    monkeypatch.setattr(materials, "_run_lock_heartbeat", no_heartbeat)
+    monkeypatch.setattr(material_processing_service, "engine", engine)
+    monkeypatch.setattr(material_processing_service, "_run_lock_heartbeat", no_heartbeat)
     def fake_transcode(_path):
         transcoded.write_bytes(b"video")
         return transcoded
-    monkeypatch.setattr(materials, "transcode_video_for_storage", fake_transcode)
-    monkeypatch.setattr(materials, "extract_audio", lambda path: path)
-    monkeypatch.setattr(materials, "get_audio_duration", lambda _path: 1.0)
-    monkeypatch.setattr(materials, "transcribe_for_scene", fake_transcribe)
-    monkeypatch.setattr(materials, "segment_to_sentences", fake_segment)
-    monkeypatch.setattr(materials, "build_sentence_audio_metadata", fake_audio_metadata)
-    monkeypatch.setattr(materials, "translate_sentences", fake_translate)
-    monkeypatch.setattr(materials, "_owns_processing_lock", lambda *_args: True)
+    monkeypatch.setattr(material_processing_service, "transcode_video_for_storage", fake_transcode)
+    monkeypatch.setattr(material_processing_service, "extract_audio", lambda path: path)
+    monkeypatch.setattr(material_processing_service, "get_audio_duration", lambda _path: 1.0)
+    monkeypatch.setattr(material_processing_service, "transcribe_for_scene", fake_transcribe)
+    monkeypatch.setattr(material_processing_service, "segment_to_sentences", fake_segment)
+    monkeypatch.setattr(material_processing_service, "build_sentence_audio_metadata", fake_audio_metadata)
+    monkeypatch.setattr(material_processing_service, "translate_sentences", fake_translate)
+    monkeypatch.setattr(material_processing_service, "_owns_processing_lock", lambda *_args: True)
 
     with Session(engine) as session:
         material = Material(
@@ -106,10 +105,10 @@ def test_material_processing_uses_material_languages_for_asr_segmentation_and_tr
         session.commit()
         material_id = material.id
 
-    asyncio.run(materials._process_material_in_background(material_id, "job-1"))
+    asyncio.run(material_processing_service._run_processing_pipeline(material_id, "job-1"))
 
     assert captured == {
-        "scene": materials.MATERIAL_TRANSCRIPTION,
+        "scene": material_processing_service.MATERIAL_TRANSCRIPTION,
         "audio_path": str(transcoded if file_type == "video" else source),
         "word_timestamps": True,
         "asr_language": "ja",
@@ -177,7 +176,7 @@ def test_evaluation_job_uses_sentence_material_content_language(
 def test_missing_translation_entries_stay_blank_instead_of_becoming_english_content():
     candidates = [{"source_text": "こんにちは。"}, {"source_text": "さようなら。"}]
 
-    assert materials._normalize_translations_for_sentences(candidates, ["你好。"]) == [
+    assert material_processing_service.normalize_translations(candidates, ["你好。"]) == [
         "你好。",
         "",
     ]

@@ -160,7 +160,8 @@ async def _run_evaluation(job_id: str, payload: dict[str, Any]) -> dict[str, Any
 
 async def _run_material_processing(job_id: str, payload: dict[str, Any]) -> dict[str, Any]:
     update_job(job_id, stage="processing_material", progress=10)
-    from app.api.materials import process_material_job
+    from app.services.material_processing_service import process_material_job
+
     material_id = int(payload["material_id"])
     await process_material_job(material_id, job_id)
     return {"material_id": material_id}

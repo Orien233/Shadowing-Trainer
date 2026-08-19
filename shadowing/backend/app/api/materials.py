@@ -1,19 +1,18 @@
-import asyncio
 import json
 import logging
 import mimetypes
 import shutil
-from datetime import UTC, datetime
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Response, UploadFile
 from fastapi.responses import FileResponse
-from sqlalchemy import desc, update
+from sqlalchemy import desc
 from sqlmodel import Session, func, select
 
 from app.core.config import settings
-from app.core.database import engine, get_session
+from app.core.database import get_session
 from app.models.evaluation import Evaluation
 from app.models.job import Job
 from app.models.material_sentence_score import MaterialSentenceScore
@@ -31,31 +30,14 @@ from app.services.material_score_service import (
     resolve_user_id,
 )
 from app.services.media_service import (
-    build_sentence_audio_metadata,
     detect_file_type,
-    extract_audio,
-    get_audio_duration,
     save_upload,
-    transcode_video_for_storage,
 )
-from app.services.job_service import enqueue_job, update_job
-from app.services.segmentation_service import segment_to_sentences
-from app.services.asr_router import MATERIAL_TRANSCRIPTION, transcribe_for_scene
-from app.services.translation_service import translate_sentences
+from app.services.job_service import enqueue_job
 from app.services.language_catalog import LanguageValidationError, normalize_language_tag
 
 router = APIRouter(prefix="/api/materials", tags=["materials"])
 logger = logging.getLogger(__name__)
-
-
-def _now_utc() -> datetime:
-    return datetime.now(UTC)
-
-
-def _clear_processing_lock_fields(material: Material) -> None:
-    material.processing_owner = None
-    material.processing_started_at = None
-    material.processing_heartbeat_at = None
 
 
 def _is_within_data_dir(path: Path) -> bool:
@@ -106,59 +88,6 @@ def _recording_artifact_paths(recording_audio_path: str) -> set[Path]:
     return artifacts
 
 
-def _get_rowcount(result: object) -> int:
-    return int(getattr(result, "rowcount", 0) or 0)
-
-
-def _touch_processing_lock(material_id: int, owner: str) -> bool:
-    statement = (
-        update(Material)
-        .where(Material.id == material_id)
-        .where(Material.status == "processing")
-        .where(Material.processing_owner == owner)
-        .values(processing_heartbeat_at=_now_utc())
-    )
-    with Session(engine) as heartbeat_session:
-        result = heartbeat_session.exec(statement)
-        updated_rows = _get_rowcount(result)
-        if updated_rows < 1:
-            heartbeat_session.rollback()
-            return False
-        heartbeat_session.commit()
-        return True
-
-
-def _owns_processing_lock(material_id: int, owner: str) -> bool:
-    with Session(engine) as lock_session:
-        material = lock_session.get(Material, material_id)
-        if not material:
-            return False
-        return material.status == "processing" and material.processing_owner == owner
-
-
-async def _run_lock_heartbeat(material_id: int, owner: str, stop_event: asyncio.Event) -> None:
-    interval = max(settings.processing_lock_heartbeat_seconds, 1)
-    while not stop_event.is_set():
-        try:
-            await asyncio.wait_for(stop_event.wait(), timeout=interval)
-            return
-        except asyncio.TimeoutError:
-            pass
-
-        heartbeat_ok = await asyncio.to_thread(_touch_processing_lock, material_id, owner)
-        if heartbeat_ok:
-            continue
-
-        logger.warning(
-            "Lost processing lock heartbeat for material %s owned by %s.",
-            material_id,
-            owner,
-        )
-        stop_event.set()
-        return
-
-
-# Ensure necessary directories exist at startup
 @router.post("/upload", response_model=MaterialRead)
 async def upload_material(
     title: str = Form(...),
@@ -329,21 +258,6 @@ def _extract_word_alignment(raw_metrics: str) -> dict[str, Any] | None:
     return None
 
 
-def _normalize_translations_for_sentences(
-    sentence_candidates: list[dict[str, object]],
-    translations: list[str],
-) -> list[str]:
-    expected_count = len(sentence_candidates)
-    normalized = list(translations[:expected_count])
-    if len(normalized) == expected_count:
-        return normalized
-
-    # Keep diagnostics out of learner content.  A blank translation is
-    # rendered as a localized "not available" state by the frontend.
-    normalized.extend("" for _ in sentence_candidates[len(normalized) :])
-    return normalized
-
-
 def _list_latest_scores_from_main_db(
     session: Session,
     material_id: int,
@@ -386,189 +300,6 @@ def _list_latest_scores_from_main_db(
     ]
 
 
-def _mark_material_failed(material_id: int, owner: str | None = None, error_message: str | None = None) -> None:
-    with Session(engine) as failure_session:
-        material = failure_session.get(Material, material_id)
-        if not material:
-            return
-
-        if owner is not None:
-            lock_owned = material.status == "processing" and material.processing_owner == owner
-            if not lock_owned:
-                return
-
-        material.status = "failed"
-        material.processing_stage = "failed"
-        material.error_message = error_message
-        _clear_processing_lock_fields(material)
-        failure_session.add(material)
-        failure_session.commit()
-
-
-# Extract the 'content' field from the LLM API response, handling different possible response formats.
-async def _process_material_in_background(material_id: int, owner: str) -> None:
-    heartbeat_stop_event = asyncio.Event()
-    heartbeat_task = asyncio.create_task(
-        _run_lock_heartbeat(material_id, owner, heartbeat_stop_event)
-    )
-    try:
-        with Session(engine) as session:
-            material = session.get(Material, material_id)
-            if not material:
-                return
-            if material.status != "processing" or material.processing_owner != owner:
-                logger.warning(
-                    "Skipping material %s: processing lock is not owned by current worker.",
-                    material_id,
-                )
-                return
-            source_path = Path(material.original_path)
-            is_video = material.file_type == "video"
-            content_language = material.content_language
-            translation_language = material.translation_language
-            audio_source_path = source_path
-            if is_video:
-                audio_source_path = await asyncio.to_thread(transcode_video_for_storage, source_path)
-                source_path.unlink(missing_ok=True)
-                material.original_path = str(audio_source_path)
-                material.processing_stage = "extracting_audio"
-                material.processing_progress = 20
-                session.add(material)
-                session.commit()
-
-        audio_path = await asyncio.to_thread(extract_audio, audio_source_path)
-        duration_probe_path = audio_source_path if is_video else audio_path
-        duration = await asyncio.to_thread(get_audio_duration, duration_probe_path)
-        segments = await asyncio.to_thread(
-            transcribe_for_scene,
-            MATERIAL_TRANSCRIPTION,
-            str(audio_path),
-            word_timestamps=True,
-            language=content_language,
-        )
-        sentence_candidates = await asyncio.to_thread(
-            segment_to_sentences,
-            segments,
-            language=content_language,
-        )
-        enriched_candidates, translations = await asyncio.gather(
-            asyncio.to_thread(
-                build_sentence_audio_metadata,
-                audio_path,
-                material_id,
-                sentence_candidates,
-                duration,
-            ),
-            translate_sentences(
-                (item["source_text"] for item in sentence_candidates),
-                source_language=content_language,
-                target_language=translation_language,
-            ),
-        )
-        if len(enriched_candidates) != len(sentence_candidates):
-            raise RuntimeError(
-                "Sentence metadata count mismatch: "
-                f"expected={len(sentence_candidates)} got={len(enriched_candidates)}"
-            )
-        if len(translations) != len(enriched_candidates):
-            logger.warning(
-                "Translation count mismatch for material %s: expected=%s got=%s. "
-                "Missing translations will remain blank for localized UI handling.",
-                material_id,
-                len(enriched_candidates),
-                len(translations),
-            )
-        normalized_translations = _normalize_translations_for_sentences(
-            enriched_candidates,
-            translations,
-        )
-
-        still_owns_lock = await asyncio.to_thread(_owns_processing_lock, material_id, owner)
-        if not still_owns_lock:
-            logger.warning(
-                "Material %s processing aborted because lock ownership was lost before DB write.",
-                material_id,
-            )
-            return
-
-        with Session(engine) as session:
-            material = session.get(Material, material_id)
-            if not material:
-                return
-            if material.status != "processing" or material.processing_owner != owner:
-                logger.warning(
-                    "Material %s processing aborted: lock owner changed before commit.",
-                    material_id,
-                )
-                return
-
-            existing_sentences = session.exec(
-                select(Sentence).where(Sentence.material_id == material_id)
-            ).all()
-            for existing in existing_sentences:
-                session.delete(existing)
-            session.commit()
-
-            for item, translation in zip(enriched_candidates, normalized_translations):
-                sentence = Sentence(
-                    material_id=material_id,
-                    display_order=item["display_order"],
-                    start_time=item["start_time"],
-                    end_time=item["end_time"],
-                    original_start_time=item["original_start_time"],
-                    original_end_time=item["original_end_time"],
-                    clip_audio_path=item["clip_audio_path"],
-                    clip_duration=item["clip_duration"],
-                    source_text=item["source_text"],
-                    translation=translation,
-                )
-                session.add(sentence)
-
-            material.audio_path = str(audio_path)
-            material.duration = duration
-            material.status = "ready"
-            material.processing_stage = "completed"
-            material.processing_progress = 100
-            material.error_message = None
-            _clear_processing_lock_fields(material)
-            session.add(material)
-            session.commit()
-    except Exception as exc:
-        logger.exception("Failed processing material %s", material_id)
-        await asyncio.to_thread(_mark_material_failed, material_id, owner, str(exc)[:2000])
-    finally:
-        heartbeat_stop_event.set()
-        try:
-            await heartbeat_task
-        except Exception:
-            logger.exception("Heartbeat task failed for material %s", material_id)
-
-
-async def process_material_job(material_id: int, job_id: str) -> None:
-    """Worker entrypoint; API routes only enqueue this operation."""
-    with Session(engine) as session:
-        material = session.get(Material, material_id)
-        if not material:
-            raise RuntimeError("Material no longer exists.")
-        material.status = "processing"
-        material.processing_owner = job_id
-        material.processing_started_at = _now_utc()
-        material.processing_heartbeat_at = _now_utc()
-        material.processing_stage = "transcribing"
-        material.processing_progress = 15
-        material.error_message = None
-        session.add(material)
-        session.commit()
-    update_job(job_id, stage="transcribing_material", progress=25)
-    await _process_material_in_background(material_id, job_id)
-    with Session(engine) as session:
-        material = session.get(Material, material_id)
-        if not material or material.status != "ready":
-            raise RuntimeError(material.error_message if material else "Material processing failed.")
-    update_job(job_id, stage="material_ready", progress=95)
-
-
-# This endpoint triggers the processing of the material: extracting audio, transcribing, segmenting, translating, and saving sentences.
 @router.post("/{material_id}/process", response_model=MaterialDetail)
 async def process_material(material_id: int, session: Session = Depends(get_session)):
     material = session.get(Material, material_id)
