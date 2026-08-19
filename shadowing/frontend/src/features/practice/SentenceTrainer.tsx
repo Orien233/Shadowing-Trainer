@@ -4,6 +4,16 @@ import type { Evaluation, Material, Sentence, SentenceLatestEvaluation, WordColl
 import CollectableSentenceText from "./alignment/CollectableSentenceText";
 import EvaluationPanel from "./evaluation/EvaluationPanel";
 import RecorderPanel from "./recorder/RecorderPanel";
+import { asEvaluation } from "./evaluation/mappers";
+import {
+  buildTimelineSegments,
+  clamp,
+  findAdjacentSegmentIndex,
+  getSentenceEnd,
+  locateSegmentIndex,
+  SEGMENT_EPSILON,
+  type TimelineSegment,
+} from "./timeline/timeline";
 import { useLanguage } from "../../i18n/LanguageContext";
 
 interface Props {
@@ -15,153 +25,12 @@ interface Props {
   onRefreshWordCollections: () => Promise<void>;
 }
 
-type SegmentType = "sentence" | "gap";
-
-interface TimelineSegment {
-  key: string;
-  type: SegmentType;
-  start: number;
-  end: number;
-  duration: number;
-  sentence: Sentence | null;
-  displayOrder: number;
-}
-
-const SEGMENT_EPSILON = 0.05;
 const PROGRAMMATIC_SEEK_TOLERANCE = SEGMENT_EPSILON * 2;
 
 type VideoFrameAwareElement = HTMLVideoElement & {
   requestVideoFrameCallback?: (callback: VideoFrameRequestCallback) => number;
   cancelVideoFrameCallback?: (handle: number) => void;
 };
-
-function clamp(value: number, min: number, max: number): number {
-  return Math.min(Math.max(value, min), max);
-}
-
-function getSentenceStart(sentence: Sentence): number {
-  if (Number.isFinite(sentence.start_time)) {
-    return sentence.start_time;
-  }
-  return sentence.original_start_time ?? 0;
-}
-
-function getSentenceEnd(sentence: Sentence): number {
-  if (Number.isFinite(sentence.end_time)) {
-    return sentence.end_time;
-  }
-  return sentence.original_end_time ?? getSentenceStart(sentence) + SEGMENT_EPSILON;
-}
-
-function asEvaluation(snapshot: SentenceLatestEvaluation): Evaluation {
-  return {
-    id: snapshot.main_db_evaluation_id ?? 0,
-    recording_id: snapshot.main_db_recording_id ?? 0,
-    completeness_score: snapshot.completeness_score,
-    fluency_score: snapshot.fluency_score,
-    sync_score: snapshot.sync_score,
-    pronunciation_score: snapshot.pronunciation_score,
-    overall_score: snapshot.overall_score,
-    feedback: snapshot.feedback,
-    suggestion: snapshot.suggestion,
-    raw_metrics: snapshot.raw_metrics,
-    word_alignment: snapshot.word_alignment,
-    created_at: snapshot.created_at,
-  };
-}
-
-function buildTimelineSegments(sentences: Sentence[], timelineDuration: number): TimelineSegment[] {
-  const segments: TimelineSegment[] = [];
-  let cursor = 0;
-  let gapOrder = 0;
-
-  for (const sentence of sentences) {
-    const sentenceStart = Math.max(getSentenceStart(sentence), 0);
-    const sentenceEnd = Math.max(getSentenceEnd(sentence), sentenceStart + SEGMENT_EPSILON);
-
-    if (sentenceStart - cursor > SEGMENT_EPSILON) {
-      gapOrder += 1;
-      segments.push({
-        key: `gap-${gapOrder}-${cursor.toFixed(3)}`,
-        type: "gap",
-        start: cursor,
-        end: sentenceStart,
-        duration: sentenceStart - cursor,
-        sentence: null,
-        displayOrder: gapOrder,
-      });
-    }
-
-    const sentenceDuration = Math.max(sentenceEnd - sentenceStart, SEGMENT_EPSILON);
-
-    segments.push({
-      key: `sentence-${sentence.id}`,
-      type: "sentence",
-      start: sentenceStart,
-      end: sentenceStart + sentenceDuration,
-      duration: sentenceDuration,
-      sentence,
-      displayOrder: sentence.display_order,
-    });
-
-    cursor = Math.max(cursor, sentenceStart + sentenceDuration);
-  }
-
-  if (timelineDuration - cursor > SEGMENT_EPSILON) {
-    gapOrder += 1;
-    segments.push({
-      key: `gap-${gapOrder}-${cursor.toFixed(3)}`,
-      type: "gap",
-      start: cursor,
-      end: timelineDuration,
-      duration: timelineDuration - cursor,
-      sentence: null,
-      displayOrder: gapOrder,
-    });
-  }
-
-  if (segments.length === 0 && timelineDuration > SEGMENT_EPSILON) {
-    segments.push({
-      key: "gap-1-0",
-      type: "gap",
-      start: 0,
-      end: timelineDuration,
-      duration: timelineDuration,
-      sentence: null,
-      displayOrder: 1,
-    });
-  }
-
-  return segments;
-}
-
-function locateSegmentIndex(segments: TimelineSegment[], time: number): number {
-  if (segments.length === 0) return 0;
-
-  // Sentence clips can overlap after padding/trim; prefer the latest matching segment.
-  for (let i = segments.length - 1; i >= 0; i -= 1) {
-    const segment = segments[i];
-    const isLast = i === segments.length - 1;
-    if (
-      time >= segment.start &&
-      (time < segment.end || (isLast && time <= segment.end + SEGMENT_EPSILON))
-    ) {
-      return i;
-    }
-  }
-
-  if (time < segments[0].start) return 0;
-  return segments.length - 1;
-}
-
-function findAdjacentSegmentIndex(
-  segments: TimelineSegment[],
-  fromIndex: number,
-  direction: -1 | 1
-): number {
-  if (segments.length === 0) return 0;
-  return clamp(fromIndex + direction, 0, segments.length - 1);
-}
 
 export default function SentenceTrainer({
   material,
