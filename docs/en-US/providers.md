@@ -25,7 +25,7 @@ Quick templates are read-only metadata. They are not stored in the database, can
 - Select capabilities and formats within the protocol's allowed range.
 - Be enabled, disabled, tested, made default, or deleted.
 
-Unsupported historical records from an upgraded database are retained but remain disabled and cannot be re-enabled. They are not the same as built-in quick templates.
+Version 0.4.2 neither reads nor upgrades provider records from an old database. The fresh baseline only permits profiles from the current support matrix; other provider types are rejected and never appear as built-in quick templates.
 
 ## Endpoint rules
 
