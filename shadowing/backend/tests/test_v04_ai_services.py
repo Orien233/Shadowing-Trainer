@@ -21,7 +21,14 @@ from app.models.text_practice import TextPractice
 from app.models.word_collection import WordCollection
 from app.schemas.ai_provider import ASRSceneSettingUpdate, ProviderTestRequest
 from app.schemas.text_practice import TextGenerationRequest, TTSOptions
-from app.services import asr_router, evaluation_service, job_service, text_generation_service, tts_service
+from app.services import (
+    asr_router,
+    evaluation_service,
+    job_service,
+    provider_test_service,
+    text_generation_service,
+    tts_service,
+)
 from app.services.ai.asr.local_whisper import LocalWhisperASRProvider
 from app.services import local_whisper_runtime
 from app.services.local_whisper_runtime import LocalWhisperStatus
@@ -450,7 +457,7 @@ def test_provider_test_response_reports_static_capabilities_without_leaking_key(
     class Provider:
         def test_connection(self):
             raise RuntimeError("request rejected for secret-value")
-    monkeypatch.setattr(providers_api, "create_provider", lambda *_args: Provider())
+    monkeypatch.setattr(provider_test_service, "create_provider", lambda *_args: Provider())
     with Session(engine) as session:
         provider = AIProvider(name="private", capability="asr", provider_type="mimo_asr", base_url="https://example.test", api_key="secret-value", model_name="mimo", enabled_capabilities='["transcribe"]', enabled_formats="[]")
         session.add(provider); session.commit(); session.refresh(provider)
@@ -468,7 +475,7 @@ def test_provider_test_response_reports_static_capabilities_without_leaking_key(
 def test_provider_catalog_and_draft_test_require_only_no_cost_configuration(monkeypatch):
     class Provider:
         def test_connection(self): return "configured only"
-    monkeypatch.setattr(providers_api, "create_provider", lambda *_args: Provider())
+    monkeypatch.setattr(provider_test_service, "create_provider", lambda *_args: Provider())
     draft = ProviderTestRequest(
         name="draft",
         capability="tts",
@@ -490,13 +497,13 @@ def test_live_provider_test_is_explicitly_billable_and_uses_a_small_request(monk
             assert kwargs["user_prompt"] == "Return OK."
             return "OK"
 
-    monkeypatch.setattr(providers_api, "create_provider", lambda *_args: Provider())
+    monkeypatch.setattr(provider_test_service, "create_provider", lambda *_args: Provider())
     provider = AIProvider(
         name="live", capability="llm", provider_type="openai_chat_compatible",
         base_url="https://example.test/v1", api_key="secret", model_name="model",
         enabled_capabilities='["generate_text", "generate_json"]', enabled_formats='["response_format"]',
     )
-    response = providers_api._test_provider(provider, "inference")
+    response = provider_test_service.test_provider(provider, "inference")
     assert response.ok is True
     assert response.verification_level == "inference"
     assert response.billable is True
