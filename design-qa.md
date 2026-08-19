@@ -60,6 +60,7 @@
 **Comparison History**
 
 - Pass 0: source visual opened; implementation API state and local URL verified; capture failed before any visual comparison. No visual fixes were made because visible implementation evidence was unavailable.
+- Browser recovery audit: the native Browser setup was retried across three consecutive goal turns and returned the same trusted-path error before browser discovery each time. Plugin files and configured trust mappings exist; no screenshot-capable native session was created. There is no evidence that a full Codex application restart occurred between the final retries.
 
 **Follow-up Polish**
 
