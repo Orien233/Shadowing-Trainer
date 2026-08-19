@@ -1,7 +1,6 @@
 from app.models.evaluation import Evaluation
 from app.models.job import Job
 from app.models.material import Material
-from app.models.material_sentence_score import MaterialSentenceScore
 from app.models.recording import Recording
 from app.models.sentence import Sentence
 from app.models.word_collection import WordCollection
@@ -16,7 +15,6 @@ __all__ = [
     "Recording",
     "Evaluation",
     "Job",
-    "MaterialSentenceScore",
     "WordCollection",
     "AIProvider",
     "ASRSceneSetting",

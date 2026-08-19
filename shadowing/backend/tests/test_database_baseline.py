@@ -44,6 +44,13 @@ def test_v0_4_2_baseline_matches_current_metadata():
         }.issubset(
             {column["name"] for column in inspector.get_columns("material")}
         )
+        assert "material_sentence_score" not in inspector.get_table_names()
+        assert "user_id" in {
+            column["name"] for column in inspector.get_columns("recording")
+        }
+        assert "ix_recording_user_id" in {
+            index["name"] for index in inspector.get_indexes("recording")
+        }
         assert {
             "ix_word_collections_created_at",
             "ix_word_collections_normalized_word",

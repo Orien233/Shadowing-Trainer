@@ -8,11 +8,11 @@ from app.core.config import settings
 from app.core.database import get_session
 from app.models.evaluation import Evaluation
 from app.models.job import Job
-from app.models.material_sentence_score import MaterialSentenceScore
 from app.models.recording import Recording
 from app.models.sentence import Sentence
 from app.schemas.recording import RecordingUploadResponse
 from app.schemas.system import RecordingCleanupResponse
+from app.services.evaluation_history_service import normalize_user_id
 from app.services.job_service import enqueue_job
 from app.services.media_service import detect_file_type, get_audio_duration, save_upload
 
@@ -29,11 +29,6 @@ def cleanup_recordings(session: Session = Depends(get_session)):
         evaluations = session.exec(select(Evaluation).where(Evaluation.recording_id.in_(recording_ids))).all()
         for evaluation in evaluations:
             session.delete(evaluation)
-        snapshots = session.exec(
-            select(MaterialSentenceScore).where(MaterialSentenceScore.main_db_recording_id.in_(recording_ids))
-        ).all()
-        for snapshot in snapshots:
-            session.delete(snapshot)
     for job in session.exec(select(Job).where(Job.kind == "evaluation")).all():
         try:
             if int(json.loads(job.payload).get("recording_id", -1)) in recording_ids:
@@ -88,10 +83,15 @@ async def upload_recording(
             saved_path.unlink(missing_ok=True)
         raise HTTPException(status_code=400, detail=f"Invalid recording media: {exc}")
 
-    recording = Recording(sentence_id=sentence_id, audio_path=str(saved_path), status="queued")
+    recording = Recording(
+        sentence_id=sentence_id,
+        user_id=normalize_user_id(user_id),
+        audio_path=str(saved_path),
+        status="queued",
+    )
     session.add(recording)
     session.flush()
-    job = enqueue_job(session, "evaluation", {"recording_id": recording.id, "user_id": user_id})
+    job = enqueue_job(session, "evaluation", {"recording_id": recording.id})
     recording.job_id = job.id
     session.add(recording)
     session.commit()

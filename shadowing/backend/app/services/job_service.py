@@ -20,7 +20,6 @@ from app.models.recording import Recording
 from app.models.sentence import Sentence
 from app.models.material import Material
 from app.services.evaluation_service import evaluate_recording
-from app.services.material_score_service import record_material_sentence_score
 from app.services.media_service import extract_audio
 
 logger = logging.getLogger(__name__)
@@ -149,10 +148,6 @@ async def _run_evaluation(job_id: str, payload: dict[str, Any]) -> dict[str, Any
         session.add(recording)
         session.add(evaluation)
         session.flush()
-        record_material_sentence_score(
-            session=session, material_id=sentence.material_id, sentence_id=sentence.id,
-            evaluation=evaluation, recording_id=recording.id, user_id=payload.get("user_id"),
-        )
         session.commit()
         session.refresh(evaluation)
         return {"recording_id": recording.id, "evaluation": evaluation.model_dump(mode="json")}

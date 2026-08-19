@@ -17,7 +17,6 @@ from app.core.database import get_session
 from app.models.evaluation import Evaluation
 from app.models.job import Job
 from app.models.material import Material
-from app.models.material_sentence_score import MaterialSentenceScore
 from app.models.recording import Recording
 from app.models.sentence import Sentence
 from app.services.job_service import retry_job
@@ -29,7 +28,7 @@ def recording_client(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Iterato
     engine = create_engine("sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool)
     SQLModel.metadata.create_all(engine, tables=[
         Material.__table__, Sentence.__table__, Recording.__table__, Evaluation.__table__,
-        MaterialSentenceScore.__table__, Job.__table__,
+        Job.__table__,
     ])
     media_path = tmp_path / "accepted.webm"
 
@@ -59,7 +58,11 @@ def recording_client(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Iterato
 
 def test_recording_upload_returns_accepted_job(recording_client):
     client, engine = recording_client
-    response = client.post("/api/recordings/upload", data={"sentence_id": "1"}, files={"file": ("recording.webm", b"x", "audio/webm")})
+    response = client.post(
+        "/api/recordings/upload",
+        data={"sentence_id": "1", "user_id": " learner-a "},
+        files={"file": ("recording.webm", b"x", "audio/webm")},
+    )
 
     assert response.status_code == 202
     payload = response.json()
@@ -68,10 +71,11 @@ def test_recording_upload_returns_accepted_job(recording_client):
         recording = session.get(Recording, payload["recording_id"])
         job = session.get(Job, payload["job_id"])
         assert recording is not None and recording.status == "queued"
+        assert recording.user_id == "learner-a"
         assert job is not None and job.kind == "evaluation" and job.status == "queued"
 
 
-def test_cleanup_removes_recording_rows_and_snapshots(recording_client, tmp_path: Path):
+def test_cleanup_removes_recording_rows_and_evaluations(recording_client, tmp_path: Path):
     client, engine = recording_client
     audio_path = tmp_path / "finished.wav"; audio_path.write_bytes(b"audio")
     with Session(engine) as session:
@@ -79,7 +83,6 @@ def test_cleanup_removes_recording_rows_and_snapshots(recording_client, tmp_path
         session.add(recording); session.flush()
         evaluation = Evaluation(recording_id=recording.id, completeness_score=1, fluency_score=1, sync_score=1, pronunciation_score=1, overall_score=1, feedback="", suggestion="", raw_metrics="{}")
         session.add(evaluation); session.flush()
-        session.add(MaterialSentenceScore(material_id=1, sentence_id=1, main_db_recording_id=recording.id, main_db_evaluation_id=evaluation.id, completeness_score=1, fluency_score=1, sync_score=1, pronunciation_score=1, overall_score=1, feedback="", suggestion="", raw_metrics="{}"))
         session.commit()
 
     response = client.delete("/api/recordings/cleanup")
@@ -88,7 +91,6 @@ def test_cleanup_removes_recording_rows_and_snapshots(recording_client, tmp_path
     with Session(engine) as session:
         assert session.exec(select(Recording)).all() == []
         assert session.exec(select(Evaluation)).all() == []
-        assert session.exec(select(MaterialSentenceScore)).all() == []
 
 
 def test_failed_job_can_be_manually_requeued(recording_client):

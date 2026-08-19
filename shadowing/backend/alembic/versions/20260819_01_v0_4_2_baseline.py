@@ -127,37 +127,10 @@ def upgrade() -> None:
         batch_op.create_index(batch_op.f('ix_material_text_practice_id'), ['text_practice_id'], unique=False)
         batch_op.create_index(batch_op.f('ix_material_translation_language'), ['translation_language'], unique=False)
 
-    op.create_table('material_sentence_score',
-    sa.Column('id', sa.Integer(), nullable=False),
-    sa.Column('user_id', sqlmodel.sql.sqltypes.AutoString(length=64), nullable=False),
-    sa.Column('material_id', sa.Integer(), nullable=False),
-    sa.Column('sentence_id', sa.Integer(), nullable=False),
-    sa.Column('main_db_recording_id', sa.Integer(), nullable=True),
-    sa.Column('main_db_evaluation_id', sa.Integer(), nullable=True),
-    sa.Column('completeness_score', sa.Integer(), nullable=False),
-    sa.Column('fluency_score', sa.Integer(), nullable=False),
-    sa.Column('sync_score', sa.Integer(), nullable=False),
-    sa.Column('pronunciation_score', sa.Integer(), nullable=False),
-    sa.Column('overall_score', sa.Integer(), nullable=False),
-    sa.Column('feedback', sqlmodel.sql.sqltypes.AutoString(), nullable=False),
-    sa.Column('suggestion', sqlmodel.sql.sqltypes.AutoString(), nullable=False),
-    sa.Column('raw_metrics', sqlmodel.sql.sqltypes.AutoString(), nullable=False),
-    sa.Column('created_at', sa.DateTime(), nullable=False),
-    sa.PrimaryKeyConstraint('id')
-    )
-    with op.batch_alter_table('material_sentence_score', schema=None) as batch_op:
-        batch_op.create_index(batch_op.f('ix_material_sentence_score_created_at'), ['created_at'], unique=False)
-        batch_op.create_index(batch_op.f('ix_material_sentence_score_material_id'), ['material_id'], unique=False)
-        batch_op.create_index(batch_op.f('ix_material_sentence_score_sentence_id'), ['sentence_id'], unique=False)
-        batch_op.create_index(batch_op.f('ix_material_sentence_score_user_id'), ['user_id'], unique=False)
-        batch_op.create_index('ix_mss_main_db_evaluation_id', ['main_db_evaluation_id'], unique=False)
-        batch_op.create_index('ix_mss_main_db_recording_id', ['main_db_recording_id'], unique=False)
-        batch_op.create_index('ix_mss_user_material_created', ['user_id', 'material_id', 'created_at'], unique=False)
-        batch_op.create_index('ix_mss_user_material_sentence_created', ['user_id', 'material_id', 'sentence_id', 'created_at'], unique=False)
-
     op.create_table('recording',
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('sentence_id', sa.Integer(), nullable=False),
+    sa.Column('user_id', sqlmodel.sql.sqltypes.AutoString(length=64), nullable=False),
     sa.Column('audio_path', sqlmodel.sql.sqltypes.AutoString(), nullable=False),
     sa.Column('duration', sa.Float(), nullable=True),
     sa.Column('asr_text', sqlmodel.sql.sqltypes.AutoString(), nullable=True),
@@ -171,6 +144,7 @@ def upgrade() -> None:
         batch_op.create_index(batch_op.f('ix_recording_job_id'), ['job_id'], unique=False)
         batch_op.create_index(batch_op.f('ix_recording_sentence_id'), ['sentence_id'], unique=False)
         batch_op.create_index(batch_op.f('ix_recording_status'), ['status'], unique=False)
+        batch_op.create_index(batch_op.f('ix_recording_user_id'), ['user_id'], unique=False)
 
     op.create_table('sentence',
     sa.Column('id', sa.Integer(), nullable=False),
@@ -275,22 +249,12 @@ def downgrade() -> None:
 
     op.drop_table('sentence')
     with op.batch_alter_table('recording', schema=None) as batch_op:
+        batch_op.drop_index(batch_op.f('ix_recording_user_id'))
         batch_op.drop_index(batch_op.f('ix_recording_status'))
         batch_op.drop_index(batch_op.f('ix_recording_sentence_id'))
         batch_op.drop_index(batch_op.f('ix_recording_job_id'))
 
     op.drop_table('recording')
-    with op.batch_alter_table('material_sentence_score', schema=None) as batch_op:
-        batch_op.drop_index('ix_mss_user_material_sentence_created')
-        batch_op.drop_index('ix_mss_user_material_created')
-        batch_op.drop_index('ix_mss_main_db_recording_id')
-        batch_op.drop_index('ix_mss_main_db_evaluation_id')
-        batch_op.drop_index(batch_op.f('ix_material_sentence_score_user_id'))
-        batch_op.drop_index(batch_op.f('ix_material_sentence_score_sentence_id'))
-        batch_op.drop_index(batch_op.f('ix_material_sentence_score_material_id'))
-        batch_op.drop_index(batch_op.f('ix_material_sentence_score_created_at'))
-
-    op.drop_table('material_sentence_score')
     with op.batch_alter_table('material', schema=None) as batch_op:
         batch_op.drop_index(batch_op.f('ix_material_translation_language'))
         batch_op.drop_index(batch_op.f('ix_material_text_practice_id'))
