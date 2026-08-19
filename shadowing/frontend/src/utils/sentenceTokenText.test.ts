@@ -1,6 +1,6 @@
 import { expect, it } from "vitest";
 
-import { cleanCollectableWordText, normalizeWordText, tokenizeSentenceText } from "./sentenceTokenText.js";
+import { cleanCollectableWordText, normalizeWordText, tokenizeSentenceText } from "./sentenceTokenText";
 
 it("segments Japanese text into collectable units instead of one whitespace token", () => {
   const tokens = tokenizeSentenceText("私は学生です。", "ja");

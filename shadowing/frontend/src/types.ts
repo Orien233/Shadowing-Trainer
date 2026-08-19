@@ -49,6 +49,13 @@ export interface WordAlignmentToken {
   insertion_type?: string;
 }
 
+export type AlignmentToken = Partial<WordAlignmentToken> & {
+  index: number;
+  text: string;
+  status?: string;
+  severity?: string;
+};
+
 export interface WordAlignmentSummary {
   correct_count: number;
   substitution_count: number;

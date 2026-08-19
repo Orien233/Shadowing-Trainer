@@ -11,7 +11,7 @@ vi.mock("../lib/api", () => api);
 
 import { LanguageProvider } from "../i18n/LanguageContext";
 import type { Evaluation } from "../types";
-import AlignmentToken from "./AlignmentToken.jsx";
+import AlignmentToken from "./AlignmentToken";
 import EvaluationPanel from "./EvaluationPanel";
 
 function evaluation(overrides: Partial<Evaluation> = {}): Evaluation {

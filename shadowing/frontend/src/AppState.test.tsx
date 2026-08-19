@@ -41,7 +41,7 @@ vi.mock("./components/MaterialList", () => ({
     <button type="button" onClick={onOpenWordLibrary}>Open library</button>
   ),
 }));
-vi.mock("./components/WordCollectionPanel.jsx", () => ({
+vi.mock("./components/WordCollectionPanel", () => ({
   default: ({ collections }: { collections: Array<{ id: number; word_text: string }> }) => (
     <div>{collections.map((collection) => <span key={collection.id}>{collection.word_text}</span>)}</div>
   ),

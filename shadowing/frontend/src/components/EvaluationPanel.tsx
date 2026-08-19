@@ -1,7 +1,7 @@
 import { useLanguage } from "../i18n/LanguageContext";
 import type { Evaluation } from "../types";
 import { getLocalizedEvaluationCopy } from "../utils/evaluationCopy";
-import WordAlignmentView from "./WordAlignmentView.jsx";
+import WordAlignmentView from "./WordAlignmentView";
 
 interface Props { evaluation: Evaluation | null; }
 

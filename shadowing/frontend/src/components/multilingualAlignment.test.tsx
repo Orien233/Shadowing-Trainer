@@ -9,7 +9,7 @@ const api = vi.hoisted(() => ({
 vi.mock("../lib/api", () => api);
 
 import { LanguageProvider } from "../i18n/LanguageContext";
-import WordAlignmentView from "./WordAlignmentView.jsx";
+import WordAlignmentView from "./WordAlignmentView";
 
 beforeEach(() => {
   window.localStorage.clear();
@@ -33,7 +33,7 @@ it("labels limited CJK alignment as character accuracy rather than word accuracy
         support_level: "limited",
         reference_tokens: [],
         user_tokens: [],
-        summary: { word_accuracy: 0.75 },
+        summary: { word_accuracy: 0.75, correct_count: 0, substitution_count: 0, deletion_count: 0, insertion_count: 0, minor_error_count: 0 },
       }} />
     </LanguageProvider>,
   );

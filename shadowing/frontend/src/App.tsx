@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import MaterialList from "./components/MaterialList";
 import MaterialUploader from "./components/MaterialUploader";
 import SentenceTrainer from "./components/SentenceTrainer";
-import WordCollectionPanel from "./components/WordCollectionPanel.jsx";
+import WordCollectionPanel from "./components/WordCollectionPanel";
 import TextGeneratorPanel from "./components/TextGeneratorPanel";
 import SettingsPanel from "./components/SettingsPanel";
 import LanguageSelector from "./components/LanguageSelector";
@@ -16,7 +16,7 @@ import {
 } from "./lib/api";
 import type { WordCollectionSortMode } from "./lib/api";
 import type { Material, Sentence, SentenceLatestEvaluation, WordCollection } from "./types";
-import { buildCollectedWordKey, normalizeWordText } from "./utils/sentenceTokenText.js";
+import { buildCollectedWordKey, normalizeWordText } from "./utils/sentenceTokenText";
 import { useLanguage } from "./i18n/LanguageContext";
 
 function indexLatestEvaluations(
