@@ -4,6 +4,12 @@
 
 本文保留旧版 README 中的版本演进信息。使用方法以当前[安装指南](getting-started.md)和[用户指南](user-guide.md)为准。
 
+## v0.4.2 — Breaking fresh baseline
+
+- 这是全新的数据库基线；旧的 `backend/data/app.db` 不支持升级或 stamp。
+- 用户必须先备份数据，再显式移走或删除旧 `app.db`，由新版本创建数据库；数据目录中的素材、音频、视频、录音和模型不得删除。
+- 不承诺从旧数据库兼容升级；详见[安装与启动](getting-started.md)。
+
 ## v0.4.1
 
 - 将 UI 语言、学习内容语言和翻译语言拆分并持久化，新增中英文界面。

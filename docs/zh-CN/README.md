@@ -2,7 +2,7 @@
 
 简体中文 | [English](../en-US/README.md) · [返回项目首页](../../README.md)
 
-这里保存 Shadowing Trainer v0.4.1 的详细使用和开发文档。根目录 README 只提供最短启动路径；安装、模型配置和具体工作流以本目录文档为准。
+这里保存 Shadowing Trainer v0.4.2 的详细使用和开发文档。根目录 README 只提供最短启动路径；安装、模型配置和具体工作流以本目录文档为准。
 
 ## 开始使用
 
@@ -14,7 +14,7 @@
 
 - [多语言行为](multilingual.md)：语言快照、Provider 语言限制、分句和评分边界。
 - [开发与 API](development.md)：技术栈、目录、数据文件、主要接口和验证命令。
-- [版本记录](changelog.md)：v0.4.1 及先前版本的主要变化。
+- [版本记录](changelog.md)：v0.4.2、v0.4.1 及先前版本的主要变化。
 
 ## 文档约定
 

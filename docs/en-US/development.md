@@ -74,7 +74,7 @@ alembic heads
 alembic upgrade head
 ```
 
-The current migration chain preserves old materials, sentences, evaluations, jobs, collected words, and provider records, and backfills compatible language defaults. Always back up the data directory before migrating.
+Version 0.4.2 is a fresh database baseline: do not upgrade or stamp an old `app.db`. Back up the entire data directory first, then have the user explicitly move or delete only the old `app.db`, preserving materials, audio, video, recordings, and models; run `alembic upgrade head` only against the new database. No compatibility upgrade for the old database is promised.
 
 ## Verification commands
 
@@ -102,4 +102,4 @@ git status --short
 git ls-files --others --exclude-standard
 ```
 
-Provider, language, and job changes should at minimum cover the Factory, capability gates, API-key masking, ASR routing, TTS snapshots/recovery, old-database upgrades, and backend/frontend regressions.
+Provider, language, and job changes should at minimum cover the Factory, capability gates, API-key masking, ASR routing, TTS snapshots/recovery, the 0.4.2 fresh-database baseline, and backend/frontend regressions.

@@ -74,7 +74,7 @@ alembic heads
 alembic upgrade head
 ```
 
-当前迁移链保留旧素材、句子、评分、任务、收藏词和 Provider 数据，并为旧记录填充兼容语言默认值。迁移前始终备份数据目录。
+0.4.2 是全新数据库基线：旧的 `app.db` 不得执行升级或 stamp。先备份整个数据目录，再由用户明确决定移走或删除旧 `app.db`，保留目录中的素材、音频、视频、录音和模型；随后只对新数据库执行 `alembic upgrade head`。不承诺旧数据库的兼容升级。
 
 ## 验证命令
 
@@ -102,4 +102,4 @@ git status --short
 git ls-files --others --exclude-standard
 ```
 
-Provider、语言和任务改动至少应覆盖 Factory、能力门控、API Key 脱敏、ASR 路由、TTS 快照/恢复、旧数据库升级以及前后端回归。
+Provider、语言和任务改动至少应覆盖 Factory、能力门控、API Key 脱敏、ASR 路由、TTS 快照/恢复、0.4.2 新库基线以及前后端回归。

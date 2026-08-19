@@ -5,7 +5,7 @@
 ## 环境要求
 
 - Python 3.10 或更高版本（建议 3.12）。
-- Node.js 18 或更高版本及 npm。
+- Node.js 20.19 或更高版本及 npm。
 - FFmpeg 与 ffprobe，并可从终端的 `PATH` 调用。
 - SQLite 由 Python 依赖提供，无需独立安装数据库服务。
 
@@ -78,9 +78,11 @@ npm run dev
 
 端点规则和能力依赖见[模型与 Provider](providers.md)。
 
-## 升级已有安装
+## 0.4.2 全新基线
 
-升级代码前先停止前后端，并备份整个 `shadowing/backend/data/`。切换到新代码后：
+0.4.2 不支持将旧安装的 `shadowing/backend/data/app.db` 升级或 stamp。停止前后端并先备份整个 `shadowing/backend/data/`；经用户明确决定后，仅将旧的 `app.db` 移走或删除。不要删除数据目录中的素材、音频、视频、录音或模型。
+
+然后安装依赖并创建新数据库：
 
 ```powershell
 cd shadowing/backend
@@ -89,7 +91,7 @@ pip install -r requirements.txt
 alembic upgrade head
 ```
 
-Alembic 会保留已有素材、句子、评分、任务、收藏单词和 Provider 配置。不要用空数据库覆盖旧的 `app.db`，也不要手工复制迁移中的单个表。
+`alembic upgrade head` 只用于这个全新数据库基线；不要对旧 `app.db` 执行升级、stamp 或手工复制迁移中的表。
 
 ## 验证安装
 

@@ -2,7 +2,7 @@
 
 [简体中文](../zh-CN/README.md) | English · [Back to project home](../../README.en.md)
 
-This directory contains the detailed Shadowing Trainer v0.4.1 user and developer documentation. The root README provides only the shortest startup path; installation, model configuration, and workflow details live here.
+This directory contains the detailed Shadowing Trainer v0.4.2 user and developer documentation. The root README provides only the shortest startup path; installation, model configuration, and workflow details live here.
 
 ## Getting started
 
@@ -14,7 +14,7 @@ This directory contains the detailed Shadowing Trainer v0.4.1 user and developer
 
 - [Multilingual behaviour](multilingual.md): language snapshots, provider language limits, segmentation, and scoring boundaries.
 - [Development and API](development.md): stack, layout, data files, major endpoints, and verification commands.
-- [Release history](changelog.md): major changes in v0.4.1 and earlier versions.
+- [Release history](changelog.md): the v0.4.2 baseline, v0.4.1, and earlier versions.
 
 ## Documentation conventions
 

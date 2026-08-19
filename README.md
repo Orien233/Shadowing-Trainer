@@ -1,4 +1,4 @@
-# Shadowing Trainer v0.4.1
+# Shadowing Trainer v0.4.2
 
 简体中文 | [English](README.en.md)
 
@@ -19,7 +19,7 @@ Shadowing Trainer 是一款本地优先的多语言跟读训练 Web 应用。你
 ## 运行前准备
 
 - Python 3.10 或更高版本
-- Node.js 18 或更高版本及 npm
+- Node.js 20.19 或更高版本及 npm
 - 可从 `PATH` 调用的 FFmpeg 和 ffprobe
 
 Local Whisper 是可选组件；只使用远程 ASR 时无需安装。完整环境说明见[安装与启动](docs/zh-CN/getting-started.md)。
@@ -54,6 +54,10 @@ npm run dev
 
 首次启动后，请在前端的“设置”页面创建需要的 Provider 配置档。端点填写方式和测试等级见[模型与 Provider 指南](docs/zh-CN/providers.md)。
 
+## 0.4.2 全新基线
+
+0.4.2 是全新数据库基线：旧的 `shadowing/backend/data/app.db` 不支持升级或 stamp。请先备份整个 `shadowing/backend/data/`，再由用户显式将旧 `app.db` 移走或删除；不要删除数据目录中的素材、音频、视频、录音或模型。随后运行 `alembic upgrade head`，让应用创建新的数据库。
+
 ## 文档
 
 - [文档首页](docs/zh-CN/README.md)
@@ -66,7 +70,7 @@ npm run dev
 
 ## 重要说明
 
-- 升级已有数据库前请备份 `shadowing/backend/data/`，并执行 `alembic upgrade head`。
+- 0.4.2 不承诺兼容升级旧数据库；请遵循上面的全新基线流程。
 - Provider 密钥由后端保存，查询接口只返回掩码；不要将 `.env`、数据库或密钥提交到 Git。
 - 本项目的评分结果用于练习反馈，不应视为正式语言能力考试成绩。
-- 当前 Git 分支为 `v0_4_1`，运行源码位于版本中立的 `shadowing/` 目录。
+- 当前运行源码位于版本中立的 `shadowing/` 目录。

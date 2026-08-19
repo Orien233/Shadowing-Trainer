@@ -5,7 +5,7 @@
 ## Requirements
 
 - Python 3.10 or newer (3.12 recommended).
-- Node.js 18 or newer with npm.
+- Node.js 20.19 or newer with npm.
 - FFmpeg and ffprobe available from the terminal `PATH`.
 - SQLite is provided through the Python runtime; no separate database service is required.
 
@@ -78,9 +78,11 @@ The frontend defaults to <http://localhost:5173> and the backend to <http://loca
 
 Endpoint rules and capability dependencies are described in [Models and providers](providers.md).
 
-## Upgrade an existing installation
+## The 0.4.2 fresh baseline
 
-Stop both processes and back up all of `shadowing/backend/data/` before updating the code. Then run:
+Version 0.4.2 does not support upgrading or stamping an old `shadowing/backend/data/app.db`. Stop both processes and back up all of `shadowing/backend/data/`; only after the user explicitly decides, move or delete the old `app.db`. Do not delete materials, audio, video, recordings, or models in the data directory.
+
+Install dependencies and create the new database:
 
 ```powershell
 cd shadowing/backend
@@ -89,7 +91,7 @@ pip install -r requirements.txt
 alembic upgrade head
 ```
 
-Alembic preserves existing materials, sentences, evaluations, jobs, collected words, and provider profiles. Do not replace the old `app.db` with an empty database or manually copy individual tables during migration.
+`alembic upgrade head` is for this fresh database baseline only; do not run upgrade, stamp, or manual table copies against the old `app.db`.
 
 ## Verify the installation
 

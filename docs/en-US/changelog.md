@@ -4,6 +4,12 @@
 
 This page preserves the release history previously carried in the root README. Follow the current [installation guide](getting-started.md) and [user guide](user-guide.md) for current instructions.
 
+## v0.4.2 — Breaking fresh baseline
+
+- This release is a fresh database baseline; the old `backend/data/app.db` must not be upgraded or stamped.
+- The user must back up the data first, then explicitly move or delete the old `app.db` so the new release can create its database; materials, audio, video, recordings, and models in the data directory must not be deleted.
+- No compatibility upgrade from the old database is promised; see [Installation and startup](getting-started.md).
+
 ## v0.4.1
 
 - Separated and persisted UI, learning-content, and translation languages, with Chinese and English interfaces.
