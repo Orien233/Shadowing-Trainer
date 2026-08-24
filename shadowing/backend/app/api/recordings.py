@@ -1,7 +1,9 @@
 import json
+import mimetypes
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
+from fastapi.responses import FileResponse
 from sqlmodel import Session, select
 
 from app.core.config import settings
@@ -17,6 +19,26 @@ from app.services.job_service import enqueue_job
 from app.services.media_service import detect_file_type, get_audio_duration, save_upload
 
 router = APIRouter(prefix="/api/recordings", tags=["recordings"])
+
+_AUDIO_MEDIA_TYPES = {
+    ".aac": "audio/aac",
+    ".flac": "audio/flac",
+    ".m4a": "audio/mp4",
+    ".mp3": "audio/mpeg",
+    ".oga": "audio/ogg",
+    ".ogg": "audio/ogg",
+    ".opus": "audio/opus",
+    ".wav": "audio/wav",
+    ".wave": "audio/wav",
+    ".webm": "audio/webm",
+}
+
+
+def _recording_media_type(audio_path: Path) -> str:
+    return _AUDIO_MEDIA_TYPES.get(
+        audio_path.suffix.lower(),
+        mimetypes.guess_type(audio_path.name)[0] or "application/octet-stream",
+    )
 
 
 @router.delete("/cleanup", response_model=RecordingCleanupResponse)
@@ -96,3 +118,16 @@ async def upload_recording(
     session.add(recording)
     session.commit()
     return RecordingUploadResponse(recording_id=recording.id, job_id=job.id, status="queued")
+
+
+@router.get("/{recording_id}/audio")
+def get_recording_audio(recording_id: int, session: Session = Depends(get_session)):
+    recording = session.get(Recording, recording_id)
+    if not recording:
+        raise HTTPException(status_code=404, detail="Recording not found.")
+
+    audio_path = Path(recording.audio_path)
+    if not audio_path.exists() or not audio_path.is_file():
+        raise HTTPException(status_code=404, detail="Recording audio file not found.")
+
+    return FileResponse(audio_path, media_type=_recording_media_type(audio_path))

@@ -1,8 +1,13 @@
+from collections.abc import Iterator
 from datetime import UTC, datetime, timedelta
 
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
 from sqlalchemy.pool import StaticPool
 from sqlmodel import Session, SQLModel, create_engine
 
+from app.api.materials import router as materials_router
+from app.core.database import get_session
 from app.models.evaluation import Evaluation
 from app.models.material import Material
 from app.models.recording import Recording
@@ -66,10 +71,30 @@ def test_latest_evaluations_are_derived_without_a_duplicate_score_table():
         first_id = first.id
         second_id = second.id
 
-        older = Recording(sentence_id=first.id, user_id="learner-a", audio_path="a-1.wav")
-        latest = Recording(sentence_id=first.id, user_id="learner-a", audio_path="a-2.wav")
-        other_sentence = Recording(sentence_id=second.id, user_id="learner-a", audio_path="a-3.wav")
-        other_user = Recording(sentence_id=first.id, user_id="learner-b", audio_path="b-1.wav")
+        older = Recording(
+            sentence_id=first.id,
+            user_id="learner-a",
+            audio_path="a-1.wav",
+            duration=1.25,
+        )
+        latest = Recording(
+            sentence_id=first.id,
+            user_id="learner-a",
+            audio_path="a-2.wav",
+            duration=2.5,
+        )
+        other_sentence = Recording(
+            sentence_id=second.id,
+            user_id="learner-a",
+            audio_path="a-3.wav",
+            duration=3.75,
+        )
+        other_user = Recording(
+            sentence_id=first.id,
+            user_id="learner-b",
+            audio_path="b-1.wav",
+            duration=9.0,
+        )
         session.add(older)
         session.add(latest)
         session.add(other_sentence)
@@ -88,7 +113,31 @@ def test_latest_evaluations_are_derived_without_a_duplicate_score_table():
             user_id="learner-a",
         )
 
-    assert [(row.sentence_id, row.evaluation.overall_score) for row in rows] == [
-        (first_id, 90),
-        (second_id, 80),
+        material_id = material.id
+
+    assert [
+        (row.sentence_id, row.evaluation.overall_score, row.recording_duration)
+        for row in rows
+    ] == [
+        (first_id, 90, 2.5),
+        (second_id, 80, 3.75),
+    ]
+
+    def override_session() -> Iterator[Session]:
+        with Session(engine) as session:
+            yield session
+
+    app = FastAPI()
+    app.include_router(materials_router)
+    app.dependency_overrides[get_session] = override_session
+    with TestClient(app) as client:
+        response = client.get(
+            f"/api/materials/{material_id}/latest-evaluations",
+            params={"user_id": "learner-a"},
+        )
+
+    assert response.status_code == 200
+    assert [item["recording_duration"] for item in response.json()["evaluations"]] == [
+        2.5,
+        3.75,
     ]

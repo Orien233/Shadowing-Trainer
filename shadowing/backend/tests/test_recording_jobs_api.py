@@ -75,6 +75,50 @@ def test_recording_upload_returns_accepted_job(recording_client):
         assert job is not None and job.kind == "evaluation" and job.status == "queued"
 
 
+def test_recording_audio_returns_saved_media(recording_client, tmp_path: Path):
+    client, engine = recording_client
+    audio_path = tmp_path / "finished.webm"
+    audio_path.write_bytes(b"saved recording")
+    with Session(engine) as session:
+        recording = Recording(sentence_id=1, audio_path=str(audio_path), status="completed")
+        session.add(recording)
+        session.commit()
+        recording_id = recording.id
+
+    response = client.get(f"/api/recordings/{recording_id}/audio")
+
+    assert response.status_code == 200
+    assert response.headers["content-type"] == "audio/webm"
+    assert response.content == b"saved recording"
+
+
+def test_recording_audio_returns_404_for_unknown_recording(recording_client):
+    client, _engine = recording_client
+
+    response = client.get("/api/recordings/999/audio")
+
+    assert response.status_code == 404
+    assert response.json() == {"detail": "Recording not found."}
+
+
+def test_recording_audio_returns_404_when_file_is_missing(recording_client, tmp_path: Path):
+    client, engine = recording_client
+    with Session(engine) as session:
+        recording = Recording(
+            sentence_id=1,
+            audio_path=str(tmp_path / "missing.wav"),
+            status="completed",
+        )
+        session.add(recording)
+        session.commit()
+        recording_id = recording.id
+
+    response = client.get(f"/api/recordings/{recording_id}/audio")
+
+    assert response.status_code == 404
+    assert response.json() == {"detail": "Recording audio file not found."}
+
+
 def test_cleanup_removes_recording_rows_and_evaluations(recording_client, tmp_path: Path):
     client, engine = recording_client
     audio_path = tmp_path / "finished.wav"; audio_path.write_bytes(b"audio")

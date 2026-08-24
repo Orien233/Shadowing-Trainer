@@ -15,6 +15,7 @@ DEFAULT_USER_ID = "default"
 class LatestSentenceEvaluation:
     sentence_id: int
     recording_id: int
+    recording_duration: float | None
     evaluation: Evaluation
 
 
@@ -31,7 +32,7 @@ def list_latest_evaluations(
 ) -> list[LatestSentenceEvaluation]:
     """Return one latest evaluation per sentence for a material and user."""
     statement = (
-        select(Sentence.id, Recording.id, Evaluation)
+        select(Sentence.id, Recording.id, Recording.duration, Evaluation)
         .join(Recording, Recording.sentence_id == Sentence.id)
         .join(Evaluation, Evaluation.recording_id == Recording.id)
         .where(Sentence.material_id == material_id)
@@ -45,12 +46,13 @@ def list_latest_evaluations(
     rows = session.exec(statement).all()
 
     latest_by_sentence: dict[int, LatestSentenceEvaluation] = {}
-    for sentence_id, recording_id, evaluation in rows:
+    for sentence_id, recording_id, recording_duration, evaluation in rows:
         if sentence_id in latest_by_sentence:
             continue
         latest_by_sentence[sentence_id] = LatestSentenceEvaluation(
             sentence_id=sentence_id,
             recording_id=recording_id,
+            recording_duration=recording_duration,
             evaluation=evaluation,
         )
 

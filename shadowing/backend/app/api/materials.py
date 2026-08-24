@@ -169,6 +169,7 @@ def get_material_latest_evaluations(
         _build_latest_evaluation_read(
             sentence_id=row.sentence_id,
             recording_id=row.recording_id,
+            recording_duration=row.recording_duration,
             evaluation=row.evaluation,
         )
         for row in latest_rows
@@ -191,11 +192,13 @@ def _build_latest_evaluation_read(
     *,
     sentence_id: int,
     recording_id: int,
+    recording_duration: float | None,
     evaluation: Evaluation,
 ) -> SentenceLatestEvaluationRead:
     return SentenceLatestEvaluationRead(
         sentence_id=sentence_id,
         recording_id=recording_id,
+        recording_duration=recording_duration,
         evaluation_id=evaluation.id,
         completeness_score=evaluation.completeness_score,
         fluency_score=evaluation.fluency_score,
