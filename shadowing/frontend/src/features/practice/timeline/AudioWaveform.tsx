@@ -82,7 +82,10 @@ export default function AudioWaveform({
 
     const decodeAudio = async () => {
       try {
-        const response = await fetch(audioUrl, { signal: controller.signal });
+        // Media elements can populate Chrome's cache with an opaque range
+        // response before this CORS fetch runs. Bypass that cache so decoding
+        // always receives the API response with its CORS headers intact.
+        const response = await fetch(audioUrl, { signal: controller.signal, cache: "no-store" });
         if (!response.ok) throw new Error(`Audio request failed with ${response.status}`);
 
         const encodedAudio = await response.arrayBuffer();
@@ -190,21 +193,36 @@ export default function AudioWaveform({
       "#cdd5e2",
     );
 
+    const peaks = Array.from({ length: barCount }, () => 0);
+
     for (let barIndex = 0; barIndex < barCount; barIndex += 1) {
       const barStartTime = startTime + barIndex * secondsPerBar;
       const barEndTime = startTime + (barIndex + 1) * secondsPerBar;
       const firstSample = clamp(Math.floor(barStartTime * sampleRate), 0, sampleCount);
       const lastSample = clamp(Math.ceil(barEndTime * sampleRate), 0, sampleCount);
-      let peak = 0;
 
       for (const samples of channelData) {
         for (let sampleIndex = firstSample; sampleIndex < lastSample; sampleIndex += 1) {
-          peak = Math.max(peak, Math.abs(samples[sampleIndex] ?? 0));
+          peaks[barIndex] = Math.max(peaks[barIndex], Math.abs(samples[sampleIndex] ?? 0));
         }
       }
+    }
+
+    // Normalize against the segment's 95th-percentile peak. This keeps quiet
+    // source files legible without changing the relative shape of their audio.
+    const audiblePeaks = peaks.filter((peak) => peak > 0.00001).sort((a, b) => a - b);
+    const referencePeak = audiblePeaks.length > 0
+      ? audiblePeaks[Math.floor((audiblePeaks.length - 1) * 0.95)]
+      : 0;
+
+    for (let barIndex = 0; barIndex < barCount; barIndex += 1) {
+      const peak = peaks[barIndex];
+      const normalizedPeak = referencePeak > 0 ? clamp(peak / referencePeak, 0, 1) : 0;
 
       const x = barIndex * barStride;
-      const barHeight = Math.max(2, Math.min(1, peak) * height * 0.86);
+      const barHeight = peak > 0.00001
+        ? Math.max(3, normalizedPeak * height * 0.86)
+        : 2;
       context.fillStyle = x + BAR_WIDTH / 2 <= playedWidth ? playedColor : remainingColor;
       context.fillRect(x, (height - barHeight) / 2, BAR_WIDTH, barHeight);
     }

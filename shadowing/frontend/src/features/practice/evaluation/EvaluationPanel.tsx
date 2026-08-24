@@ -1,4 +1,4 @@
-import { CheckCircle, Info } from "@phosphor-icons/react";
+import { CaretRight, CheckCircle, Info } from "@phosphor-icons/react";
 import { useLanguage } from "../../../i18n/LanguageContext";
 import type { Evaluation } from "../../../types";
 import { getLocalizedEvaluationCopy } from "../../../utils/evaluationCopy";
@@ -64,16 +64,22 @@ export default function EvaluationPanel({ evaluation, onReplayReference, onRetry
         </div>
       </div>
 
-      <div className="evaluation-copy-grid">
-        <p>
-          <strong>{t("evaluation.feedback")}</strong>
-          <span>{localizedCopy.feedback}</span>
-        </p>
-        <p>
-          <strong>{t("evaluation.suggestion")}</strong>
-          <span>{localizedCopy.suggestion}</span>
-        </p>
-      </div>
+      <details className="evaluation-details">
+        <summary>
+          {t("evaluation.viewDetails")}
+          <CaretRight size={16} weight="bold" aria-hidden="true" />
+        </summary>
+        <div className="evaluation-details-copy">
+          <p>
+            <strong>{t("evaluation.feedback")}</strong>
+            <span>{localizedCopy.feedback}</span>
+          </p>
+          <p>
+            <strong>{t("evaluation.suggestion")}</strong>
+            <span>{localizedCopy.suggestion}</span>
+          </p>
+        </div>
+      </details>
 
       {evaluation.word_alignment && (
         <div className="alignment-feedback">

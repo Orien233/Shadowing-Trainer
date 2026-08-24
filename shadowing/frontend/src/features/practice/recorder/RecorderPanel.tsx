@@ -281,7 +281,7 @@ export default function RecorderPanel({ sentence, evaluation, onEvaluated, onPla
               {t("recorder.recordingReady")}
               {formatDuration(readyDuration) && <time>{formatDuration(readyDuration)}</time>}
             </span>
-            <audio ref={previewAudioRef} className="recording-preview" controls preload="metadata" src={activePreviewUrl} />
+            <audio ref={previewAudioRef} className="recording-preview" preload="metadata" src={activePreviewUrl} />
             {!jobId && (
               <button type="button" className="text-button" onClick={rerecord}>
                 <ArrowCounterClockwise size={16} weight="bold" />

@@ -149,7 +149,7 @@ describe("AudioWaveform", () => {
 
     expect(fetchMock).toHaveBeenCalledWith(
       "/api/materials/1/audio",
-      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+      expect.objectContaining({ signal: expect.any(AbortSignal), cache: "no-store" }),
     );
     expect(decodeAudioData).toHaveBeenCalledOnce();
     expect(close).toHaveBeenCalledOnce();

@@ -335,7 +335,7 @@
   min-height: 468px;
   flex-direction: column;
   align-items: center;
-  padding: 38px clamp(62px, 8vw, 126px) 24px;
+  padding: 38px clamp(62px, 8vw, 126px) 18px;
   background: #fff;
 }
 
@@ -650,8 +650,7 @@
 }
 
 .recording-preview {
-  width: min(174px, 32vw);
-  height: 32px;
+  display: none;
 }
 
 .text-button {
@@ -714,9 +713,9 @@
 }
 
 .evaluation-panel {
+  position: relative;
   width: calc(100% - 44px);
   margin: 0 22px;
-  overflow: hidden;
   border: 1px solid var(--line);
   border-radius: 12px;
   background: #fff;
@@ -826,27 +825,61 @@
   background: var(--green);
 }
 
-.evaluation-copy-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+.evaluation-details {
+  position: absolute;
+  top: 14px;
+  right: 16px;
+  z-index: 4;
 }
 
-.evaluation-copy-grid p {
+.evaluation-details summary {
+  display: inline-flex;
+  min-height: 32px;
+  align-items: center;
+  gap: 6px;
+  color: var(--blue);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 700;
+  list-style: none;
+}
+
+.evaluation-details summary::-webkit-details-marker {
+  display: none;
+}
+
+.evaluation-details[open] summary svg {
+  transform: rotate(90deg);
+}
+
+.evaluation-details-copy {
+  position: absolute;
+  top: 38px;
+  right: 0;
+  width: min(560px, calc(100vw - 76px));
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #fff;
+  box-shadow: 0 16px 38px rgba(16, 32, 70, 0.14);
+}
+
+.evaluation-details-copy p {
   display: grid;
-  grid-template-columns: 76px minmax(0, 1fr);
-  gap: 12px;
+  grid-template-columns: 70px minmax(0, 1fr);
+  gap: 10px;
   margin: 0;
-  padding: 14px 24px;
+  padding: 12px 14px;
   color: var(--ink-soft);
   font-size: 13px;
   line-height: 1.55;
 }
 
-.evaluation-copy-grid p:first-child {
-  border-right: 1px solid var(--line);
+.evaluation-details-copy p + p {
+  border-top: 1px solid var(--line);
 }
 
-.evaluation-copy-grid strong {
+.evaluation-details-copy strong {
   color: var(--ink);
 }
 
@@ -1147,13 +1180,13 @@
     font-size: 13px;
   }
 
+  .recording-console {
+    margin-top: 12px;
+  }
+
   .recording-status {
     gap: 8px;
     flex-wrap: wrap;
-  }
-
-  .recording-preview {
-    width: min(220px, 68vw);
   }
 
   .score-summary {
@@ -1189,18 +1222,21 @@
     border-top: 1px solid var(--line);
   }
 
-  .evaluation-copy-grid {
-    grid-template-columns: 1fr;
+  .evaluation-details {
+    top: 10px;
+    right: 14px;
   }
 
-  .evaluation-copy-grid p {
+  .evaluation-details-copy {
+    position: fixed;
+    top: calc(var(--header-height) + 12px);
+    right: 12px;
+    left: 12px;
+    width: auto;
+  }
+
+  .evaluation-details-copy p {
     grid-template-columns: 64px minmax(0, 1fr);
-    padding: 12px 14px;
-  }
-
-  .evaluation-copy-grid p:first-child {
-    border-right: 0;
-    border-bottom: 1px solid var(--line);
   }
 
   .alignment-feedback {
