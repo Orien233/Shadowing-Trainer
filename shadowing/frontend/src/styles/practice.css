@@ -809,7 +809,7 @@
   align-items: center;
   justify-content: space-between;
   gap: 24px;
-  margin-top: 14px;
+  margin-top: 0;
   padding: 10px 22px;
   border-top: 1px solid var(--line);
   background: #fff;
