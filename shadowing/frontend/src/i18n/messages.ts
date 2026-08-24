@@ -140,12 +140,21 @@ Object.assign(zhCN, {
   "evaluation.completeness": "\u5b8c\u6574\u6027",
   "evaluation.fluency": "\u6d41\u7545\u5ea6",
   "evaluation.sync": "\u540c\u6b65\u5ea6",
+  "evaluation.rhythm": "\u8282\u594f",
+  "evaluation.completenessValue": "\u5b8c\u6574\u6027 {score}/100",
   "evaluation.pronunciation": "\u53d1\u97f3\u8868\u73b0",
   "evaluation.feedback": "\u53cd\u9988\uff1a",
   "evaluation.suggestion": "\u5efa\u8bae\uff1a",
   "alignment.title": "\u8bcd\u7ea7\u5bf9\u9f50",
   "alignment.wordAccuracy": "\u5355\u8bcd\u51c6\u786e\u7387 {accuracy}",
   "alignment.recognizedResult": "\u4f60\u7684\u8bc6\u522b\u7ed3\u679c",
+  "alignment.wordQuality": "\u9010\u8bcd\u53d1\u97f3\u8d28\u91cf",
+  "alignment.quality.correct": "\u51c6\u786e",
+  "alignment.quality.minor": "\u9700\u6ce8\u610f",
+  "alignment.quality.major": "\u91cd\u7ec3",
+  "alignment.quality.pending": "\u5f85\u8bc4\u5206",
+  "alignment.listenReference": "\u542c\u539f\u53e5",
+  "alignment.retrySentence": "\u91cd\u7ec3\u672c\u53e5",
   "alignment.noRecognizedWords": "\u672a\u8bc6\u522b\u5230\u5355\u8bcd\u3002",
   "alignment.noWords": "\u6ca1\u6709\u5355\u8bcd\u3002",
 });
@@ -155,8 +164,8 @@ Object.assign(enUS, {
   "wordCollection.sort.collectedAsc": "Collected: newest first", "wordCollection.sort.collectedDesc": "Collected: oldest first", "wordCollection.sort.alphabetical": "Unicode text order",
   "wordCollection.loading": "Loading…", "wordCollection.empty": "No collected words yet.", "wordCollection.remove": "Remove from collection", "wordCollection.removing": "Removing…", "wordCollection.removeFailed": "Could not remove the word from your collection.", "wordCollection.alreadyCollected": "This word is already collected.", "wordCollection.collect": "Collect this word", "wordCollection.collectFailed": "Could not collect this word.",
   "recorder.title": "Shadowing recording", "recorder.start": "Start recording", "recorder.recording": "Recording…", "recorder.stop": "Stop recording", "recorder.submit": "Submit for scoring", "recorder.rerecord": "Record again", "recorder.retry": "Retry scoring", "recorder.recordingTime": "Recording: {elapsed}s / {maxSeconds}s", "recorder.scoringProgress": "Scoring task: {stage} ({progress}%)", "recorder.maxDuration": "The maximum recording length is {maxSeconds} seconds.", "recorder.microphoneFailed": "Microphone permission failed: {message}", "recorder.microphoneFailedGeneric": "Microphone permission failed.", "recorder.scoringFailed": "Scoring failed. You can retry it.", "recorder.scoringProgressFailed": "Could not check scoring progress.", "recorder.uploadFailed": "Could not upload recording.", "recorder.retryFailed": "Retry failed.",
-  "evaluation.title": "Evaluation results", "evaluation.empty": "Your scores and suggestions will appear after you record.", "evaluation.overall": "Overall", "evaluation.completeness": "Completeness", "evaluation.fluency": "Fluency", "evaluation.sync": "Sync", "evaluation.pronunciation": "Pronunciation", "evaluation.feedback": "Feedback:", "evaluation.suggestion": "Suggestion:",
-  "alignment.title": "Word alignment", "alignment.wordAccuracy": "Word accuracy {accuracy}", "alignment.recognizedResult": "Your recognized result", "alignment.noRecognizedWords": "No recognized words.", "alignment.noWords": "No words.",
+  "evaluation.title": "Evaluation results", "evaluation.empty": "Your scores and suggestions will appear after you record.", "evaluation.overall": "Overall", "evaluation.completeness": "Completeness", "evaluation.completenessValue": "Completeness {score}/100", "evaluation.fluency": "Fluency", "evaluation.sync": "Sync", "evaluation.rhythm": "Rhythm", "evaluation.pronunciation": "Pronunciation", "evaluation.feedback": "Feedback:", "evaluation.suggestion": "Suggestion:",
+  "alignment.title": "Word alignment", "alignment.wordAccuracy": "Word accuracy {accuracy}", "alignment.recognizedResult": "Your recognized result", "alignment.wordQuality": "Word pronunciation quality", "alignment.quality.correct": "Accurate", "alignment.quality.minor": "Review", "alignment.quality.major": "Retry", "alignment.quality.pending": "Not scored", "alignment.listenReference": "Listen", "alignment.retrySentence": "Retry sentence", "alignment.noRecognizedWords": "No recognized words.", "alignment.noWords": "No words.",
 });
 
 Object.assign(zhCN, {

@@ -11,15 +11,24 @@ import {
 } from "@phosphor-icons/react";
 import { useLanguage } from "../../../i18n/LanguageContext";
 import { stageLabel } from "../../../i18n/statusLabels";
-import { getJob, retryJob, uploadRecording } from "../../../lib/api";
+import { apiBase, getJob, retryJob, uploadRecording } from "../../../lib/api";
 import type { Evaluation, Sentence } from "../../../types";
 
 const MAX_SECONDS = 90;
 
 interface Props {
   sentence: Sentence | null;
+  evaluation: Evaluation | null;
   onEvaluated: (evaluation: Evaluation) => void;
   onPlayReference: () => void | Promise<void>;
+}
+
+function formatDuration(seconds: number | null | undefined) {
+  if (typeof seconds !== "number" || !Number.isFinite(seconds)) return null;
+  const safeSeconds = Math.max(seconds, 0);
+  const minutes = Math.floor(safeSeconds / 60);
+  const remainder = safeSeconds - minutes * 60;
+  return `${String(minutes).padStart(2, "0")}:${remainder.toFixed(2).padStart(5, "0")}`;
 }
 
 function isTypingTarget(target: EventTarget | null): boolean {
@@ -29,12 +38,13 @@ function isTypingTarget(target: EventTarget | null): boolean {
     (target instanceof HTMLElement && target.isContentEditable);
 }
 
-export default function RecorderPanel({ sentence, onEvaluated, onPlayReference }: Props) {
+export default function RecorderPanel({ sentence, evaluation, onEvaluated, onPlayReference }: Props) {
   const { t } = useLanguage();
   const recorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const streamRef = useRef<MediaStream | null>(null);
   const stopTimerRef = useRef<number | null>(null);
+  const previewAudioRef = useRef<HTMLAudioElement | null>(null);
   const [recording, setRecording] = useState(false);
   const [elapsed, setElapsed] = useState(0);
   const [blob, setBlob] = useState<Blob | null>(null);
@@ -43,6 +53,11 @@ export default function RecorderPanel({ sentence, onEvaluated, onPlayReference }
   const [stage, setStage] = useState<string | null>(null);
   const [progress, setProgress] = useState(0);
   const [error, setError] = useState<string | null>(null);
+  const savedRecordingUrl = evaluation?.recording_id
+    ? `${apiBase}/api/recordings/${evaluation.recording_id}/audio`
+    : null;
+  const activePreviewUrl = previewUrl ?? savedRecordingUrl;
+  const readyDuration = previewUrl ? elapsed : evaluation?.recording_duration;
 
   useEffect(() => () => {
     if (stopTimerRef.current) window.clearTimeout(stopTimerRef.current);
@@ -55,6 +70,16 @@ export default function RecorderPanel({ sentence, onEvaluated, onPlayReference }
     const timer = window.setInterval(() => setElapsed((value) => Math.min(value + 1, MAX_SECONDS)), 1000);
     return () => window.clearInterval(timer);
   }, [recording]);
+
+  useEffect(() => {
+    setBlob(null);
+    setPreviewUrl(null);
+    setElapsed(0);
+    setJobId(null);
+    setStage(null);
+    setProgress(0);
+    setError(null);
+  }, [sentence?.id]);
 
   useEffect(() => {
     if (!jobId) return;
@@ -146,6 +171,22 @@ export default function RecorderPanel({ sentence, onEvaluated, onPlayReference }
     }
   }
 
+  async function compareRecording() {
+    if (blob) {
+      await submitRecording();
+      return;
+    }
+    const audio = previewAudioRef.current;
+    if (!audio) return;
+    audio.currentTime = 0;
+    await audio.play().catch(() => undefined);
+  }
+
+  function rerecord() {
+    if (blob) clearPreview();
+    void startRecording();
+  }
+
   async function retry() {
     if (!jobId) return;
     try {
@@ -170,21 +211,21 @@ export default function RecorderPanel({ sentence, onEvaluated, onPlayReference }
         }
         return;
       }
-      if (event.key.toLowerCase() === "c" && blob && !jobId && !recording) {
+      if (event.key.toLowerCase() === "c" && activePreviewUrl && !jobId && !recording) {
         event.preventDefault();
-        void submitRecording();
+        void compareRecording();
       }
-      if (event.key.toLowerCase() === "r" && blob && !jobId && !recording) {
+      if (event.key.toLowerCase() === "r" && activePreviewUrl && !jobId && !recording) {
         event.preventDefault();
-        clearPreview();
+        rerecord();
       }
     }
     window.addEventListener("keydown", handleKeyboardShortcut);
     return () => window.removeEventListener("keydown", handleKeyboardShortcut);
-  }, [blob, jobId, recording, sentence, previewUrl]);
+  }, [activePreviewUrl, blob, jobId, recording, sentence, previewUrl]);
 
   const isScoring = Boolean(jobId && !error);
-  const canCompare = Boolean(blob && !recording && !jobId);
+  const canCompare = Boolean(activePreviewUrl && !recording && !jobId);
 
   return (
     <section className="recording-console" aria-label={t("recorder.title")}>
@@ -201,6 +242,7 @@ export default function RecorderPanel({ sentence, onEvaluated, onPlayReference }
         </button>
 
         <button
+          id="sentence-record-action"
           type="button"
           className={`practice-action record-action ${recording ? "recording" : ""}`}
           disabled={!sentence || isScoring}
@@ -217,7 +259,7 @@ export default function RecorderPanel({ sentence, onEvaluated, onPlayReference }
           type="button"
           className="practice-action compare-action"
           disabled={!canCompare}
-          onClick={() => void submitRecording()}
+          onClick={() => void compareRecording()}
         >
           <ArrowsLeftRight size={21} weight="regular" />
           <span>{t("recorder.compare")}</span>
@@ -232,15 +274,16 @@ export default function RecorderPanel({ sentence, onEvaluated, onPlayReference }
             {t("recorder.recordingTime", { elapsed, maxSeconds: MAX_SECONDS })}
           </span>
         )}
-        {!recording && previewUrl && (
+        {!recording && activePreviewUrl && (
           <>
             <span className="recording-ready">
               <CheckCircle size={18} weight="fill" />
               {t("recorder.recordingReady")}
+              {formatDuration(readyDuration) && <time>{formatDuration(readyDuration)}</time>}
             </span>
-            <audio className="recording-preview" controls src={previewUrl} />
+            <audio ref={previewAudioRef} className="recording-preview" controls preload="metadata" src={activePreviewUrl} />
             {!jobId && (
-              <button type="button" className="text-button" onClick={clearPreview}>
+              <button type="button" className="text-button" onClick={rerecord}>
                 <ArrowCounterClockwise size={16} weight="bold" />
                 {t("recorder.rerecord")}
                 <kbd>R</kbd>
@@ -254,7 +297,7 @@ export default function RecorderPanel({ sentence, onEvaluated, onPlayReference }
             {t("recorder.scoringProgress", { stage: stageLabel(t, stage), progress })}
           </span>
         )}
-        {!recording && !blob && !jobId && !error && (
+        {!recording && !activePreviewUrl && !jobId && !error && (
           <span className="muted">{t("recorder.maxDuration", { maxSeconds: MAX_SECONDS })}</span>
         )}
         {error && (

@@ -6,14 +6,15 @@ import {
   Play,
   Star,
   VideoCamera,
-  Waveform,
 } from "@phosphor-icons/react";
 import { apiBase } from "../../lib/api";
 import type { Evaluation, Material, Sentence, SentenceLatestEvaluation, WordCollection } from "../../types";
 import CollectableSentenceText from "./alignment/CollectableSentenceText";
+import SentenceWordDiagnostics from "./alignment/SentenceWordDiagnostics";
 import EvaluationPanel from "./evaluation/EvaluationPanel";
 import RecorderPanel from "./recorder/RecorderPanel";
 import SentenceProgress from "./SentenceProgress";
+import AudioWaveform from "./timeline/AudioWaveform";
 import { asEvaluation } from "./evaluation/mappers";
 import {
   buildTimelineSegments,
@@ -645,6 +646,12 @@ export default function SentenceTrainer({
     [currentSentence?.id]
   );
 
+  const focusRecorder = useCallback(() => {
+    const recordButton = document.getElementById("sentence-record-action");
+    recordButton?.scrollIntoView({ behavior: "smooth", block: "center" });
+    recordButton?.focus();
+  }, []);
+
   useEffect(() => {
     function handleKeyboardShortcut(event: KeyboardEvent) {
       if (isTypingTarget(event.target)) return;
@@ -781,6 +788,9 @@ export default function SentenceTrainer({
           ) : (
             <div className="sentence-translation muted">{t("trainer.noSpeechDetected")}</div>
           )}
+          {!isGapSegment && referenceAlignmentTokens.length > 0 && (
+            <SentenceWordDiagnostics tokens={referenceAlignmentTokens} />
+          )}
           {!isGapSegment && (
             <div className="collection-hint">
               <Star size={17} weight="regular" aria-hidden="true" />
@@ -800,17 +810,13 @@ export default function SentenceTrainer({
             <Play size={19} weight="fill" />
           </button>
           <time>{formatTime(currentSegmentPlaybackTime)}</time>
-          <Waveform className="waveform-icon" size={28} weight="regular" aria-hidden="true" />
-          <input
-            className="timeline-slider"
-            type="range"
-            min={0}
-            max={currentSegment.duration > 0 ? currentSegment.duration : 0}
-            step={0.01}
-            value={currentSegment.duration > 0 ? currentSegmentPlaybackTime : 0}
-            onChange={(event) => handleSegmentTimelineChange(event.target.value)}
-            disabled={currentSegment.duration <= 0}
-            aria-label={t("trainer.timelineAria")}
+          <AudioWaveform
+            audioUrl={`${apiBase}/api/materials/${material.id}/audio`}
+            segmentStart={currentSegment.start}
+            segmentDuration={currentSegment.duration}
+            currentTime={currentSegmentPlaybackTime}
+            onSeek={(time) => handleSegmentTimelineChange(String(time))}
+            ariaLabel={t("trainer.timelineAria")}
           />
           <time>{formatTime(currentSegment.duration)}</time>
         </div>
@@ -824,6 +830,7 @@ export default function SentenceTrainer({
         {!isGapSegment ? (
           <RecorderPanel
             sentence={currentSentence}
+            evaluation={evaluation}
             onEvaluated={handleEvaluated}
             onPlayReference={playCurrentSegment}
           />
@@ -854,7 +861,13 @@ export default function SentenceTrainer({
         )}
       </section>
 
-      {!isGapSegment && <EvaluationPanel evaluation={evaluation} />}
+      {!isGapSegment && (
+        <EvaluationPanel
+          evaluation={evaluation}
+          onReplayReference={() => void playCurrentSegment()}
+          onRetrySentence={focusRecorder}
+        />
+      )}
 
       <footer className="practice-footer">
         <div className="shortcut-legend" aria-label={t("trainer.shortcuts")}>

@@ -80,6 +80,7 @@ export interface WordAlignment {
 export interface Evaluation {
   id: number;
   recording_id: number;
+  recording_duration?: number | null;
   completeness_score: number;
   fluency_score: number;
   sync_score: number;
@@ -95,6 +96,7 @@ export interface Evaluation {
 export interface SentenceLatestEvaluation {
   sentence_id: number;
   recording_id: number;
+  recording_duration?: number | null;
   evaluation_id: number;
   completeness_score: number;
   fluency_score: number;

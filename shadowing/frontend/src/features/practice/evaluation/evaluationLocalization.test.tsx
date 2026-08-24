@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -109,5 +109,48 @@ describe("evaluation localization", () => {
     const wrapper = screen.getByText("um").closest(".alignment-token-wrap");
     expect(wrapper).toHaveAttribute("title", "识别到未出现在参考文本中的语气词。");
     expect(wrapper).not.toHaveAttribute("title", "Filler word not present in the reference.");
+  });
+
+  it("turns real alignment issues into immediate replay and retry actions", () => {
+    const onReplayReference = vi.fn();
+    const onRetrySentence = vi.fn();
+    renderWithLocale(
+      <EvaluationPanel
+        evaluation={evaluation({
+          word_alignment: {
+            language: "en",
+            alignment_mode: "word",
+            support_level: "full",
+            token_unit: "word",
+            reference_tokens: [{
+              index: 0,
+              text: "compound",
+              normalized: "compound",
+              status: "minor",
+              severity: "minor",
+              matched_token_index: 0,
+            }],
+            user_tokens: [],
+            summary: {
+              correct_count: 0,
+              substitution_count: 0,
+              deletion_count: 0,
+              insertion_count: 0,
+              minor_error_count: 1,
+              word_accuracy: 0.84,
+            },
+          },
+        })}
+        onReplayReference={onReplayReference}
+        onRetrySentence={onRetrySentence}
+      />,
+      "zh-CN",
+    );
+
+    expect(screen.getByText("compound")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "听原句" }));
+    fireEvent.click(screen.getByRole("button", { name: "重练本句" }));
+    expect(onReplayReference).toHaveBeenCalledOnce();
+    expect(onRetrySentence).toHaveBeenCalledOnce();
   });
 });

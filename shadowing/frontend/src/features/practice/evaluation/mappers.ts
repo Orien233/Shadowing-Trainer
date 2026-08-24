@@ -4,6 +4,7 @@ export function asEvaluation(snapshot: SentenceLatestEvaluation): Evaluation {
   return {
     id: snapshot.evaluation_id,
     recording_id: snapshot.recording_id,
+    recording_duration: snapshot.recording_duration,
     completeness_score: snapshot.completeness_score,
     fluency_score: snapshot.fluency_score,
     sync_score: snapshot.sync_score,

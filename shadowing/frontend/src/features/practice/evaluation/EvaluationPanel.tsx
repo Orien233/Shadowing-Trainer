@@ -6,9 +6,11 @@ import WordAlignmentView from "../alignment/WordAlignmentView";
 
 interface Props {
   evaluation: Evaluation | null;
+  onReplayReference?: () => void;
+  onRetrySentence?: () => void;
 }
 
-export default function EvaluationPanel({ evaluation }: Props) {
+export default function EvaluationPanel({ evaluation, onReplayReference, onRetrySentence }: Props) {
   const { t } = useLanguage();
 
   if (!evaluation) {
@@ -28,9 +30,8 @@ export default function EvaluationPanel({ evaluation }: Props) {
   const localizedCopy = getLocalizedEvaluationCopy(evaluation, t);
   const metrics = [
     { label: t("evaluation.pronunciation"), value: evaluation.pronunciation_score },
+    { label: t("evaluation.rhythm"), value: evaluation.sync_score },
     { label: t("evaluation.fluency"), value: evaluation.fluency_score },
-    { label: t("evaluation.sync"), value: evaluation.sync_score },
-    { label: t("evaluation.completeness"), value: evaluation.completeness_score },
   ];
 
   return (
@@ -45,6 +46,9 @@ export default function EvaluationPanel({ evaluation }: Props) {
             {Math.round(evaluation.overall_score)}
             <small>/100</small>
           </strong>
+          <span className="score-context">
+            {t("evaluation.completenessValue", { score: Math.round(evaluation.completeness_score) })}
+          </span>
         </div>
 
         <div className="metric-grid">
@@ -73,7 +77,11 @@ export default function EvaluationPanel({ evaluation }: Props) {
 
       {evaluation.word_alignment && (
         <div className="alignment-feedback">
-          <WordAlignmentView alignment={evaluation.word_alignment} />
+          <WordAlignmentView
+            alignment={evaluation.word_alignment}
+            onReplayReference={onReplayReference}
+            onRetrySentence={onRetrySentence}
+          />
         </div>
       )}
     </section>
