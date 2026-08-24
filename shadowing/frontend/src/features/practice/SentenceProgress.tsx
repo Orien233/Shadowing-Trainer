@@ -1,3 +1,4 @@
+import { useEffect, useRef } from "react";
 import { Check } from "@phosphor-icons/react";
 import { useLanguage } from "../../i18n/LanguageContext";
 import type { Sentence } from "../../types";
@@ -16,7 +17,19 @@ export default function SentenceProgress({
   onSelect,
 }: Props) {
   const { t } = useLanguage();
+  const activeStepRef = useRef<HTMLButtonElement | null>(null);
   const currentIndex = sentences.findIndex((sentence) => sentence.id === currentSentenceId);
+
+  useEffect(() => {
+    if (typeof window.matchMedia !== "function") return;
+    if (!window.matchMedia("(max-width: 680px)").matches) return;
+
+    activeStepRef.current?.scrollIntoView({
+      behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth",
+      block: "nearest",
+      inline: "center",
+    });
+  }, [currentSentenceId]);
 
   return (
     <div className="sentence-progress-bar">
@@ -33,6 +46,7 @@ export default function SentenceProgress({
                 />
               )}
               <button
+                ref={isCurrent ? activeStepRef : undefined}
                 type="button"
                 className={`sentence-step ${isCurrent ? "active" : ""} ${isEvaluated ? "complete" : ""}`}
                 aria-current={isCurrent ? "step" : undefined}

@@ -287,8 +287,11 @@
   z-index: 25;
   display: flex;
   width: 52px;
-  min-height: 138px;
+  min-height: 240px;
+  height: min(420px, 41vh);
   flex-direction: column;
+  align-items: center;
+  justify-content: center;
   gap: 6px;
   border: 1px solid var(--line-strong);
   border-left: 0;
@@ -416,6 +419,8 @@
 
   .material-rail-trigger {
     top: 34%;
+    min-height: 150px;
+    height: min(240px, 28vh);
   }
 
   .material-drawer {
@@ -495,6 +500,7 @@
     bottom: 18%;
     width: 44px;
     min-height: 112px;
+    height: 112px;
   }
 
   .material-drawer {
@@ -547,8 +553,41 @@
     min-height: 36px;
   }
 
+  .language-control {
+    max-width: 72px;
+    gap: 3px;
+    padding-inline: 6px;
+  }
+
   .language-control span {
-    display: none;
+    overflow: hidden;
+    font-size: 11px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .language-control svg {
+    width: 13px;
+    height: 13px;
+    flex: 0 0 auto;
+  }
+
+  .material-rail-trigger {
+    position: static;
+    z-index: auto;
+    width: calc(100% - 20px);
+    min-height: 40px;
+    height: 40px;
+    margin: 8px 10px 0;
+    flex-direction: row;
+    border-left: 1px solid var(--line-strong);
+    border-radius: 9px;
+    box-shadow: none;
+  }
+
+  .material-rail-trigger span {
+    writing-mode: horizontal-tb;
+    letter-spacing: 0;
   }
 
 }

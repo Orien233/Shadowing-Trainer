@@ -1,5 +1,5 @@
 import { fireEvent, render, screen } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { LanguageProvider } from "../../i18n/LanguageContext";
 import type { Sentence } from "../../types";
 import SentenceProgress from "./SentenceProgress";
@@ -18,8 +18,19 @@ const sentences: Sentence[] = [1, 2, 3].map((displayOrder) => ({
   translation: null,
   created_at: "2026-08-20T00:00:00Z",
 }));
+const originalScrollIntoView = Object.getOwnPropertyDescriptor(HTMLElement.prototype, "scrollIntoView");
 
 describe("SentenceProgress", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+    if (originalScrollIntoView) {
+      Object.defineProperty(HTMLElement.prototype, "scrollIntoView", originalScrollIntoView);
+    } else {
+      Reflect.deleteProperty(HTMLElement.prototype, "scrollIntoView");
+    }
+  });
+
   it("exposes the current and evaluated sentence states", () => {
     render(
       <LanguageProvider>
@@ -52,5 +63,61 @@ describe("SentenceProgress", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Go to sentence 3 of 3" }));
     expect(onSelect).toHaveBeenCalledWith(3);
+  });
+
+  it("centers the current sentence on a small screen", () => {
+    const scrollIntoView = vi.fn();
+    vi.stubGlobal("matchMedia", vi.fn((query: string) => ({
+      matches: query === "(max-width: 680px)",
+    })));
+    Object.defineProperty(HTMLElement.prototype, "scrollIntoView", {
+      configurable: true,
+      value: scrollIntoView,
+    });
+
+    render(
+      <LanguageProvider>
+        <SentenceProgress
+          sentences={sentences}
+          currentSentenceId={2}
+          evaluatedSentenceIds={new Set()}
+          onSelect={() => undefined}
+        />
+      </LanguageProvider>
+    );
+
+    expect(scrollIntoView).toHaveBeenCalledWith({
+      behavior: "smooth",
+      block: "nearest",
+      inline: "center",
+    });
+  });
+
+  it("avoids animated scrolling when reduced motion is requested", () => {
+    const scrollIntoView = vi.fn();
+    vi.stubGlobal("matchMedia", vi.fn((query: string) => ({
+      matches: query === "(max-width: 680px)" || query === "(prefers-reduced-motion: reduce)",
+    })));
+    Object.defineProperty(HTMLElement.prototype, "scrollIntoView", {
+      configurable: true,
+      value: scrollIntoView,
+    });
+
+    render(
+      <LanguageProvider>
+        <SentenceProgress
+          sentences={sentences}
+          currentSentenceId={2}
+          evaluatedSentenceIds={new Set()}
+          onSelect={() => undefined}
+        />
+      </LanguageProvider>
+    );
+
+    expect(scrollIntoView).toHaveBeenCalledWith({
+      behavior: "auto",
+      block: "nearest",
+      inline: "center",
+    });
   });
 });
