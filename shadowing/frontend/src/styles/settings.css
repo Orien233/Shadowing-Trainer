@@ -8,7 +8,33 @@
 .provider-voices { color: #475569; font-size: 13px; overflow-wrap: anywhere; }
 .catalog-summary { display: flex; flex-wrap: wrap; gap: 6px 12px; padding: 9px 11px; border-radius: 8px; background: #f8fafc; color: #475569; font-size: 13px; line-height: 1.45; }
 .catalog-summary a { color: #2563eb; }
-.config-checkbox { justify-content: center; }
+.boundary-options {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  align-items: flex-start;
+  align-self: start;
+  gap: 8px;
+}
+
+.form-grid .config-checkbox {
+  display: flex;
+  min-height: 24px;
+  flex-direction: row;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 8px;
+  font-weight: 500;
+}
+
+.config-checkbox input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 auto;
+  margin: 0;
+  padding: 0;
+}
+
 .config-checkbox small, .form-grid small { color: #64748b; font-size: 12px; font-weight: 400; }
 .provider-test { margin: 0; font-size: 13px; }
 .provider-test.success { color: #15803d; }

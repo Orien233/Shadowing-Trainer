@@ -79,6 +79,13 @@ beforeEach(() => {
 });
 
 describe("provider capability gates", () => {
+  it("does not render an empty voice preset count in the provider form", async () => {
+    renderSettings();
+
+    await screen.findByRole("heading", { name: "Quick templates" });
+    expect(screen.queryByText("0")).not.toBeInTheDocument();
+  });
+
   it("notifies the mounted AI-text workflow after a saved Provider changes", async () => {
     const onProvidersChanged = vi.fn();
     api.listProviders.mockResolvedValue([

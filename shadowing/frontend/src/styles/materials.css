@@ -63,8 +63,13 @@
 }
 
 .material-main {
+  display: flex;
   flex: 1;
   min-width: 0;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: center;
+  gap: 4px;
   cursor: pointer;
   border: 0;
   background: transparent;
@@ -75,7 +80,8 @@
 
 .material-actions {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
+  align-self: center;
   flex: 0 0 auto;
   gap: 8px;
 }
@@ -91,9 +97,10 @@
 }
 
 .material-more-button {
-  width: 34px;
-  min-width: 34px;
-  height: 34px;
+  width: 40px;
+  min-width: 40px;
+  height: 40px;
+  min-height: 40px;
   border-radius: 10px;
   background: #e2e8f0;
   color: #1e293b;
@@ -140,6 +147,7 @@
 }
 
 .material-title {
+  width: 100%;
   font-weight: 700;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -150,9 +158,14 @@
   display: flex;
   flex-wrap: wrap;
   gap: 3px 8px;
-  margin-top: 4px;
+  margin-top: 0;
   color: #64748b;
   font-size: 13px;
+  line-height: 1.35;
+}
+
+.material-meta > span {
+  white-space: nowrap;
 }
 
 .material-progress {
