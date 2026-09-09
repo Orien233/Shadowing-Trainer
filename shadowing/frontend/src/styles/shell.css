@@ -496,11 +496,21 @@
   }
 
   .material-rail-trigger {
-    top: auto;
-    bottom: 18%;
-    width: 44px;
-    min-height: 112px;
-    height: 112px;
+    position: static;
+    z-index: auto;
+    width: calc(100% - 28px);
+    min-height: 40px;
+    height: 40px;
+    margin: 10px 14px 0;
+    flex-direction: row;
+    border-left: 1px solid var(--line-strong);
+    border-radius: 9px;
+    box-shadow: none;
+  }
+
+  .material-rail-trigger span {
+    writing-mode: horizontal-tb;
+    letter-spacing: 0;
   }
 
   .material-drawer {
@@ -570,24 +580,6 @@
     width: 13px;
     height: 13px;
     flex: 0 0 auto;
-  }
-
-  .material-rail-trigger {
-    position: static;
-    z-index: auto;
-    width: calc(100% - 20px);
-    min-height: 40px;
-    height: 40px;
-    margin: 8px 10px 0;
-    flex-direction: row;
-    border-left: 1px solid var(--line-strong);
-    border-radius: 9px;
-    box-shadow: none;
-  }
-
-  .material-rail-trigger span {
-    writing-mode: horizontal-tb;
-    letter-spacing: 0;
   }
 
 }
