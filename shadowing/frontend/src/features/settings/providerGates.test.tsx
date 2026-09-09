@@ -62,6 +62,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   api.listProviderCatalog.mockResolvedValue([
     catalogEntry("openai_chat_compatible", "llm", ["generate_text", "generate_json"]),
+    catalogEntry("openai_responses", "llm", ["generate_text", "generate_json"]),
     catalogEntry("mimo_chat", "llm", ["generate_text"]),
     catalogEntry("tts", "tts", ["synthesize"]),
     catalogEntry("mimo_asr", "asr", ["transcribe"]),
@@ -79,6 +80,13 @@ beforeEach(() => {
 });
 
 describe("provider capability gates", () => {
+  it("offers the OpenAI Responses adapter in settings", async () => {
+    renderSettings();
+
+    expect(await screen.findByRole("button", { name: "OpenAI Responses" })).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "OpenAI Responses" })).toBeInTheDocument();
+  });
+
   it("does not render an empty voice preset count in the provider form", async () => {
     renderSettings();
 

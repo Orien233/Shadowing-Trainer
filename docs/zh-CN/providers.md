@@ -9,6 +9,7 @@ Provider 配置由后端持久化。静态 Adapter Catalog 描述协议能提供
 | 类型 | 快捷模板 / Adapter | 地址模式 | 可选能力 | 可选格式 |
 | --- | --- | --- | --- | --- |
 | LLM | OpenAI Chat Completions | Base URL | `generate_text`, `generate_json` | `json_schema`, `response_format`, `prompt_only` |
+| LLM | OpenAI Responses | Base URL | `generate_text`, `generate_json` | `json_schema`, `json_object`, `prompt_only` |
 | TTS | OpenAI Audio TTS | 完整 Endpoint | `synthesize` | WAV, MP3, FLAC, Opus, AAC, PCM |
 | TTS | MiMo TTS | 完整 Endpoint | `synthesize` | WAV, MP3, FLAC, Opus, PCM16 |
 | ASR | OpenAI Audio Transcription | Base URL | `transcribe`, `word_timestamps` | 不适用 |
@@ -32,6 +33,7 @@ Local Whisper 是系统级本地 ASR 回退，不是数据库中的远程 Provid
 | Adapter | 应填写内容 | 示例 | 应用追加路径 |
 | --- | --- | --- | --- |
 | OpenAI Chat | Base URL | `https://api.openai.com/v1` | `/chat/completions`；连接验证使用 `/models` |
+| OpenAI Responses | Base URL | `https://api.openai.com/v1` | `/responses`；连接验证使用 `/models` |
 | OpenAI ASR | Base URL | `https://api.openai.com/v1` | `/audio/transcriptions` |
 | OpenAI TTS | 完整语音 Endpoint | `https://api.openai.com/v1/audio/speech` | 不追加 |
 | MiMo TTS / ASR | 完整 Chat Completions Endpoint | `https://api.xiaomimimo.com/v1/chat/completions` | 不追加 |
@@ -43,7 +45,7 @@ Local Whisper 是系统级本地 ASR 回退，不是数据库中的远程 Provid
 用户声明是后端强制执行的边界，不只是 UI 提示：
 
 - AI 文本需要默认 LLM 同时启用 `generate_text` 和 `generate_json`。
-- `generate_json` 至少需要启用一种 JSON 方式：`json_schema`、`response_format` 或 `prompt_only`。
+- `generate_json` 至少需要启用一种该 Adapter 声明的 JSON 方式。OpenAI Responses 使用 `json_schema`、`json_object` 或 `prompt_only`；OpenAI Chat 使用 `json_schema`、`response_format` 或 `prompt_only`。
 - TTS 的 `synthesize` 至少需要一种输出格式。
 - `word_timestamps` 自动依赖 `transcribe`。
 - MiMo ASR 不提供词级时间戳，因此不能声明 `word_timestamps`。
@@ -52,12 +54,14 @@ TTS 从配置档已启用的格式中按 `wav → mp3 → flac → opus → aac 
 
 OpenAI TTS 默认不会因为练习带有语言标签就发送 `instructions`。只有明确确认兼容端点支持该字段时，才启用 `send_language_instruction`；用户填写的音色 instructions 不受此默认规则影响。
 
+OpenAI Responses 使用原生 `instructions`、`input` 和 `text.format` 字段。应用显式发送 `store: false`，不依赖 Responses API 的默认存储行为。
+
 ## 配置检查与模型测试
 
 设置页提供三个不同等级，响应中的 `verification_level` 会说明实际验证范围：
 
 1. **检查配置（configuration）**：只在后端本地校验必填字段、能力、格式、依赖和 URL 形状，不发送网络请求，也不产生模型费用。
-2. **验证连接（network）**：仅当 Adapter 声明安全的无生成请求时访问网络。OpenAI Chat 当前通过 `GET /models` 检查元数据；音频 Adapter 的安全策略仍是本地配置检查，所以“成功”不代表已调用过音频模型。
+2. **验证连接（network）**：仅当 Adapter 声明安全的无生成请求时访问网络。OpenAI Chat 与 OpenAI Responses 通过 `GET /models` 检查元数据；音频 Adapter 的安全策略仍是本地配置检查，所以“成功”不代表已调用过音频模型。
 3. **运行付费测试（inference）**：用户确认后发送最小真实生成、合成或转写请求，可能产生费用，并受模型配额和内容策略影响。
 
 连接失败只返回经过脱敏的可读错误，不改变能力声明、默认 Provider 或 ASR 开关。测试不会持久化“已验证”状态，也不会自动探测或扩展能力。

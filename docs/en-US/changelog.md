@@ -28,6 +28,7 @@ This page preserves the release history previously carried in the root README. F
 - Added LLM text generation, user text import, and sentence-level TTS practice.
 - Introduced the Provider Factory, Adapter Catalog, user capability/format declarations, and built-in quick templates.
 - Narrowed remote support to OpenAI Chat, OpenAI Audio, and MiMo; historical adapters are no longer registered.
+- Added a native OpenAI Responses LLM adapter with Structured Outputs and JSON Object support.
 - Added LLM/TTS/ASR profile CRUD, credential masking, and tiered tests.
 - Added independent ASR route settings for material transcription and recording evaluation.
 - Normalized TTS output to sentence WAV, merged full MP3, and reused Material/Sentence training structures.

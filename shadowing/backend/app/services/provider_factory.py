@@ -35,7 +35,7 @@ def parse_string_list(raw: str | None) -> set[str]:
 
 
 def _preferred_format(capability: str, formats: set[str]) -> str | None:
-    order = ("json_schema", "response_format", "prompt_only") if capability == "llm" else ("wav", "mp3", "flac", "opus", "aac", "pcm", "pcm16")
+    order = ("json_schema", "json_object", "response_format", "prompt_only") if capability == "llm" else ("wav", "mp3", "flac", "opus", "aac", "pcm", "pcm16")
     return next((item for item in order if item in formats), None)
 
 

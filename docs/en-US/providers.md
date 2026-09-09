@@ -9,6 +9,7 @@ Provider profiles are persisted by the backend. The static Adapter Catalog descr
 | Kind | Quick template / adapter | Endpoint mode | Available capabilities | Available formats |
 | --- | --- | --- | --- | --- |
 | LLM | OpenAI Chat Completions | Base URL | `generate_text`, `generate_json` | `json_schema`, `response_format`, `prompt_only` |
+| LLM | OpenAI Responses | Base URL | `generate_text`, `generate_json` | `json_schema`, `json_object`, `prompt_only` |
 | TTS | OpenAI Audio TTS | Full endpoint | `synthesize` | WAV, MP3, FLAC, Opus, AAC, PCM |
 | TTS | MiMo TTS | Full endpoint | `synthesize` | WAV, MP3, FLAC, Opus, PCM16 |
 | ASR | OpenAI Audio Transcription | Base URL | `transcribe`, `word_timestamps` | Not applicable |
@@ -32,6 +33,7 @@ Version 0.4.2 neither reads nor upgrades provider records from an old database. 
 | Adapter | Value to enter | Example | Path appended by the app |
 | --- | --- | --- | --- |
 | OpenAI Chat | Base URL | `https://api.openai.com/v1` | `/chat/completions`; connection verification uses `/models` |
+| OpenAI Responses | Base URL | `https://api.openai.com/v1` | `/responses`; connection verification uses `/models` |
 | OpenAI ASR | Base URL | `https://api.openai.com/v1` | `/audio/transcriptions` |
 | OpenAI TTS | Full speech endpoint | `https://api.openai.com/v1/audio/speech` | None |
 | MiMo TTS / ASR | Full Chat Completions endpoint | `https://api.xiaomimimo.com/v1/chat/completions` | None |
@@ -43,7 +45,7 @@ A `full_endpoint` URL is used exactly as entered. The application does not appen
 User declarations are backend-enforced boundaries, not frontend hints:
 
 - AI Text requires both `generate_text` and `generate_json` on the default LLM.
-- `generate_json` requires at least one JSON method: `json_schema`, `response_format`, or `prompt_only`.
+- `generate_json` requires at least one JSON method declared by its adapter. OpenAI Responses uses `json_schema`, `json_object`, or `prompt_only`; OpenAI Chat uses `json_schema`, `response_format`, or `prompt_only`.
 - TTS `synthesize` requires at least one output format.
 - `word_timestamps` automatically depends on `transcribe`.
 - MiMo ASR has no word timestamps and cannot declare `word_timestamps`.
@@ -52,12 +54,14 @@ TTS chooses from the formats enabled on the profile in this order: `wav → mp3 
 
 OpenAI TTS does not send `instructions` merely because a practice has a language tag. Enable `send_language_instruction` only after confirming that the compatible endpoint supports the field. Voice instructions explicitly entered by the user are unaffected by this default.
 
+OpenAI Responses uses the native `instructions`, `input`, and `text.format` fields. The application explicitly sends `store: false` instead of relying on the Responses API storage default.
+
 ## Configuration checks and model tests
 
 Settings offers three distinct levels, and the response `verification_level` states what was actually checked:
 
 1. **Check configuration (`configuration`)** validates required fields, capabilities, formats, dependencies, and URL shape locally. It sends no network request and has no model cost.
-2. **Verify connection (`network`)** accesses the network only when the adapter declares a safe, non-generation request. OpenAI Chat currently uses `GET /models`; audio adapters retain configuration-only validation, so success does not mean an audio model was called.
+2. **Verify connection (`network`)** accesses the network only when the adapter declares a safe, non-generation request. OpenAI Chat and OpenAI Responses use `GET /models`; audio adapters retain configuration-only validation, so success does not mean an audio model was called.
 3. **Run paid test (`inference`)** sends a minimal real generation, synthesis, or transcription request after confirmation. It may incur cost and is subject to quota and content policies.
 
 A failed connection test returns a sanitized readable error and does not change capability declarations, default profiles, or ASR switches. Tests do not persist a verified state and never auto-detect or expand capabilities.

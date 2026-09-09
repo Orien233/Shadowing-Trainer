@@ -28,6 +28,7 @@
 - 新增 LLM 文本生成、用户文本导入和句级 TTS 练习闭环。
 - 引入 Provider Factory、Adapter Catalog、用户能力/格式声明和内置快捷模板。
 - 远程支持收敛为 OpenAI Chat、OpenAI Audio 与 MiMo；历史 Adapter 不再注册。
+- 新增原生 OpenAI Responses LLM Adapter，并支持 Structured Outputs 与 JSON Object。
 - 增加 LLM、TTS、ASR 配置档 CRUD、密钥遮罩和分级测试。
 - 增加素材转写与录音评估两个独立 ASR 路由设置。
 - TTS 将 Provider 输出规范化为句级 WAV，并合并整篇 MP3 后复用 Material/Sentence 训练结构。

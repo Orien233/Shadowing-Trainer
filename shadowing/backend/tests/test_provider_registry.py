@@ -56,9 +56,11 @@ def _engine():
 
 def test_factory_creates_supported_openai_providers():
     llm = create_provider(AIProvider(name="x", capability="llm", provider_type="openai_chat_compatible", base_url="https://example.test/v1", api_key="secret", model_name="model"))
+    responses = create_provider(AIProvider(name="x", capability="llm", provider_type="openai_responses", base_url="https://example.test/v1", api_key="secret", model_name="model"))
     tts = create_provider(AIProvider(name="x", capability="tts", provider_type="openai_audio_tts", base_url="https://example.test/v1", api_key="secret", model_name="model"))
     asr = create_provider(AIProvider(name="x", capability="asr", provider_type="openai_audio_asr", base_url="https://example.test/v1", api_key="secret", model_name="model"))
     assert llm.__class__.__name__ == "OpenAIChatCompatibleLLMProvider"
+    assert responses.__class__.__name__ == "OpenAIResponsesLLMProvider"
     assert tts.__class__.__name__ == "OpenAIAudioTTSProvider"
     assert asr.__class__.__name__ == "OpenAIWhisperASRProvider"
 
@@ -81,9 +83,12 @@ def test_adapter_registry_exposes_only_canonical_types_and_a_safe_catalog():
     assert get_adapter_descriptor("asr", "openai_compatible") is None
     catalog = catalog_payload()
     keys = {(item["kind"], item["key"]) for item in catalog}
-    assert keys == {("llm", "openai_chat_compatible"), ("tts", "openai_audio_tts"), ("tts", "mimo_tts"), ("asr", "openai_audio_asr"), ("asr", "mimo_asr")}
+    assert keys == {("llm", "openai_chat_compatible"), ("llm", "openai_responses"), ("tts", "openai_audio_tts"), ("tts", "mimo_tts"), ("asr", "openai_audio_asr"), ("asr", "mimo_asr")}
     assert all(item["preset"] is True and isinstance(item["preset_defaults"], dict) for item in catalog)
     assert next(item for item in catalog if item["key"] == "openai_audio_tts")["preset_defaults"]["base_url"].endswith("/audio/speech")
+    responses = next(item for item in catalog if item["key"] == "openai_responses")
+    assert responses["available_formats"] == ["json_schema", "json_object", "prompt_only"]
+    assert responses["preset_defaults"]["enabled_formats"] == ["json_schema"]
     assert all("api_key" not in {field["key"] for field in item["config_fields"]} for item in catalog)
 
 

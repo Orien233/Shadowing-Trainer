@@ -14,7 +14,7 @@ Changing a global default does not modify existing material. Every Material and 
 
 ## 2. Configure models
 
-Open Settings and choose an OpenAI Chat, OpenAI TTS, OpenAI ASR, MiMo TTS, or MiMo ASR quick template. A template does not take part in business calls by itself; saving it creates an independent profile that can be renamed, enabled, tested, and made default.
+Open Settings and choose an OpenAI Chat, OpenAI Responses, OpenAI TTS, OpenAI ASR, MiMo TTS, or MiMo ASR quick template. A template does not take part in business calls by itself; saving it creates an independent profile that can be renamed, enabled, tested, and made default.
 
 Every profile can execute only the capabilities and formats selected by the user. At minimum:
 

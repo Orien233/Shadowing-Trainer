@@ -14,7 +14,7 @@
 
 ## 2. 配置模型
 
-进入“设置”，在快捷模板中选择 OpenAI Chat、OpenAI TTS、OpenAI ASR、MiMo TTS 或 MiMo ASR。模板不会直接参与业务调用；保存后会生成一个可改名、启用、测试和设为默认的独立配置档。
+进入“设置”，在快捷模板中选择 OpenAI Chat、OpenAI Responses、OpenAI TTS、OpenAI ASR、MiMo TTS 或 MiMo ASR。模板不会直接参与业务调用；保存后会生成一个可改名、启用、测试和设为默认的独立配置档。
 
 每个配置档只会执行用户勾选的能力和格式。至少需要：
 
