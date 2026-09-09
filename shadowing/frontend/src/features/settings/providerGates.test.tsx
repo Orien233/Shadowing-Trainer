@@ -83,8 +83,12 @@ describe("provider capability gates", () => {
   it("offers the OpenAI Responses adapter in settings", async () => {
     renderSettings();
 
-    expect(await screen.findByRole("button", { name: "OpenAI Responses" })).toBeInTheDocument();
+    const responsesTemplate = await screen.findByRole("button", { name: "OpenAI Responses" });
+    expect(responsesTemplate).toHaveAttribute("aria-pressed", "false");
     expect(screen.getByRole("option", { name: "OpenAI Responses" })).toBeInTheDocument();
+
+    fireEvent.click(responsesTemplate);
+    expect(responsesTemplate).toHaveAttribute("aria-pressed", "true");
   });
 
   it("does not render an empty voice preset count in the provider form", async () => {

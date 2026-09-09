@@ -8,6 +8,31 @@
 .provider-voices { color: #475569; font-size: 13px; overflow-wrap: anywhere; }
 .catalog-summary { display: flex; flex-wrap: wrap; gap: 6px 12px; padding: 9px 11px; border-radius: 8px; background: #f8fafc; color: #475569; font-size: 13px; line-height: 1.45; }
 .catalog-summary a { color: #2563eb; }
+.template-actions {
+  gap: 8px;
+}
+
+.template-button {
+  border-color: #cbd9f5;
+  background: #fff;
+  color: var(--blue);
+}
+
+.template-button:hover:not(:disabled) {
+  border-color: #9db8f1;
+  background: var(--surface-blue);
+}
+
+.template-button.active {
+  border-color: var(--blue);
+  background: var(--blue);
+  color: #fff;
+}
+
+.template-button.active:hover:not(:disabled) {
+  background: var(--blue-strong);
+}
+
 .boundary-options {
   display: flex;
   min-width: 0;
