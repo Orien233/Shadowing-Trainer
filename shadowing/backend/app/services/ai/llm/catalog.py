@@ -39,7 +39,7 @@ LLM_ADAPTER_DESCRIPTORS = (
         endpoint_hint="https://api.openai.com/v1  (adds /responses)",
         config_fields=(
             AdapterConfigField("json_schema_name", "JSON schema name", default="response"),
-            AdapterConfigField("auth_scheme", "Authentication scheme", "select", default="bearer", options=("bearer", "api-key", "none")),
+            AdapterConfigField("auth_scheme", "Authentication scheme", "select", default="bearer", options=("bearer", "api-key")),
         ),
         docs_url="https://platform.openai.com/docs/api-reference/responses/create",
         test_strategy=AdapterTestStrategy(mode="metadata_http", label="List models", method="GET", endpoint_hint="/models", description="Checks metadata only; it never creates a response."),

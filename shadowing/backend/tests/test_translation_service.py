@@ -33,6 +33,8 @@ def test_translate_sentence_uses_catalog_languages_in_both_prompts():
     assert "Japanese (ja)" in call["user_prompt"]
     assert "Korean (ko)" in call["user_prompt"]
     assert "Simplified Chinese" not in call["system_prompt"]
+    assert call["json_schema"] == translation_service.TRANSLATION_RESULT_SCHEMA
+    assert set(call["json_schema"]["properties"]) == set(call["json_schema"]["required"])
 
 
 def test_same_language_translation_returns_original_without_provider_call():

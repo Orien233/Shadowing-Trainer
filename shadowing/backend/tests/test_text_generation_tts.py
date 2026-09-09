@@ -53,6 +53,13 @@ def _engine():
     SQLModel.metadata.create_all(engine, tables=[AIProvider.__table__, ASRSceneSetting.__table__, TextPractice.__table__, WordCollection.__table__, Job.__table__, Material.__table__, Sentence.__table__])
     return engine
 
+
+def test_practice_result_schema_is_openai_strict_compatible():
+    schema = text_generation_service.PRACTICE_RESULT_SCHEMA
+
+    assert schema["additionalProperties"] is False
+    assert set(schema["properties"]) == set(schema["required"])
+
 def test_generated_word_selection_uses_single_structured_response(monkeypatch):
     engine = _engine()
     class Provider:

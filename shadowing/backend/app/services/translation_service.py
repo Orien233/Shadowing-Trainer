@@ -26,6 +26,13 @@ DEFAULT_TARGET_LANGUAGE = "zh-CN"
 RETRYABLE_STATUS_CODES = {408, 429, 500, 502, 503, 504}
 _translation_semaphore = threading.BoundedSemaphore(settings.translation_concurrency)
 
+TRANSLATION_RESULT_SCHEMA = {
+    "type": "object",
+    "additionalProperties": False,
+    "required": ["translation"],
+    "properties": {"translation": {"type": "string"}},
+}
+
 
 def _generate_json_with_slot(provider: Any, **kwargs: Any) -> dict[str, Any]:
     """Apply one process-wide limit without binding it to an event loop.
@@ -133,6 +140,7 @@ async def translate_sentence(
                 system_prompt=_build_translation_system_prompt(source_tag, target_tag),
                 user_prompt=_build_translation_prompt(source_text, source_tag, target_tag),
                 temperature=0.2,
+                json_schema=TRANSLATION_RESULT_SCHEMA,
             )
             translation = parsed.get("translation")
             if not isinstance(translation, str) or not translation.strip():

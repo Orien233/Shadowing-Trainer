@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from collections.abc import Mapping
 from typing import Any
 
@@ -53,10 +54,25 @@ class OpenAIResponsesLLMProvider(LLMProvider):
         if self._auth_scheme != "none":
             require_api_key(self.api_key)
 
+    def _schema_name(self) -> str:
+        name = str(self.extra_config.get("json_schema_name", "response")).strip()
+        if not re.fullmatch(r"[A-Za-z0-9_-]{1,64}", name):
+            raise ValueError(
+                "JSON schema name must be 1-64 characters using letters, numbers, underscores, or hyphens."
+            )
+        return name
+
     @staticmethod
     def _response_text(data: Any) -> str:
         if not isinstance(data, Mapping):
             raise ValueError("Provider response was not a JSON object.")
+
+        status = data.get("status")
+        if isinstance(status, str) and status != "completed":
+            details = data.get("incomplete_details")
+            reason = details.get("reason") if isinstance(details, Mapping) else None
+            suffix = f" ({reason})" if isinstance(reason, str) and reason else ""
+            raise ValueError(f"Provider response status was {status}{suffix}.")
 
         direct = data.get("output_text")
         if isinstance(direct, str) and direct.strip():
@@ -99,7 +115,10 @@ class OpenAIResponsesLLMProvider(LLMProvider):
     ) -> str:
         self._require_credential()
         mode = str(self.extra_config.get("json_mode", "json_schema")).lower()
-        if json_mode and mode == "prompt_only":
+        uses_json_object = json_mode and mode != "prompt_only" and not (
+            mode == "json_schema" and json_schema
+        )
+        if json_mode and (mode == "prompt_only" or uses_json_object):
             system_prompt = json_system_prompt(system_prompt, json_schema)
 
         payload: dict[str, Any] = {
@@ -114,7 +133,7 @@ class OpenAIResponsesLLMProvider(LLMProvider):
                 payload["text"] = {
                     "format": {
                         "type": "json_schema",
-                        "name": str(self.extra_config.get("json_schema_name", "response")),
+                        "name": self._schema_name(),
                         "schema": json_schema,
                         "strict": True,
                     }

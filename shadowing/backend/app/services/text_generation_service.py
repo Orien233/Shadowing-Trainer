@@ -22,7 +22,7 @@ SYSTEM_PROMPT = """You create concise, natural shadowing practice texts. Return 
 PRACTICE_RESULT_SCHEMA = {
     "type": "object",
     "additionalProperties": False,
-    "required": ["title", "body", "used_words", "unused_words"],
+    "required": ["title", "body", "used_words", "unused_words", "explanation"],
     "properties": {
         "title": {"type": "string"},
         "body": {"type": "string"},
@@ -110,7 +110,7 @@ def _word_appears_in_body(word: str, body: str, language: str) -> bool:
 def _build_prompt(request: TextGenerationRequest, words: list[str], topic: str) -> str:
     language = get_language_descriptor(request.target_language)
     explanation_language = get_language_descriptor(request.translation_language)
-    return json.dumps({"target_language": {"code": language.code, "name": language.english_name, "native_name": language.native_name}, "explanation_language": {"code": explanation_language.code, "name": explanation_language.english_name}, "difficulty": request.difficulty, "approximate_length": request.desired_length, "topic": topic, "selected_words": words, "requirements": f"Write the title and body entirely in {language.english_name}. Write the optional explanation in {explanation_language.english_name}. Create a continuous spoken-practice passage. Use selected words naturally where possible. Do not include markdown."}, ensure_ascii=False)
+    return json.dumps({"target_language": {"code": language.code, "name": language.english_name, "native_name": language.native_name}, "explanation_language": {"code": explanation_language.code, "name": explanation_language.english_name}, "difficulty": request.difficulty, "approximate_length": request.desired_length, "topic": topic, "selected_words": words, "requirements": f"Write the title and body entirely in {language.english_name}. Write the explanation in {explanation_language.english_name}, or return an empty string if none is needed. Create a continuous spoken-practice passage. Use selected words naturally where possible. Do not include markdown."}, ensure_ascii=False)
 
 
 def create_generated_practice(session: Session, request: TextGenerationRequest) -> TextPractice:

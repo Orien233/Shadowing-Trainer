@@ -111,6 +111,51 @@ def test_responses_json_without_schema_uses_json_object(monkeypatch):
 
     assert provider.generate_json(system_prompt="Translate.", user_prompt="Hello") == {"translation": "你好"}
     assert captured["payload"]["text"] == {"format": {"type": "json_object"}}
+    assert "JSON" in captured["payload"]["instructions"]
+
+
+def test_responses_incomplete_output_is_not_accepted(monkeypatch):
+    monkeypatch.setattr(
+        "app.services.ai.llm.openai_responses.provider_http.post",
+        lambda *_args, **_kwargs: _Response({
+            "status": "incomplete",
+            "incomplete_details": {"reason": "max_output_tokens"},
+            "output_text": "Partial answer",
+        }),
+    )
+    provider = OpenAIResponsesLLMProvider(
+        base_url="https://api.example.test/v1",
+        api_key="secret",
+        model_name="gpt-test",
+    )
+
+    with pytest.raises(ValueError, match="incomplete.*max_output_tokens"):
+        provider.generate_text(system_prompt="", user_prompt="Hello")
+
+
+def test_responses_rejects_invalid_schema_name_before_request(monkeypatch):
+    monkeypatch.setattr(
+        "app.services.ai.llm.openai_responses.provider_http.post",
+        lambda *_args, **_kwargs: pytest.fail("invalid schema name must fail locally"),
+    )
+    provider = OpenAIResponsesLLMProvider(
+        base_url="https://api.example.test/v1",
+        api_key="secret",
+        model_name="gpt-test",
+        extra_config={"json_mode": "json_schema", "json_schema_name": "not valid"},
+    )
+
+    with pytest.raises(ValueError, match="schema name"):
+        provider.generate_json(
+            system_prompt="Return JSON.",
+            user_prompt="Hello",
+            json_schema={
+                "type": "object",
+                "properties": {"value": {"type": "string"}},
+                "required": ["value"],
+                "additionalProperties": False,
+            },
+        )
 
 
 def test_responses_refusal_is_reported_as_an_error(monkeypatch):
