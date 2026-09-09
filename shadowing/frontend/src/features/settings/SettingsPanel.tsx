@@ -80,6 +80,7 @@ export default function SettingsPanel({ onProvidersChanged }: { onProvidersChang
   const { t } = useLanguage();
   const [providers, setProviders] = useState<AIProvider[]>([]);
   const [catalog, setCatalog] = useState<ProviderCatalogEntry[]>([]);
+  const [loading, setLoading] = useState(true);
   const [scenes, setScenes] = useState<ASRSceneSettings | null>(null);
   const [localASR, setLocalASR] = useState<LocalASRStatus | null>(null);
   const [message, setMessage] = useState("");
@@ -124,6 +125,8 @@ export default function SettingsPanel({ onProvidersChanged }: { onProvidersChang
   };
 
   const load = async () => {
+    setLoading(true);
+    setMessage("");
     try {
       const [nextProviders, nextScenes, nextCatalog, nextLocalASR] = await Promise.all([
         listProviders(),
@@ -142,10 +145,16 @@ export default function SettingsPanel({ onProvidersChanged }: { onProvidersChang
     } catch (error) {
       setCatalog([]);
       setMessage(error instanceof Error ? `${error.message} ${t("settings.retryConnection")}` : t("settings.loadFailed"));
+    } finally {
+      setLoading(false);
     }
   };
 
   useEffect(() => { void load(); }, []);
+
+  if (loading) {
+    return <div className="card settings-panel" aria-busy="true" aria-live="polite"><p className="muted">{t("settings.loading")}</p></div>;
+  }
 
   if (!selectedCatalog) {
     return <div className="card settings-panel"><p className="provider-test error">{message || t("settings.catalogUnavailable")}</p><button onClick={() => void load()}>{t("settings.retry")}</button></div>;

@@ -80,6 +80,18 @@ beforeEach(() => {
 });
 
 describe("provider capability gates", () => {
+  it("shows a neutral loading state before the provider catalog is ready", async () => {
+    let resolveCatalog: (value: ReturnType<typeof catalogEntry>[]) => void = () => undefined;
+    api.listProviderCatalog.mockReturnValue(new Promise((resolve) => { resolveCatalog = resolve; }));
+
+    renderSettings();
+
+    expect(screen.getByText("Loading settings…")).toBeInTheDocument();
+    expect(screen.queryByText(/catalog unavailable/i)).not.toBeInTheDocument();
+    resolveCatalog([catalogEntry("openai_chat_compatible", "llm", ["generate_text", "generate_json"])]);
+    expect(await screen.findByRole("heading", { name: "Quick templates" })).toBeInTheDocument();
+  });
+
   it("offers the OpenAI Responses adapter in settings", async () => {
     renderSettings();
 

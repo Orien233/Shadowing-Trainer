@@ -540,9 +540,11 @@ Object.assign(enUS, {
   "trainer.videoLoadFailed": "Video file could not be loaded. Please reprocess the material.",
 });
 
-zhCN["settings.catalogUnavailable"] = "Provider catalog unavailable. Check the backend connection and retry.";
+zhCN["settings.loading"] = "正在加载设置…";
+zhCN["settings.catalogUnavailable"] = "无法加载提供商目录，请检查后端连接并重试。";
 zhCN["settings.retryConnection"] = "请检查后端连接并重试。";
 zhCN["settings.retry"] = "重试";
+enUS["settings.loading"] = "Loading settings…";
 enUS["settings.catalogUnavailable"] = "Provider catalog unavailable. Check the backend connection and retry.";
 enUS["settings.retryConnection"] = "Check the backend connection and retry.";
 enUS["settings.retry"] = "Retry";
