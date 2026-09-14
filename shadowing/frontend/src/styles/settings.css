@@ -1,8 +1,11 @@
 .settings-panel { display: flex; flex-direction: column; gap: 16px; }
 .provider-section { border-top: 1px solid #e2e8f0; padding-top: 14px; display: flex; flex-direction: column; gap: 10px; }
 .provider-section h3 { margin: 0; }
-.provider-row { display: flex; justify-content: space-between; gap: 16px; align-items: flex-start; border: 1px solid #dbe4f0; border-radius: 10px; padding: 12px; background: #f8fafc; }
-.provider-row > div:last-child { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; flex: 0 0 auto; }
+.provider-row { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 16px; align-items: flex-start; border: 1px solid #dbe4f0; border-radius: 10px; padding: 12px; background: #f8fafc; }
+.provider-row > div:last-child { display: flex; min-width: 0; gap: 6px; flex-wrap: wrap; justify-content: flex-start; flex: 1 1 480px; }
+.provider-row > div:last-child > button:not(.provider-live-test) { background: #fff; color: var(--ink-soft); border-color: var(--line-strong); }
+.provider-row > div:last-child > button:not(.provider-live-test):hover:not(:disabled) { background: var(--surface-blue); color: var(--blue); }
+.provider-row > div:last-child > button:disabled { color: var(--muted); background: var(--surface); }
 .provider-details { display: flex; min-width: 0; flex: 1 1 320px; flex-direction: column; gap: 5px; }
 .provider-details > span:first-child { color: #334155; line-height: 1.5; overflow-wrap: anywhere; }
 .provider-voices { color: #475569; font-size: 13px; overflow-wrap: anywhere; }
@@ -71,6 +74,12 @@
 @media (max-width: 640px) {
   .provider-row {
     flex-direction: column;
+  }
+
+  .provider-details,
+  .provider-row > div:last-child {
+    flex: 0 1 auto;
+    width: 100%;
   }
 
   .provider-row > div:last-child {
